@@ -30,6 +30,7 @@ for i = 1:length(m_class)
    end
 end
 MM = identity.(MM)
+MM_dict = Dict(MM[i] => i for i = 1:length(MM))
 T = Ltot == 0 ? Float64 : SVector{2Ltot+1, Float64}
 C_re_semi_pi = []
 t1 = @elapsed for L1 in 0:sum(ll1)
@@ -38,7 +39,7 @@ t1 = @elapsed for L1 in 0:sum(ll1)
       # global C2, _,_, M2 = re_rpe(nn2,ll2,L2)
       global C1,M1 = rpe_basis_new(nn1,ll1,L1)
       global C2,M2 = rpe_basis_new(nn2,ll2,L2)
-      global Basis_func = Ltot == 0 ? zeros(Float64, size(C1,1),size(C2,1),length(M1)*length(M2)) : zeros(SVector{2Ltot+1, Float64}, size(C1,1),size(C2,1),length(M1)*length(M2))
+      # global Basis_func = Ltot == 0 ? zeros(Float64, size(C1,1),size(C2,1),length(M1)*length(M2)) : zeros(SVector{2Ltot+1, Float64}, size(C1,1),size(C2,1),length(M1)*length(M2))
       global counter = 0
       for i1 in 1:size(C1,1)
          for i2 in 1:size(C2,1)
@@ -46,8 +47,8 @@ t1 = @elapsed for L1 in 0:sum(ll1)
             for (k1,m1) in enumerate(M1)
                for (k2,m2) in enumerate(M2)
                   if abs(sum(m1)+sum(m2))<=Ltot
-                     k = findfirst(m -> m == SA[m1...,m2...], MM)
-                     @assert !isnothing(k)
+                     k = MM_dict[SA[m1...,m2...]] # findfirst(m -> m == SA[m1...,m2...], MM)
+                     # @assert !isnothing(k)
                      #    Basis_func[i1,i2,counter] = Ltot == 0 ? 
                      #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
                      #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:]
