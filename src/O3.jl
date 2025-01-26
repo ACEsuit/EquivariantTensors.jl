@@ -379,4 +379,63 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     end
 end
 
-end
+ # ============================ RE_SEMI_PI basis ============================
+
+ # Given nn and ll, generate the Ltot RE basis which are PI for the first N1 variables and also PI for the rest
+function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::Int64) where N
+    @assert 0 < N1 < N
+ 
+    ll1 = SA[ll[1:N1]...]
+    ll2 = SA[ll[N1+1:end]...]
+    nn1 = SA[nn[1:N1]...]
+    nn2 = SA[nn[N1+1:end]...]
+ 
+    m_class = m_generate(nn,ll,Ltot)[1]
+    MM = []
+    for i = 1:length(m_class)
+       for j = 1:length(m_class[i])
+          push!(MM, m_class[i][j])
+       end
+    end
+    MM = identity.(MM)
+    MM_dict = Dict(MM[i] => i for i = 1:length(MM))
+    T = Ltot == 0 ? Float64 : SVector{2Ltot+1, Float64}
+    C_re_semi_pi = []
+    counter = 0
+    for L1 in 0:sum(ll1)
+       for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
+          # global C1, _,_, M1 = re_rpe(nn1,ll1,L1)
+          # global C2, _,_, M2 = re_rpe(nn2,ll2,L2)
+          C1,M1 = rpe_basis_new(nn1,ll1,L1)
+          C2,M2 = rpe_basis_new(nn2,ll2,L2)
+          # global Basis_func = Ltot == 0 ? zeros(Float64, size(C1,1),size(C2,1),length(M1)*length(M2)) : zeros(SVector{2Ltot+1, Float64}, size(C1,1),size(C2,1),length(M1)*length(M2))
+          for i1 in 1:size(C1,1)
+             for i2 in 1:size(C2,1)
+                cc = [ zero(T) for _ = 1:length(MM) ]
+                for (k1,m1) in enumerate(M1)
+                   for (k2,m2) in enumerate(M2)
+                      if abs(sum(m1)+sum(m2))<=Ltot
+                         k = MM_dict[SA[m1...,m2...]] # findfirst(m -> m == SA[m1...,m2...], MM)
+                         # @assert !isnothing(k)
+                         # Basis_func[i1,i2,counter] = Ltot == 0 ? 
+                         #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                         #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:]
+                         cc[k] = Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                                             clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
+                      end
+                   end
+                end
+                push!(C_re_semi_pi, cc)
+                counter += 1
+             end
+          end
+          # BB = reshape(Basis_func,size(C1,1)*size(C2,1),length(M1)*length(M2))
+          # total_rank += rank(gram(BB))
+          # @show size(BB), rank(gram(BB))
+       end
+    end
+    @assert length(C_re_semi_pi) == counter
+    C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM)])
+ 
+    return C_re_semi_pi, MM
+ end
