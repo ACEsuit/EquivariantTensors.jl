@@ -82,8 +82,8 @@ for i = 1:200
    t2 = @elapsed C_re,C_rpe,_,M = re_rpe(nn,ll,Ltot)
    @show t1, t2
    if rank(gram(C_rpe)) > 0
-      @show rank(gram(C_re_semi_pi))
       @show rank(gram(C_re))
+      @show rank(gram(C_re_semi_pi))
       @show rank(gram(C_rpe))
       @test rank(gram(C_rpe)) <= rank(gram(C_re_semi_pi)) <= rank(gram(C_re))
    end
