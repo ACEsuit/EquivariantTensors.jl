@@ -27,5 +27,8 @@ isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
         @testset "Clebsch Gordan Coeffs" begin include("test_clebschgordans.jl"); end
         @testset "Representation" begin include("test_representation.jl"); end
         @testset "Coupling Coeffs" begin include("test_coupling.jl"); end
+        @testset "RE SEMI PI" begin include("test_re_semi_pi.jl"); end
     end 
+    # @testset "O3 new" begin include("new_rpe_test.jl"); end
+        
 end
