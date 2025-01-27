@@ -1,5 +1,4 @@
-using StaticArrays, LinearAlgebra, RepLieGroups, WignerD, 
-      Rotations
+using StaticArrays, LinearAlgebra, RepLieGroups, WignerD, Rotations
 using Test
 
 for ntest = 1:200
@@ -48,7 +47,7 @@ for ntest = 1:200
 end
 
 llset = [SA[1,1,1,1], SA[1,1,2,2], SA[1,2,2,2], SA[1,1,2,2,2], SA[1,1,2,2,3], SA[1,1,1,2,2,3] ]
-nnset = [SA[1,1,2,2], SA[1,1,2,3], SA[1,3,1,2], SA[1,2,1,2,2], SA[1,1,1,1,1], SA[2,2,1,1,2,1] ]
+nnset = [SA[1,1,2,2], SA[1,1,2,3], SA[1,1,2,3], SA[1,2,1,2,2], SA[1,1,1,1,1], SA[1,2,2,1,2,1] ]
 Partition = [2,2,1,2,2,3]
 
 
