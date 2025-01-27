@@ -404,6 +404,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     counter = 0
     for L1 in 0:sum(ll1)
        for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
+          # if isodd(L1+L2+Ltot); continue; end # This is wrong - all orders of L1 L2 are needed
           # global C1, _,_, M1 = re_rpe(nn1,ll1,L1)
           # global C2, _,_, M2 = re_rpe(nn2,ll2,L2)
           C1,M1 = rpe_basis_new(nn1,ll1,L1)
@@ -439,3 +440,15 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
  
     return C_re_semi_pi, MM
  end
+
+ function rpe_basis_new(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, N1::Int64; intersection = false) where N
+    C_re_semi_pi, MM = re_semi_pi(nn, ll, L, N1)
+    # @show t_re # should be removed in the final version
+    if intersection == false
+        @assert length( intersect([(nn[i],ll[i]) for i = 1:N1], [(nn[i],ll[i]) for i = N1+1:N]) ) == 0
+        U, S, V = svd(gram(C_re_semi_pi))
+        rk = rank(Diagonal(S); rtol =  1e-12)
+        return Diagonal(S[1:rk]) * (U[:, 1:rk]' * C_re_semi_pi), MM
+    end
+ end
+
