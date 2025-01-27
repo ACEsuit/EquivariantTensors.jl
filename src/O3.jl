@@ -426,8 +426,10 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
                       end
                    end
                 end
-                push!(C_re_semi_pi, cc)
-                counter += 1
+                if norm(cc) > 1e-12
+                    push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
+                    counter += 1
+                end
              end
           end
           # BB = reshape(Basis_func,size(C1,1)*size(C2,1),length(M1)*length(M2))
@@ -437,18 +439,15 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     end
     @assert length(C_re_semi_pi) == counter
     C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM)])
+    @assert counter == 0 || rank(gram(C_re_semi_pi)) == counter == size(C_re_semi_pi, 1)
  
     return C_re_semi_pi, MM
  end
 
  function rpe_basis_new(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, N1::Int64; intersection = false) where N
-    C_re_semi_pi, MM = re_semi_pi(nn, ll, L, N1)
-    # @show t_re # should be removed in the final version
     if intersection == false
         @assert length( intersect([(nn[i],ll[i]) for i = 1:N1], [(nn[i],ll[i]) for i = N1+1:N]) ) == 0
-        U, S, V = svd(gram(C_re_semi_pi))
-        rk = rank(Diagonal(S); rtol =  1e-12)
-        return Diagonal(S[1:rk]) * (U[:, 1:rk]' * C_re_semi_pi), MM
+        return re_semi_pi(nn,ll,L,N1)
     end
  end
 
