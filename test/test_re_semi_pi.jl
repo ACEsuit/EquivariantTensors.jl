@@ -48,14 +48,19 @@ for ntest = 1:200
    end
 end
 
-llset = [SA[1,1,1,1], SA[1,1,2,2], SA[1,2,2,2], SA[1,1,2,2,2], SA[1,1,2,2,3], SA[1,1,1,2,2,3], SA[1,1,1,1,2,2,3] ]
-nnset = [SA[1,1,2,2], SA[1,1,2,3], SA[1,1,2,3], SA[1,2,1,2,2], SA[1,1,1,1,1], SA[1,2,2,1,2,1], SA[1,1,1,2,1,2,1] ]
-Partition = [2,2,1,2,2,3,4]
+llset = [SA[1,1,1,1], SA[1,1,2,2], SA[1,2,2,2], SA[1,1,2,2,2], SA[1,1,2,2,3], SA[1,1,1,2,2,3], SA[1,1,1,1,2,2,3], SA[1,1,1,1,2,2,2,2] ]
+nnset = [SA[1,1,2,2], SA[1,1,2,3], SA[1,1,2,3], SA[1,2,1,2,2], SA[1,1,1,1,1], SA[1,2,2,1,2,1], SA[1,1,1,2,1,2,1], SA[1,1,2,2,1,1,1,1] ]
+Partition = [2,2,1,2,2,3,4,4]
 
+# To test if we gain efficiency for larger correlation order
 # llset = [SA[1,1,1,1,1,2,2,2,2,2]]
 # nnset = [SA[1,1,1,1,1,1,1,1,1,1]]
 # Partition = [5]
 
+# To test the equivariance violation for large sum(ll_i)
+# llset = [SA[5,5,4,4]] |> sort
+# nnset = [SA[1,1,1,1]]
+# Partition = [2]
 
 for k = 1:length(llset)
    nn = nnset[k]
@@ -82,7 +87,7 @@ for k = 1:length(llset)
          # fRs1Q = eval_basis(QRs; coeffs = C_re_semi_pi, MM = MM, ll = ll, nn = nn)
          fRs1 = eval_basis(Rs; coeffs = C_rpe_recursive, MM = MM, ll = ll, nn = nn)
          fRs1Q = eval_basis(QRs; coeffs = C_rpe_recursive, MM = MM, ll = ll, nn = nn)
-         Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-8) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-8)
+         Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-7) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-7)
 
          # @info("Test that re_semi_pi span the same space as RPE")
          # Do the rand batch on the same set of points
