@@ -55,15 +55,10 @@ nnset = [SA[1,1,2,2], SA[1,1,2,3], SA[1,1,2,3], SA[1,2,1,2,2], SA[1,1,1,1,1], SA
 Partition = [2,2,1,2,2,3,4,4]
 
 # To test if we gain efficiency for larger correlation order - for this one, the old RPE basis is much slower
-llset = [SA[1,1,1,1,1,2,2,2,2,2]]
-nnset = [SA[1,1,1,1,1,1,1,1,1,1]]
-Partition = [5]
+# llset = [SA[1,1,1,1,1,2,2,2,2,2]]
+# nnset = [SA[1,1,1,1,1,1,1,1,1,1]]
+# Partition = [5]
 
-nn = nnset[1]
-ll = llset[1]
-N1 = Partition[1]
-# @time rpe_basis_new(nn,ll,2)
-@time rpe_basis_new(nn,ll,2,N1)
 # To test the equivariance violation for large sum(ll_i)
 # llset = [SA[5,5,4,4]] |> sort
 # nnset = [SA[1,1,1,1]]

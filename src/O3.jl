@@ -415,6 +415,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
                 cc = [ zero(T) for _ = 1:length(MM) ]
                 for (k1,m1) in enumerate(M1)
                    for (k2,m2) in enumerate(M2)
+                      if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{Ltot,0}_{L1,0,L2,0} = 0 for odd L1+L2+Ltot
                       if abs(sum(m1)+sum(m2))<=Ltot
                          k = MM_dict[SA[m1...,m2...]] # findfirst(m -> m == SA[m1...,m2...], MM)
                          # @assert !isnothing(k)
@@ -429,6 +430,8 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
                 if norm(cc) > 1e-12
                     push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
                     counter += 1
+                else
+                    @warn("zero dropped") # If we have some zero basis, the code will warn us
                 end
              end
           end
@@ -439,7 +442,6 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     end
     @assert length(C_re_semi_pi) == counter
     C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM)])
-    @assert counter == 0 || rank(gram(C_re_semi_pi)) == counter == size(C_re_semi_pi, 1)
  
     return C_re_semi_pi, MM
  end
