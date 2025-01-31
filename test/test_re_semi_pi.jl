@@ -50,9 +50,9 @@ end
 
 # When the partition gives non-intersect nn's and ll's
 
-llset = [SA[1,1,1,1], SA[1,1,2,2], SA[1,2,2,2], SA[1,1,2,2,2], SA[1,1,2,2,3], SA[1,1,1,2,2,3], SA[1,1,1,1,2,2,3], SA[1,1,1,1,2,2,2,2] ]
-nnset = [SA[1,1,2,2], SA[1,1,2,3], SA[1,1,2,3], SA[1,2,1,2,2], SA[1,1,1,1,1], SA[1,2,2,1,2,1], SA[1,1,1,2,1,2,1], SA[1,1,2,2,1,1,1,1] ]
-Partition = [2,2,1,2,2,3,4,4]
+# llset = [SA[1,1,1,1], SA[1,1,2,2], SA[1,2,2,2], SA[1,1,2,2,2], SA[1,1,2,2,3], SA[1,1,1,2,2,3], SA[1,1,1,1,2,2,3], SA[1,1,1,1,2,2,2,2] ]
+# nnset = [SA[1,1,2,2], SA[1,1,2,3], SA[1,1,2,3], SA[1,2,1,2,2], SA[1,1,1,1,1], SA[1,2,2,1,2,1], SA[1,1,1,2,1,2,1], SA[1,1,2,2,1,1,1,1] ]
+# Partition = [2,2,1,2,2,3,4,4]
 
 # To test if we gain efficiency for larger correlation order - for this one, the old RPE basis is much slower
 # llset = [SA[1,1,1,1,1,2,2,2,2,2]]
@@ -64,11 +64,35 @@ Partition = [2,2,1,2,2,3,4,4]
 # nnset = [SA[1,1,1,1]]
 # Partition = [2]
 
-for k = 1:length(llset)
-   nn = nnset[k]
-   ll = llset[k]
-   N1 = Partition[k]
-   
+using Combinatorics
+lmax = 4
+nmax = 4
+nnll_list = [] 
+for ORD = 2:6
+   for ll in with_replacement_combinations(1:lmax, ORD) 
+      # 0 or 1 above ?
+      # if !iseven(sum(ll)+L); continue; end  # This is to ensure the reflection symmetry
+      if sum(ll) > 3 * lmax; continue; end 
+      for Inn in CartesianIndices( ntuple(_->1:nmax, ORD) )
+         nn = [ Inn.I[α] for α = 1:ORD ]
+         if sum(nn) > sum(1:nmax); continue; end
+         nnll = [ (ll[α], nn[α]) for α = 1:ORD ]
+         if !issorted(nnll); continue; end
+         push!(nnll_list, (SVector(nn...), SVector(ll...)))
+      end
+   end
+end
+
+nnll_list_short = nnll_list[1:100:end]
+
+for i = 1:length(nnll_list_short)
+   ll = nnll_list_short[i][2]
+   nn = nnll_list_short[i][1]
+   Partitionset = RepLieGroups.Sn(nn,ll)
+   if length(Partitionset) <= 2; continue; end
+   N1 = Partitionset[rand(2:length(Partitionset)-1)]-1
+   # N1 = rand(1:length(ll)-1)
+
    for Ltot in (iseven(sum(ll)) ? (0:2:4) : (1:2:3))
       t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1)
       t_recursive = @elapsed C_rpe_recursive, MM = rpe_basis_new(nn,ll,Ltot,N1)
