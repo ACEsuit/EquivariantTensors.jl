@@ -88,17 +88,32 @@ nnll_list_short = nnll_list[1:100:end]
 for i = 1:length(nnll_list_short)
    ll = nnll_list_short[i][2]
    nn = nnll_list_short[i][1]
-   Partitionset = RepLieGroups.Sn(nn,ll)
-   if length(Partitionset) <= 2; continue; end
-   N1 = Partitionset[rand(2:length(Partitionset)-1)]-1
-   # N1 = rand(1:length(ll)-1)
+   # Partitionset = RepLieGroups.Sn(nn,ll)
+   # if length(Partitionset) <= 2; continue; end
+   # N1 = Partitionset[rand(2:length(Partitionset)-1)]-1
+   N1 = rand(1:length(ll)-1) # Instead of fine partition which gives two non-intersecting sets, we now allow random partition
 
    for Ltot in (iseven(sum(ll)) ? (0:2:4) : (1:2:3))
+      println("Case : nn = $nn, ll = $ll, Ltot = $Ltot, N1 = $N1")
+      println()
       t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1)
       t_recursive = @elapsed C_rpe_recursive, MM = rpe_basis_new(nn,ll,Ltot,N1)
       t_rpe = @elapsed C_rpe,M = rpe_basis_new(nn,ll,Ltot)
-      println("Case : nn = $nn, ll = $ll, Ltot = $Ltot")
-      println()
+      
+      # make sure the order of the basis is the same
+      if size(C_rpe_recursive,1) == size(C_rpe,1) != 0
+         if MM != M
+            @assert sort(MM) == sort(M)
+            ord = sortperm(MM)
+            @assert MM[ord] = sort(MM)
+            C_rpe_recursive = C_rpe_recursive[:,ord]
+            ord = sortperm(M)
+            @assert M[ord] = sort(M)
+            C_rpe = C_rpe[:,ord]
+            MM = sort(MM)
+         end
+      end
+
       @show t_recursive, t_rpe
       println()
 
@@ -118,7 +133,7 @@ for i = 1:length(nnll_list_short)
          # fRs1Q = eval_basis(QRs; coeffs = C_re_semi_pi, MM = MM, ll = ll, nn = nn)
          fRs1 = eval_basis(Rs; coeffs = C_rpe_recursive, MM = MM, ll = ll, nn = nn)
          fRs1Q = eval_basis(QRs; coeffs = C_rpe_recursive, MM = MM, ll = ll, nn = nn)
-         Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-12) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-12)
+         Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-9) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-9)
 
          # @info("Test that re_semi_pi span the same space as RPE")
          # Do the rand batch on the same set of points

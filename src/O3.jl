@@ -380,6 +380,28 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
 end
 
  # ============================ RE_SEMI_PI basis ============================
+function swap(xx::SVector{N,T},i::Int64,j::Int64) where {N, T} 
+    i, j = sort([i,j])
+    return i == j ? xx : SA[xx[1:i-1]..., xx[j], xx[i+1:j-1]..., xx[i], xx[j+1:end]...]
+end
+
+function swap(xx::SVector{N,T},i::Vector{Int64},j::Vector{Int64}) where {N, T} 
+   for k in 1:length(i)
+       xx = swap(xx,i[k],j[k])
+   end
+   return xx
+end
+
+function pick(set,n; ordered = true)
+    if n == 1
+        return set
+    end
+    tmp = []
+    for i = 1:length(set)
+       push!(tmp, [ [mm; set[i]] for mm in pick([set[1:i-1]..., set[i+1:end]...], n-1) ]... ) 
+    end
+    return ordered ? unique(sort.(tmp)) : unique(tmp)
+end
 
  # Given nn and ll, generate the Ltot RE basis which are PI for the first N1 variables and also PI for the rest
 function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::Int64) where N
@@ -446,10 +468,52 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     return C_re_semi_pi, MM
  end
 
- function rpe_basis_new(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, N1::Int64; intersection = false) where N
-    if intersection == false
+ function rpe_basis_new(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, N1::Int64; symmetrization_method = :explicit) where N
+    nice_partition = Sn(nn,ll).-1 # a list of partitions that gives non-intersecting sets
+    if length(nice_partition) > 2 && N1 in nice_partition[2:end-1]
         @assert length( intersect([(nn[i],ll[i]) for i = 1:N1], [(nn[i],ll[i]) for i = N1+1:N]) ) == 0
+        println("Non-intersect partition - return directly rpe")
+        println()
         return re_semi_pi(nn,ll,L,N1)
+    else
+        if symmetrization_method == :explicit
+            println("Two groups intersect - explicit symmetrization is to be performed")
+            println()
+            n_block = findfirst(n -> n > N1, nice_partition)
+            N_init = n_block == nothing ? 1 : nice_partition[n_block-1]+1
+            N_final = n_block == nothing ? N : nice_partition[n_block]
+
+            C_re_semi_pi, MM = re_semi_pi(nn,ll,L,N1)
+            if size(C_re_semi_pi,1) == 0
+                return C_re_semi_pi, MM
+            end
+            MM_dict = Dict(MM[i] => i for i = 1:length(MM))
+
+            # final symmetrization
+            C_new = []
+            # we need to sum up the coefficients with qualified permutations to get a fully permutation invariant basis
+            for mm in MM
+                i = 1
+                C = C_re_semi_pi[:,MM_dict[mm]] 
+
+                # These three lines gives all qualified permytations
+                for tt = 1:minimum([N1-N_init+1, N_final-N1]) # numbers of variables to be swapped
+                    for iset in pick(N_init:N1,tt)  # pick a set of variables in the first set to be swapped
+                        for jset in pick(N1+1:N_final,tt) # pick a set of variables in the second set to be swapped
+                            C += C_re_semi_pi[:,MM_dict[swap(mm,iset,jset)]] # swap and add
+                            i += 1
+                        end
+                    end
+                end
+                push!(C_new, C./i)
+            end
+            # reshape C_new as an matrix
+            C_new = identity.(hcat(C_new...))
+        
+            U, S, V = svd(gram(C_new))
+            rk = findall(x -> x > 1e-8, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-12)
+            return Diagonal(S[1:rk]) * (U[:, 1:rk]' * C_new), MM
+        end
     end
  end
 
