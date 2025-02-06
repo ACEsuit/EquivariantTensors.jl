@@ -509,6 +509,21 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
             end
             # reshape C_new as an matrix
             C_new = identity.(hcat(C_new...))
+
+            # ## NOTE: The above should be in principle equivalent to the following, but faster - and I don't understand why
+            # # final symmetrization
+            # C_new = deepcopy(C_re_semi_pi)
+            # # we need to sum up the coefficients with qualified permutations to get a fully permutation invariant basis
+            # # These three lines gives all qualified permytations
+            # for tt = 1:minimum([N1-N_init+1, N_final-N1]) # numbers of variables to be swapped
+            #     for iset in pick(N_init:N1,tt)  # pick a set of variables in the first set to be swapped
+            #         for jset in pick(N1+1:N_final,tt) # pick a set of variables in the second set to be swapped
+            #             MM_new = [ swap(mm,iset,jset) for mm in MM ]
+            #             ord = sortperm(MM_new, by = x -> findfirst(==(x), MM))
+            #             C_new += C_re_semi_pi[:,ord] # swap and add
+            #         end
+            #     end
+            # end
         
             U, S, V = svd(gram(C_new))
             rk = findall(x -> x > 1e-8, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-12)
