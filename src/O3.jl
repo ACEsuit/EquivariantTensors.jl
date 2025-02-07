@@ -491,42 +491,21 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
             N_final = n_block == nothing ? N : nice_partition[n_block]
             
             # final symmetrization
-            C_new = []
+            C_new = deepcopy(C_re_semi_pi)
             # we need to sum up the coefficients with qualified permutations to get a fully permutation invariant basis
-            for mm in MM
-                i = 1
-                C = C_re_semi_pi[:,MM_dict[mm]] 
-
-                # These three lines gives all qualified permytations
-                for tt = 1:minimum([N1-N_init+1, N_final-N1]) # numbers of variables to be swapped
-                    for iset in pick(N_init:N1,tt)  # pick a set of variables in the first set to be swapped
-                        for jset in pick(N1+1:N_final,tt) # pick a set of variables in the second set to be swapped
-                            C += C_re_semi_pi[:,MM_dict[swap(mm,iset,jset)]] # swap and add
-                            i += 1
-                        end
+            # These three lines gives all qualified permutations
+            for tt = 1:minimum([N1-N_init+1, N_final-N1]) # numbers of variables to be swapped
+                for iset in pick(N_init:N1,tt)  # pick a set of variables in the first set to be swapped
+                    for jset in pick(N1+1:N_final,tt) # pick a set of variables in the second set to be swapped
+                        MM_new = [ swap(mm,iset,jset) for mm in MM ]
+                        ord = [ MM_dict[MM_new[i]] for i = 1:length(MM_new) ] # sortperm(MM_new, by = x -> findfirst(==(x), MM))
+                        C_new += C_re_semi_pi[:,ord] # swap and add
                     end
                 end
-                push!(C_new, C./i)
             end
-            # reshape C_new as an matrix
-            C_new = identity.(hcat(C_new...))
-
-            # ## NOTE: The above should be in principle equivalent to the following, but faster - and I don't understand why
-            # # final symmetrization
-            # C_new = deepcopy(C_re_semi_pi)
-            # # we need to sum up the coefficients with qualified permutations to get a fully permutation invariant basis
-            # # These three lines gives all qualified permytations
-            # for tt = 1:minimum([N1-N_init+1, N_final-N1]) # numbers of variables to be swapped
-            #     for iset in pick(N_init:N1,tt)  # pick a set of variables in the first set to be swapped
-            #         for jset in pick(N1+1:N_final,tt) # pick a set of variables in the second set to be swapped
-            #             MM_new = [ swap(mm,iset,jset) for mm in MM ]
-            #             ord = sortperm(MM_new, by = x -> findfirst(==(x), MM))
-            #             C_new += C_re_semi_pi[:,ord] # swap and add
-            #         end
-            #     end
-            # end
-        
-            U, S, V = svd(gram(C_new))
+            
+            C_tmp = [ C_new[i,j][sum(MM[j])+L+1] for i = 1:size(C_new,1), j = 1:size(C_new,2) ]
+            U, S, V = svd(C_tmp)
             rk = findall(x -> x > 1e-8, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-12)
             return Diagonal(S[1:rk]) * (U[:, 1:rk]' * C_new), MM
         elseif symmetrization_method == :kernel
@@ -536,7 +515,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
             # since all the element in C_re_semi_pi are vectors having one nonzero && the position of nonzeros aligns with MM, we can extract the scalar part only
             C_new = [ C_re_semi_pi[i,j][sum(MM[j])+L+1] for i = 1:size(C_re_semi_pi,1), j = 1:size(C_re_semi_pi,2) ]
             MM_new = [ swap(mm,N1,N1+1) for mm in MM ]
-            ord = sortperm(MM_new, by = x -> findfirst(==(x), MM))
+            ord = [ MM_dict[MM_new[i]] for i = 1:length(MM_new) ]
             C_new -= C_new[:,ord] # swap and subtract
 
             # left_ker = nullspace(C_new_scalar', atol = 1e-8)' # not as efficient as an svd

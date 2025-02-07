@@ -96,10 +96,10 @@ for i = 1:length(nnll_list_short)
    for Ltot in (iseven(sum(ll)) ? (0:2:4) : (1:2:3))
       println("Case : nn = $nn, ll = $ll, Ltot = $Ltot, N1 = $N1")
       println()
-      # t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1) # no longer needed and has been tested above
+      t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1) # no longer needed and has been tested above - but shown here to see how long does the last symmetrization take
+      t_rpe = @elapsed C_rpe,M = rpe_basis_new(nn,ll,Ltot)
       t_recursive = @elapsed C_rpe_recursive, MM = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :explicit)
       t_recursive_2 = @elapsed C_rpe_recursive_kernel, MM_2 = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :kernel)
-      t_rpe = @elapsed C_rpe,M = rpe_basis_new(nn,ll,Ltot)
       
       # make sure the order of the basis is the same
       if size(C_rpe_recursive,1) == size(C_rpe,1) == size(C_rpe_recursive_kernel,1) != 0
@@ -118,13 +118,14 @@ for i = 1:length(nnll_list_short)
          end
       end
 
-      @show t_recursive, t_recursive_2, t_rpe
+      @show t_re_semi_pi, t_recursive, t_recursive_2, t_rpe
       println()
 
       if rank(gram(C_rpe)) > 0
          # @info("Test that re_semi_pi span a set with rank ranging between RE and RPE")
-         # @test rank(gram(C_rpe)) == rank(gram(C_rpe_recursive)) == rank(gram([C_rpe;C_rpe_recursive])) == rank(gram(C_rpe_recursive_kernel)) == rank(gram([C_rpe;C_rpe_recursive_kernel])) == rank(gram([C_rpe_recursive;C_rpe_recursive_kernel])) == rank(gram([C_rpe;C_rpe_recursive;C_rpe_recursive_kernel]))
+         # @test rank(gram(C_rpe)) == rank(gram(C_rpe_recursive)) == rank(gram(C_rpe_recursive_kernel)) == rank(gram([C_rpe;C_rpe_recursive;C_rpe_recursive_kernel]))
          # In fact, it would be more interesting to check the following, but it makes less sense than the above test (not as intuitive)
+         # This is because we already tested elsewhere that C_rpe has full rank hence the above is sufficient to show the equivalence
          @test size(C_rpe,1) == size(C_rpe_recursive,1) == size(C_rpe_recursive_kernel,1) == rank(gram([C_rpe;C_rpe_recursive;C_rpe_recursive_kernel]))
 
          # @info("Testing the equivariance of the old RPE basis")
@@ -156,7 +157,7 @@ for i = 1:length(nnll_list_short)
             BB2[:, i] = eval_basis(Rs; coeffs=C_rpe, MM=MM, ll=ll, nn=nn) 
             BB3[:, i] = eval_basis(Rs; coeffs=C_rpe_recursive_kernel, MM=MM, ll=ll, nn=nn)
          end
-         @test size(C_rpe_recursive,1) == rank(gram(BB1); rtol=1e-11) == rank(gram([BB1;BB2]); rtol=1e-11) == rank(gram(BB2); rtol=1e-11) == size(C_rpe,1) == size(C_rpe_recursive_kernel,1) == rank(gram([BB1;BB2;BB3]); rtol=1e-11)
+         @test rank(gram(BB1); rtol=1e-11) == rank(gram(BB2); rtol=1e-11) == rank(gram([BB1;BB2;BB3]); rtol=1e-11) == size(C_rpe,1)
       end
    end
 end
