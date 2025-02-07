@@ -97,31 +97,35 @@ for i = 1:length(nnll_list_short)
       println("Case : nn = $nn, ll = $ll, Ltot = $Ltot, N1 = $N1")
       println()
       t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1)
-      t_recursive = @elapsed C_rpe_recursive, MM = rpe_basis_new(nn,ll,Ltot,N1)
+      t_recursive = @elapsed C_rpe_recursive, MM = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :explicit)
+      t_recursive_2 = @elapsed C_rpe_recursive_kernel, MM_2 = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :kernel)
       t_rpe = @elapsed C_rpe,M = rpe_basis_new(nn,ll,Ltot)
       
       # make sure the order of the basis is the same
-      if size(C_rpe_recursive,1) == size(C_rpe,1) != 0
-         if MM != M
-            @assert sort(MM) == sort(M)
+      if size(C_rpe_recursive,1) == size(C_rpe,1) == size(C_rpe_recursive_kernel,1) != 0
+         if MM != M || MM != MM_2
+            @assert sort(MM) == sort(M) == sort(MM_2)
             ord = sortperm(MM)
             @assert MM[ord] = sort(MM)
             C_rpe_recursive = C_rpe_recursive[:,ord]
             ord = sortperm(M)
             @assert M[ord] = sort(M)
             C_rpe = C_rpe[:,ord]
+            ord = sortperm(MM_2)
+            @assert MM_2[ord] = sort(MM_2)
+            C_rpe_recursive_kernel = C_rpe_recursive_kernel[:,ord]
             MM = sort(MM)
          end
       end
 
-      @show t_recursive, t_rpe
+      @show t_recursive, t_recursive_2, t_rpe
       println()
 
       if rank(gram(C_rpe)) > 0
          # @info("Test that re_semi_pi span a set with rank ranging between RE and RPE")
-         @test rank(gram(C_rpe)) == rank(gram(C_rpe_recursive)) == rank(gram([C_rpe;C_rpe_recursive]))
+         # @test rank(gram(C_rpe)) == rank(gram(C_rpe_recursive)) == rank(gram([C_rpe;C_rpe_recursive])) == rank(gram(C_rpe_recursive_kernel)) == rank(gram([C_rpe;C_rpe_recursive_kernel])) == rank(gram([C_rpe_recursive;C_rpe_recursive_kernel])) == rank(gram([C_rpe;C_rpe_recursive;C_rpe_recursive_kernel]))
          # In fact, it would be more interesting to check the following, but it makes less sense than the above test (not as intuitive)
-         @test size(C_rpe,1) == size(C_rpe_recursive,1) == rank(gram([C_rpe;C_rpe_recursive]))
+         @test size(C_rpe,1) == size(C_rpe_recursive,1) == size(C_rpe_recursive_kernel,1) == rank(gram([C_rpe;C_rpe_recursive;C_rpe_recursive_kernel]))
 
          # @info("Testing the equivariance of the old RPE basis")
          Rs = rand_config(length(ll))
@@ -134,6 +138,9 @@ for i = 1:length(nnll_list_short)
          fRs1 = eval_basis(Rs; coeffs = C_rpe_recursive, MM = MM, ll = ll, nn = nn)
          fRs1Q = eval_basis(QRs; coeffs = C_rpe_recursive, MM = MM, ll = ll, nn = nn)
          Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-9) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-9)
+         fRs1 = eval_basis(Rs; coeffs = C_rpe_recursive_kernel, MM = MM, ll = ll, nn = nn)
+         fRs1Q = eval_basis(QRs; coeffs = C_rpe_recursive_kernel, MM = MM, ll = ll, nn = nn)
+         Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-9) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-9)
 
          # @info("Test that re_semi_pi span the same space as RPE")
          # Do the rand batch on the same set of points
@@ -141,13 +148,15 @@ for i = 1:length(nnll_list_short)
          ORD = length(ll) # length of each group 
          BB1 = complex.(zeros(typeof(C_rpe_recursive[1]), size(C_rpe_recursive, 1), ntest))
          BB2 = complex.(zeros(typeof(C_rpe[1]), size(C_rpe, 1), ntest))
+         BB3 = complex.(zeros(typeof(C_rpe_recursive_kernel[1]), size(C_rpe_recursive_kernel, 1), ntest))
          for i = 1:ntest 
             # construct a random set of particles with 𝐫 ∈ ball(radius=1)
             Rs = [ rand_ball() for _ in 1:ORD ]
             BB1[:, i] = eval_basis(Rs; coeffs=C_rpe_recursive, MM=MM, ll=ll, nn=nn)
             BB2[:, i] = eval_basis(Rs; coeffs=C_rpe, MM=MM, ll=ll, nn=nn) 
+            BB3[:, i] = eval_basis(Rs; coeffs=C_rpe_recursive_kernel, MM=MM, ll=ll, nn=nn)
          end
-         @test size(C_rpe_recursive,1) == rank(gram(BB1); rtol=1e-11) == rank(gram([BB1;BB2]); rtol=1e-11) == rank(gram(BB2); rtol=1e-11) == size(C_rpe,1)
+         @test size(C_rpe_recursive,1) == rank(gram(BB1); rtol=1e-11) == rank(gram([BB1;BB2]); rtol=1e-11) == rank(gram(BB2); rtol=1e-11) == size(C_rpe,1) == size(C_rpe_recursive_kernel,1) == rank(gram([BB1;BB2;BB3]); rtol=1e-11)
       end
    end
 end

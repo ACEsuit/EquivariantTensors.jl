@@ -476,19 +476,20 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
         println()
         return re_semi_pi(nn,ll,L,N1)
     else
+        C_re_semi_pi, MM = re_semi_pi(nn,ll,L,N1)
+        if size(C_re_semi_pi,1) == 0
+            return C_re_semi_pi, MM
+        end
+        MM_dict = Dict(MM[i] => i for i = 1:length(MM))
+
+        # Last symmetrization
         if symmetrization_method == :explicit
             println("Two groups intersect - explicit symmetrization is to be performed")
             println()
             n_block = findfirst(n -> n > N1, nice_partition)
             N_init = n_block == nothing ? 1 : nice_partition[n_block-1]+1
             N_final = n_block == nothing ? N : nice_partition[n_block]
-
-            C_re_semi_pi, MM = re_semi_pi(nn,ll,L,N1)
-            if size(C_re_semi_pi,1) == 0
-                return C_re_semi_pi, MM
-            end
-            MM_dict = Dict(MM[i] => i for i = 1:length(MM))
-
+            
             # final symmetrization
             C_new = []
             # we need to sum up the coefficients with qualified permutations to get a fully permutation invariant basis
@@ -528,6 +529,21 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
             U, S, V = svd(gram(C_new))
             rk = findall(x -> x > 1e-8, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-12)
             return Diagonal(S[1:rk]) * (U[:, 1:rk]' * C_new), MM
+        elseif symmetrization_method == :kernel
+            println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
+            println()
+
+            
+            C_new = deepcopy(C_re_semi_pi)
+            MM_new = [ swap(mm,N1,N1+1) for mm in MM ]
+            ord = sortperm(MM_new, by = x -> findfirst(==(x), MM))
+            C_new -= C_re_semi_pi[:,ord] # swap and subtract
+
+            # since all the element in C_new are vectors having one nonzero && the position of nonzeros aligns with MM, we can extract the scalar part of C_new
+            C_new_scalar = [ C_new[i,j][sum(MM[j])+L+1] for i = 1:size(C_new,1), j = 1:size(C_new,2) ]
+            left_ker = nullspace(C_new_scalar', atol = 1e-8)'
+
+            return left_ker * C_re_semi_pi, MM
         end
     end
  end
