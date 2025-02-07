@@ -468,7 +468,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     return C_re_semi_pi, MM
  end
 
- function rpe_basis_new(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, N1::Int64; symmetrization_method = :explicit) where N
+ function rpe_basis_new(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, N1::Int64; symmetrization_method = :kernel) where N
     nice_partition = Sn(nn,ll).-1 # a list of partitions that gives non-intersecting sets
     if length(nice_partition) > 2 && N1 in nice_partition[2:end-1]
         @assert length( intersect([(nn[i],ll[i]) for i = 1:N1], [(nn[i],ll[i]) for i = N1+1:N]) ) == 0
@@ -506,7 +506,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
             
             C_tmp = [ C_new[i,j][sum(MM[j])+L+1] for i = 1:size(C_new,1), j = 1:size(C_new,2) ]
             U, S, V = svd(C_tmp)
-            rk = findall(x -> x > 1e-8, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-12)
+            rk = findall(x -> x > 1e-7, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-12)
             return Diagonal(S[1:rk]) * (U[:, 1:rk]' * C_new), MM
         elseif symmetrization_method == :kernel
             println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
@@ -520,7 +520,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
 
             # left_ker = nullspace(C_new_scalar', atol = 1e-8)' # not as efficient as an svd
             U, S, V = svd(C_new)
-            left_ker = U[:,S .< 1e-8]'
+            left_ker = U[:,S .< 1e-7]'
 
             return left_ker * C_re_semi_pi, MM
         end
