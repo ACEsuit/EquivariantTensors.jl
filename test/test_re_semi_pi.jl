@@ -96,7 +96,7 @@ for i = 1:length(nnll_list_short)
    for Ltot in (iseven(sum(ll)) ? (0:2:4) : (1:2:3))
       println("Case : nn = $nn, ll = $ll, Ltot = $Ltot, N1 = $N1")
       println()
-      t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1)
+      # t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1) # no longer needed and has been tested above
       t_recursive = @elapsed C_rpe_recursive, MM = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :explicit)
       t_recursive_2 = @elapsed C_rpe_recursive_kernel, MM_2 = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :kernel)
       t_rpe = @elapsed C_rpe,M = rpe_basis_new(nn,ll,Ltot)

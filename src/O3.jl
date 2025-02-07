@@ -533,18 +533,17 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
             println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
             println()
 
-            
-            C_new = deepcopy(C_re_semi_pi)
+            # since all the element in C_re_semi_pi are vectors having one nonzero && the position of nonzeros aligns with MM, we can extract the scalar part only
+            C_new = [ C_re_semi_pi[i,j][sum(MM[j])+L+1] for i = 1:size(C_re_semi_pi,1), j = 1:size(C_re_semi_pi,2) ]
             MM_new = [ swap(mm,N1,N1+1) for mm in MM ]
             ord = sortperm(MM_new, by = x -> findfirst(==(x), MM))
-            C_new -= C_re_semi_pi[:,ord] # swap and subtract
+            C_new -= C_new[:,ord] # swap and subtract
 
-            # since all the element in C_new are vectors having one nonzero && the position of nonzeros aligns with MM, we can extract the scalar part of C_new
-            C_new_scalar = [ C_new[i,j][sum(MM[j])+L+1] for i = 1:size(C_new,1), j = 1:size(C_new,2) ]
-            left_ker = nullspace(C_new_scalar', atol = 1e-8)'
+            # left_ker = nullspace(C_new_scalar', atol = 1e-8)' # not as efficient as an svd
+            U, S, V = svd(C_new)
+            left_ker = U[:,S .< 1e-8]'
 
             return left_ker * C_re_semi_pi, MM
         end
     end
  end
-
