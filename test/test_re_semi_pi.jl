@@ -161,3 +161,40 @@ for i = 1:length(nnll_list_short)
       end
    end
 end
+
+# The last test is to show the efficiency of the new recursive method
+# which can also be an example showing that how much we may get if we 
+# store in advance some coepleing coefficients.
+
+for N = 6:12
+   nn = SA[ones(Int64,N)...] .* rand(1:5)
+   ll = SA[ones(Int64,N)...]
+   N1 = Int(round(N/2))
+
+   for Ltot in (iseven(sum(ll)) ? (0:2:4) : (1:2:3))
+      t_rpe = @elapsed C_rpe, M = RepLieGroups.rpe_basis_new(nn,ll,Ltot) # reference time
+      t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1) # time for re_semi_pi - which can be avoided by storing the coupling coefficients
+      t_rpe_recursive_kernel = @elapsed C_rpe_recursive, MM = RepLieGroups.rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :kernel) # time for rpe_basis_new with kernel symmetrization - the difference to the above should be the time for symmetrization
+
+      println("Case : nn = $nn, ll = $ll, Ltot = $Ltot, N1 = $N1")
+      println("Standard RPE basis : $t_rpe")
+      println("RE_SEMI_PI basis : $t_re_semi_pi")
+      println("Recursive RPE basis : $t_rpe_recursive_kernel")
+      println()
+
+      if size(C_rpe_recursive,1) == size(C_rpe,1) != 0
+         if MM != M
+            @assert sort(MM) == sort(M)
+            ord = sortperm(MM)
+            @assert MM[ord] = sort(MM)
+            C_rpe_recursive = C_rpe_recursive[:,ord]
+            ord = sortperm(M)
+            @assert M[ord] = sort(M)
+            C_rpe = C_rpe[:,ord]
+            MM = sort(MM)
+         end
+      end
+
+      @test size(C_rpe,1) == size(C_rpe_recursive,1) == rank(gram([C_rpe;C_rpe_recursive]), rtol=1e-11)
+   end
+end
