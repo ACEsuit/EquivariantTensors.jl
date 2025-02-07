@@ -138,10 +138,10 @@ for i = 1:length(nnll_list_short)
          # fRs1Q = eval_basis(QRs; coeffs = C_re_semi_pi, MM = MM, ll = ll, nn = nn)
          fRs1 = eval_basis(Rs; coeffs = C_rpe_recursive, MM = MM, ll = ll, nn = nn)
          fRs1Q = eval_basis(QRs; coeffs = C_rpe_recursive, MM = MM, ll = ll, nn = nn)
-         Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-9) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-9)
+         Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-12) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-12)
          fRs1 = eval_basis(Rs; coeffs = C_rpe_recursive_kernel, MM = MM, ll = ll, nn = nn)
          fRs1Q = eval_basis(QRs; coeffs = C_rpe_recursive_kernel, MM = MM, ll = ll, nn = nn)
-         Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-9) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-9)
+         Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-12) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-12)
 
          # @info("Test that re_semi_pi span the same space as RPE")
          # Do the rand batch on the same set of points
