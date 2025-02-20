@@ -526,3 +526,119 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
         end
     end
  end
+
+ function rpe_basis_adhoc(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, NN::Vector{Int64}; symmetrization_method = :kernel) where N
+    # @assert all([ 0 < NN[i] < N ] for i = 1:length(NN))
+    Ltot = L
+
+    if length(NN) == 1
+        return rpe_basis_new(nn,ll,L,NN[1]; symmetrization_method = symmetrization_method)
+    end
+ 
+    N1 = NN[1]
+    ll1 = SA[ll[1:N1]...]
+    ll2 = SA[ll[N1+1:end]...]
+    nn1 = SA[nn[1:N1]...]
+    nn2 = SA[nn[N1+1:end]...]
+ 
+    m_class = m_generate(nn,ll,Ltot)[1]
+    MM = []
+    for i = 1:length(m_class)
+       for j = 1:length(m_class[i])
+          push!(MM, m_class[i][j])
+       end
+    end
+    MM = identity.(MM)
+    MM_dict = Dict(MM[i] => i for i = 1:length(MM))
+    T = Ltot == 0 ? Float64 : SVector{2Ltot+1, Float64}
+    C_re_semi_pi = []
+    counter = 0
+    for L1 in 0:sum(ll1)
+       for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
+          # if isodd(L1+L2+Ltot); continue; end # This is wrong - all orders of L1 L2 are needed
+          # global C1, _,_, M1 = re_rpe(nn1,ll1,L1)
+          # global C2, _,_, M2 = re_rpe(nn2,ll2,L2)
+          C1,M1 = rpe_basis_new(nn1,ll1,L1)
+          C2,M2 = rpe_basis_adhoc(nn2,ll2,L2,NN[2:end].-N1; symmetrization_method = symmetrization_method)
+          # global Basis_func = Ltot == 0 ? zeros(Float64, size(C1,1),size(C2,1),length(M1)*length(M2)) : zeros(SVector{2Ltot+1, Float64}, size(C1,1),size(C2,1),length(M1)*length(M2))
+          for i1 in 1:size(C1,1)
+             for i2 in 1:size(C2,1)
+                cc = [ zero(T) for _ = 1:length(MM) ]
+                for (k1,m1) in enumerate(M1)
+                   for (k2,m2) in enumerate(M2)
+                      if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{Ltot,0}_{L1,0,L2,0} = 0 for odd L1+L2+Ltot
+                      if abs(sum(m1)+sum(m2))<=Ltot
+                         k = MM_dict[SA[m1...,m2...]] # findfirst(m -> m == SA[m1...,m2...], MM)
+                         # @assert !isnothing(k)
+                         # Basis_func[i1,i2,counter] = Ltot == 0 ? 
+                         #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                         #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:]
+                         cc[k] = Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                                             clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
+                      end
+                   end
+                end
+                if norm(cc) > 1e-12
+                    push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
+                    counter += 1
+                else
+                    @warn("zero dropped") # If we have some zero basis, the code will warn us
+                end
+             end
+          end
+          # BB = reshape(Basis_func,size(C1,1)*size(C2,1),length(M1)*length(M2))
+          # total_rank += rank(gram(BB))
+          # @show size(BB), rank(gram(BB))
+       end
+    end
+    @assert length(C_re_semi_pi) == counter
+    C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM)])
+ 
+    if size(C_re_semi_pi,1) == 0
+        return C_re_semi_pi, MM
+    end
+    MM_dict = Dict(MM[i] => i for i = 1:length(MM))
+
+    # Last symmetrization
+    if symmetrization_method == :explicit
+        println("Two groups intersect - explicit symmetrization is to be performed")
+        println()
+        n_block = findfirst(n -> n > N1, nice_partition)
+        N_init = n_block == nothing ? 1 : nice_partition[n_block-1]+1
+        N_final = n_block == nothing ? N : nice_partition[n_block]
+        
+        # final symmetrization
+        C_new = deepcopy(C_re_semi_pi)
+        # we need to sum up the coefficients with qualified permutations to get a fully permutation invariant basis
+        # These three lines gives all qualified permutations
+        for tt = 1:minimum([N1-N_init+1, N_final-N1]) # numbers of variables to be swapped
+            for iset in pick(N_init:N1,tt)  # pick a set of variables in the first set to be swapped
+                for jset in pick(N1+1:N_final,tt) # pick a set of variables in the second set to be swapped
+                    MM_new = [ swap(mm,iset,jset) for mm in MM ]
+                    ord = [ MM_dict[MM_new[i]] for i = 1:length(MM_new) ] # sortperm(MM_new, by = x -> findfirst(==(x), MM))
+                    C_new += C_re_semi_pi[:,ord] # swap and add
+                end
+            end
+        end
+        
+        C_tmp = [ C_new[i,j][sum(MM[j])+L+1] for i = 1:size(C_new,1), j = 1:size(C_new,2) ]
+        U, S, V = svd(C_tmp)
+        rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-12)
+        return Diagonal(S[1:rk].^(-1)) * (U[:, 1:rk]' * C_new), MM
+    elseif symmetrization_method == :kernel
+        println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
+        println()
+
+        # since all the element in C_re_semi_pi are vectors having one nonzero && the position of nonzeros aligns with MM, we can extract the scalar part only
+        C_new = [ C_re_semi_pi[i,j][sum(MM[j])+L+1] for i = 1:size(C_re_semi_pi,1), j = 1:size(C_re_semi_pi,2) ]
+        MM_new = [ swap(mm,N1,N1+1) for mm in MM ]
+        ord = [ MM_dict[MM_new[i]] for i = 1:length(MM_new) ]
+        C_new -= C_new[:,ord] # swap and subtract
+
+        # left_ker = nullspace(C_new_scalar', atol = 1e-8)' # not as efficient as an svd
+        U, S, V = svd(C_new)
+        left_ker = U[:,S .< 1e-12]'
+
+        return left_ker * C_re_semi_pi, MM
+    end
+end
