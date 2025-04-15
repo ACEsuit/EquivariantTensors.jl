@@ -1,7 +1,6 @@
-using StaticArrays, LinearAlgebra, RepLieGroups, WignerD, Rotations
+using StaticArrays, LinearAlgebra, RepLieGroups, WignerD, Rotations, Combinatorics
 using Test
-
-include("../src/utils/utils_for_tests.jl")
+using RepLieGroups.O3_new: re_semi_pi, rpe_basis_new, gram
 
 for ntest = 1:200
    ll = SA[rand(0:1, 6)...] |> sort
@@ -23,11 +22,12 @@ for ntest = 1:200
       @test rank(gram(C_rpe)) <= rank(gram(C_re_semi_pi)) <= rank(gram(C_re))
 
       # @info("Testing the equivariance of the old RPE basis")
-      Rs = rand_config(length(ll))
-      θ = rand(3) * 2pi
-      Q = RotZYZ(θ...)
-      D = transpose(WignerD.wignerD(Ltot, θ...)) 
-      QRs = [Q*Rs[i] for i in 1:length(Rs)]
+      local Rs = rand_config(length(ll))
+      local θ = rand(3) * 2pi
+      local Q = RotZYZ(θ...)
+      local D = transpose(WignerD.wignerD(Ltot, θ...)) 
+      local QRs = [Q*Rs[i] for i in 1:length(Rs)]
+      
       fRs1 = eval_basis(Rs; coeffs = C_re_semi_pi, MM = MM, ll = ll, nn = nn)
       fRs1Q = eval_basis(QRs; coeffs = C_re_semi_pi, MM = MM, ll = ll, nn = nn)
       Ltot == 0 ? (@test norm(fRs1 - fRs1Q) < 1e-14) : (@test norm(fRs1 - Ref(D) .* fRs1Q) < 1e-14)
@@ -64,7 +64,6 @@ end
 # nnset = [SA[1,1,1,1]]
 # Partition = [2]
 
-using Combinatorics
 lmax = 4
 nmax = 4
 nnll_list = [] 
@@ -99,7 +98,7 @@ for i = 1:length(nnll_list_short)
       t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1) # no longer needed and has been tested above - but shown here to see how long does the last symmetrization take
       t_rpe = @elapsed C_rpe,M = rpe_basis_new(nn,ll,Ltot)
       t_recursive = @elapsed C_rpe_recursive, MM = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :explicit)
-      t_recursive_2 = @elapsed C_rpe_recursive_kernel, MM_2 = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :kernel)
+      t_recursive_kernel = @elapsed C_rpe_recursive_kernel, MM_2 = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :kernel)
       
       # make sure the order of the basis is the same
       if size(C_rpe_recursive,1) == size(C_rpe,1) == size(C_rpe_recursive_kernel,1) != 0
@@ -118,7 +117,7 @@ for i = 1:length(nnll_list_short)
          end
       end
 
-      @show t_re_semi_pi, t_recursive, t_recursive_2, t_rpe
+      @show t_re_semi_pi, t_recursive, t_recursive_kernel, t_rpe
       println()
 
       if rank(gram(C_rpe)) > 0
@@ -129,11 +128,11 @@ for i = 1:length(nnll_list_short)
          @test size(C_rpe,1) == size(C_rpe_recursive,1) == size(C_rpe_recursive_kernel,1) == rank(gram([C_rpe;C_rpe_recursive;C_rpe_recursive_kernel]))
 
          # @info("Testing the equivariance of the old RPE basis")
-         Rs = rand_config(length(ll))
-         θ = rand(3) * 2pi
-         Q = RotZYZ(θ...)
-         D = transpose(WignerD.wignerD(Ltot, θ...)) 
-         QRs = [Q*Rs[i] for i in 1:length(Rs)]
+         local Rs = rand_config(length(ll))
+         local θ = rand(3) * 2pi
+         local Q = RotZYZ(θ...)
+         local D = transpose(WignerD.wignerD(Ltot, θ...)) 
+         local QRs = [Q*Rs[i] for i in 1:length(Rs)]
          # fRs1 = eval_basis(Rs; coeffs = C_re_semi_pi, MM = MM, ll = ll, nn = nn)
          # fRs1Q = eval_basis(QRs; coeffs = C_re_semi_pi, MM = MM, ll = ll, nn = nn)
          fRs1 = eval_basis(Rs; coeffs = C_rpe_recursive, MM = MM, ll = ll, nn = nn)
