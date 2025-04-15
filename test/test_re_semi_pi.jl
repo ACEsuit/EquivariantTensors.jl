@@ -171,9 +171,9 @@ for N = 6:12
    N1 = Int(round(N/2))
 
    for Ltot in (iseven(sum(ll)) ? (0:2:4) : (1:2:3))
-      t_rpe = @elapsed C_rpe, M = RepLieGroups.rpe_basis_new(nn,ll,Ltot) # reference time
+      t_rpe = @elapsed C_rpe, M = rpe_basis_new(nn,ll,Ltot) # reference time
       t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1) # time for re_semi_pi - which can be avoided by storing the coupling coefficients
-      t_rpe_recursive_kernel = @elapsed C_rpe_recursive, MM = RepLieGroups.rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :kernel) # time for rpe_basis_new with kernel symmetrization - the difference to the above should be the time for symmetrization
+      t_rpe_recursive_kernel = @elapsed C_rpe_recursive, MM = rpe_basis_new(nn,ll,Ltot,N1; symmetrization_method = :kernel) # time for rpe_basis_new with kernel symmetrization - the difference to the above should be the time for symmetrization
 
       println("Case : nn = $nn, ll = $ll, Ltot = $Ltot, N1 = $N1")
       println("Standard RPE basis : $t_rpe")
