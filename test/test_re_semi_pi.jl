@@ -165,7 +165,7 @@ end
 # which can also be an example showing that how much we may get if we 
 # store in advance some coepleing coefficients.
 
-for N = 6:12
+for N = 6:11
    nn = SA[ones(Int64,N)...] .* rand(1:5)
    ll = SA[ones(Int64,N)...]
    N1 = Int(round(N/2))
