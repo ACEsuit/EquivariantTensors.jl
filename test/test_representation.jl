@@ -1,5 +1,5 @@
-using Test, RepLieGroups, StaticArrays, SpheriCart, Combinatorics
-using RepLieGroups.O3: Ctran
+using Test, EquivariantTensors, StaticArrays, SpheriCart, Combinatorics
+using EquivariantTensors.O3: Ctran
 using PartialWaveFunctions: clebschgordan
 using LinearAlgebra
 using WignerD, Rotations

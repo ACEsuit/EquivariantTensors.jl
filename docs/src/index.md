@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = RepLieGroups
+CurrentModule = EquivariantTensors
 ```
 
-# RepLieGroups
+# EquivariantTensors
 
-Documentation for [RepLieGroups](https://github.com/ACEsuit/RepLieGroups.jl).
+Documentation for [EquivariantTensors](https://github.com/ACEsuit/EquivariantTensors.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [RepLieGroups]
+Modules = [EquivariantTensors]
 ```

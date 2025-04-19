@@ -1,16 +1,14 @@
-using RepLieGroups
+using EquivariantTensors
 using Documenter
 
-DocMeta.setdocmeta!(RepLieGroups, :DocTestSetup, :(using RepLieGroups); recursive=true)
+DocMeta.setdocmeta!(EquivariantTensors, :DocTestSetup, :(using EquivariantTensors); recursive=true)
 
 makedocs(;
-    modules=[RepLieGroups],
-    authors="Christoph Ortner <christohortner@gmail.com> and contributors",
-    repo="https://github.com/ACEsuit/RepLieGroups.jl/blob/{commit}{path}#{line}",
-    sitename="RepLieGroups.jl",
+    modules=[EquivariantTensors],
+    authors="Christoph Ortner <christophortner0@gmail.com> and contributors",
+    sitename="EquivariantTensors.jl",
     format=Documenter.HTML(;
-        prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://ACEsuit.github.io/RepLieGroups.jl",
+        canonical="https://ACEsuit.github.io/EquivariantTensors.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -20,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/ACEsuit/RepLieGroups.jl",
+    repo="github.com/ACEsuit/EquivariantTensors.jl",
     devbranch="main",
 )

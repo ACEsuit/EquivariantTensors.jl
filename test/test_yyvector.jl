@@ -1,6 +1,6 @@
 
 
-using RepLieGroups: SYYVector, _lm2i, _i2lm
+using EquivariantTensors: SYYVector, _lm2i, _i2lm
 using Test
 
 isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_for_tests.jl")

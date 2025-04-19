@@ -1,4 +1,4 @@
-module RepLieGroups
+module EquivariantTensors
 
 export O3 
 

@@ -1,6 +1,6 @@
-name = "RepLieGroups"
-uuid = "f07d36f2-91c4-427a-b67b-965fe5ebe1d2"
-version = "0.1.0"
+name = "EquivariantTensors"
+uuid = "5e107534-7145-4f8f-b06f-47a52840c895"
+version = "0.0.1-dev"
 
 [deps]
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"

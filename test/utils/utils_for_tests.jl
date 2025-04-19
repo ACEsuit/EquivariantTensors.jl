@@ -3,7 +3,7 @@ const ___UTILS_FOR_TESTS___ = true
 
 using Test, SpheriCart, StaticArrays, BlockDiagonals
 using SpheriCart: idx2lm, lm2idx 
-using RepLieGroups.O3: Ctran
+using EquivariantTensors.O3: Ctran
 
 ##
 
@@ -202,7 +202,7 @@ function sym_rand_batch(; coeffs, MM, ll, nn,
 end
 
 # # The following two functions are hacked from the EQM package, just using as reference and for comparison
-# # they will be moved to RepLieGroups soon
+# # they will be moved to EquivariantTensors soon
 # function rpe_basis(A::Union{Rot3DCoeffs,Rot3DCoeffs_real}, nn::SVector{N, TN}, ll::SVector{N, Int}) where {N, TN}
 #    t_re_old = @elapsed Ure, Mre = re_basis(A, ll)
 #    # @show t_re_old

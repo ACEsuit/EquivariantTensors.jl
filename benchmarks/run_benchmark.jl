@@ -1,5 +1,5 @@
 
-using StaticArrays, LinearAlgebra, RepLieGroups, WignerD, Combinatorics, 
+using StaticArrays, LinearAlgebra, EquivariantTensors, WignerD, Combinatorics, 
       Rotations
 using WignerD: wignerD
 using Test

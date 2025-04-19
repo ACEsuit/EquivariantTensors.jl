@@ -1,6 +1,6 @@
 module O3
 
-import RepLieGroups
+import EquivariantTensors
 
 using PartialWaveFunctions
 using Combinatorics

@@ -1,11 +1,11 @@
-using RepLieGroups
+using EquivariantTensors
 using Test
 
 isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_for_tests.jl")
 
 ##
 
-@testset "RepLieGroups.jl" begin
+@testset "EquivariantTensors.jl" begin
 
     @testset "SYYVector" begin include("test_yyvector.jl"); end
     
