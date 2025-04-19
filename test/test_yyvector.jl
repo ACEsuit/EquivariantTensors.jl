@@ -3,7 +3,7 @@
 using EquivariantTensors: SYYVector, _lm2i, _i2lm
 using Test
 
-isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_for_tests.jl")
+isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 
 ##
 

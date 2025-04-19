@@ -4,7 +4,7 @@ using PartialWaveFunctions: clebschgordan
 using LinearAlgebra
 using WignerD, Rotations, BlockDiagonals
 
-isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_for_tests.jl")
+isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 
 
 ##

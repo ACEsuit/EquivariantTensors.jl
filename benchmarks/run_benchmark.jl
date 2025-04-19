@@ -4,7 +4,7 @@ using StaticArrays, LinearAlgebra, EquivariantTensors, WignerD, Combinatorics,
 using WignerD: wignerD
 using Test
 
-isdefined(Main, :___UTILS_FOR_TESTS___) || include("../utils/utils_for_tests.jl")
+isdefined(Main, :___UTILS_FOR_TESTS___) || include("../utils/utils_testO3.jl")
 
 ##
 
