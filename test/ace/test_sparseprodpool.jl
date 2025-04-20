@@ -1,9 +1,11 @@
 
-using BenchmarkTools, Test, Polynomials4ML, ChainRulesCore
-using Polynomials4ML: PooledSparseProduct, evaluate, evaluate!, 
+using Test, EquivariantTensors, ChainRulesCore
+using EquivariantTensors: PooledSparseProduct, evaluate, evaluate!, 
          _generate_input, _generate_input_1
-using Polynomials4ML.Testing: test_withalloc
+# using Polynomials4ML.Testing: test_withalloc
 using ACEbase.Testing: fdtest, println_slim, print_tf 
+
+ET = EquivariantTensors
 
 test_evaluate(basis::PooledSparseProduct, BB::Tuple{Vararg{AbstractVector}}) =
    [prod(BB[j][basis.spec[i][j]] for j = 1:length(BB))
@@ -13,7 +15,6 @@ test_evaluate(basis::PooledSparseProduct, BB::Tuple{Vararg{AbstractMatrix}}) =
    sum(test_evaluate(basis, ntuple(i -> BB[i][j, :], length(BB)))
        for j = 1:size(BB[1], 1))
 
-P4ML = Polynomials4ML
 
 ##
 
@@ -60,18 +61,16 @@ end
 
 println()
 
-
 ##
 
-@info("    testing withalloc")
-basis = _generate_basis(; order=2)
-BB = _generate_input_1(basis)
-bBB = _generate_input(basis)
-test_withalloc(basis; batch=false)
-
+# TODO: revive test to check no allocations 
+# @info("    testing withalloc")
+# basis = _generate_basis(; order=2)
+# BB = _generate_input_1(basis)
+# bBB = _generate_input(basis)
+# test_withalloc(basis; batch=false)
 
 ##
-
 
 @info("Testing rrule")
 using LinearAlgebra: dot
@@ -117,7 +116,7 @@ for ntest = 1:20
    @test ∂_BB isa NTuple{ORDER, <: AbstractMatrix}
    @test all(size(∂_BB[i]) == size(bBB[i]) for i = 1:length(bBB))
 
-   val2, pb2 = rrule(P4ML.pullback, ∂A, basis, bBB)
+   val2, pb2 = rrule(ET.pullback, ∂A, basis, bBB)
    @test val2 == ∂_BB
 
    ∂2 = ntuple(i -> randn(size(∂_BB[i])), length(∂_BB))
@@ -127,11 +126,11 @@ for ntest = 1:20
    _∂A(t) = ∂A + t * bV
 
    F(t) = begin
-      ∂_BB = P4ML.pullback(_∂A(t), basis, _BB(t))
+      ∂_BB = ET.pullback(_∂A(t), basis, _BB(t))
       return sum(dot(∂2[i], ∂_BB[i]) for i = 1:length(∂_BB))
    end
    dF(t) = begin
-      val, pb = rrule(P4ML.pullback, ∂A, basis, _BB(t))
+      val, pb = rrule(ET.pullback, ∂A, basis, _BB(t))
       _, ∂_∂A, _, ∂2_BB = pb(∂2)
       return dot(∂_∂A, bV) + sum(dot(bUU[i], ∂2_BB[i]) for i = 1:ORDER)
    end
@@ -144,7 +143,6 @@ println()
 ## 
 @info("Testing pushforward for PooledSparseProduct")
 
-using Polynomials4ML: pushforward
 
 for ntest = 1:20 
    local order, basis, BB, ΔBB, A1, ∂A1, A2, ∂A2 
@@ -154,10 +152,10 @@ for ntest = 1:20
    ΔBB = ntuple(i -> randn(Float64, size(BB[i])), order) 
    _BB(t) = ntuple(i -> BB[i] + t * ΔBB[i], order)
    U = randn(length(basis)) ./ (1:length(basis))
-   A, ∂A = pushforward(basis, BB, ΔBB)
+   A, ∂A = ET.pushforward(basis, BB, ΔBB)
    print_tf(@test A ≈ basis(BB))
    F(t) = dot(U, evaluate(basis, _BB(t)))
-   dF(t) = dot(U, pushforward(basis, _BB(t), ΔBB)[2])
+   dF(t) = dot(U, ET.pushforward(basis, _BB(t), ΔBB)[2])
    print_tf(@test fdtest(F, dF, 0.0; verbose=false))
 end
 println() 

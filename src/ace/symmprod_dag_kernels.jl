@@ -1,3 +1,4 @@
+# TO BE RE-INTEGRATED INTO CODEBASE 
 
 function whatalloc(::typeof(evaluate!), dag::SparseSymmProdDAG, 
                    A::AbstractVector{T}) where {T <: Number}

@@ -21,18 +21,18 @@ PooledSparseProduct(spec)
 where `spec` is a list of $(k_1, \dots, k_N)$ tuples or vectors, or 
 `AbstractMatrix` where each column specifies such a tuple. 
 """
-struct PooledSparseProduct{NB} <: AbstractP4MLTensor
+struct PooledSparseProduct{NB} <: AbstractETLayer 
    spec::Vector{NTuple{NB, Int}}
    # ---- temporaries & caches 
-   @reqfields
+   meta::Dict{String, Any}
 end
 
 function PooledSparseProduct()
-   return PooledSparseProduct(NTuple{NB, Int}[], _make_reqfields()...)
+   return PooledSparseProduct(NTuple{NB, Int}[], Dict{String, Any}())
 end
 
 function PooledSparseProduct(spect::AbstractVector{<: Tuple})
-   return PooledSparseProduct(spect, _make_reqfields()...)
+   return PooledSparseProduct(spect, Dict{String, Any}())
 end
 
 # each column defines a basis element
@@ -47,6 +47,15 @@ Base.length(basis::PooledSparseProduct) = length(basis.spec)
 function Base.show(io::IO, basis::PooledSparseProduct{NB}) where {NB}
    print(io, "PooledSparseProduct{$NB}(...)")
 end
+
+# (basis::PooledSparseProduct)(args...) = evaluate(basis, args...)
+
+# function evaluate(basis::PooledSparseProduct, BB)
+#    TV, nA = whatalloc(evaluate!, basis, BB)
+#    A = zeros(TV, nA) 
+#    evaluate!(A, basis, BB)
+#    return A
+# end
 
 
 # ----------------------- evaluation and allocation interfaces 
@@ -98,6 +107,10 @@ end
 #    end
 #    return nothing 
 # end
+
+const TupVec = Tuple{Vararg{AbstractVector}}
+const TupMat = Tuple{Vararg{AbstractMatrix}}
+const TupVecMat = Union{TupVec, TupMat}
 
 function whatalloc(evaluate!, basis::PooledSparseProduct{NB}, BB::TupVecMat) where {NB}
    TV = _valtype(basis, BB)
@@ -188,6 +201,14 @@ function whatalloc(::typeof(pullback!),
    TA = promote_type(eltype.(BB)..., eltype(∂A))
    return ntuple(i -> (TA, size(BB[i])...), NB)                   
 end
+
+function pullback(∂A, basis::PooledSparseProduct, BB)
+   alc = whatalloc(pullback!, ∂A, basis, BB)
+   ∂BB = ntuple(i -> zeros(alc[i]...), length(BB))
+   pullback!(∂BB, ∂A, basis, BB)
+   return ∂BB
+end
+
 
 
 # the next few method definitions ensure that we can use the 
@@ -387,6 +408,14 @@ function whatalloc(::typeof(pullback2!), ∂∂BB, ∂A,
    return ( (TA, size(∂A)...), 
             ntuple(i -> (TA, size(BB[i])...), NB)...)
 end
+
+# function pullback2(∂A, basis::PooledSparseProduct, BB)
+#    alc = whatalloc(pullback!, ∂A, basis, BB)
+#    ∂BB = ntuple(i -> zeros(alc[i]...), length(BB))
+#    pullback!(∂BB, ∂A, basis, BB)
+#    return ∂BB
+# end
+
 
 pullback2!(∇_∂A, ∇_BB1::AbstractMatrix, ∂∂BB, ∂A, basis::PooledSparseProduct{1}, BB) = 
       pullback2!(∇_∂A, (∇_BB1,), ∂∂BB, ∂A, basis, BB) 
