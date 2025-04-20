@@ -24,14 +24,16 @@ defines a basis of 9 functions,
 [ A_1, A_2, A_1^2, A_1 A_2, A_2^2, A_1^3, A_1^2 A_2, A_1 A_2^2, A_2^3 ]
 ```
 """
-struct SparseSymmProd{ORD, TS} <: AbstractP4MLTensor
+struct SparseSymmProd{ORD, TS} <: AbstractETLayer
    specs::TS
    ranges::NTuple{ORD, UnitRange{Int}}
    hasconst::Bool 
-   # --------------
-   @reqfields
 end
 
+# spec is a Tuple of Vectors of Tuples. E.g. if ORD == 3 then 
+# spec = ( [ (1,), (2,), ...], 
+#          [ (1,1), (1,2), (2,2), ...], 
+#          [ (1,1,1), (1,1,2), (1,2,2), ...] )
 
 function SparseSymmProd(spec::AbstractVector{<: Union{Tuple, AbstractVector}}; kwargs...)
    if !issorted(spec, by=length) 
@@ -57,7 +59,7 @@ function SparseSymmProd(spec::AbstractVector{<: Union{Tuple, AbstractVector}}; k
       push!(ranges, (idx+1):(idx+len))
       idx += len
    end
-   return SparseSymmProd(specs, tuple(ranges...), hasconst, _make_reqfields()...)   
+   return SparseSymmProd(specs, tuple(ranges...), hasconst)   
 end
 
 Base.length(basis::SparseSymmProd) = sum(length, basis.specs) + basis.hasconst
@@ -289,6 +291,15 @@ end
 
 # ------------------------------------------
 #  ChainRules integration 
+
+function rrule(::typeof(evaluate), basis::SparseSymmProd, A)
+   AA = evaluate(basis, A)
+   function pb(∂AA)
+      ∂A = pullback(∂AA, basis, A)
+      return NoTangent(), NoTangent(), ∂A
+   end
+   return AA, pb
+end
 
 function rrule(::typeof(pullback), ∂AA, basis::SparseSymmProd, A) 
    ∂A = pullback(∂AA, basis, A)

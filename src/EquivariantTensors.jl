@@ -6,22 +6,23 @@ using Bumper, WithAlloc, Random
 
 import ACEbase: evaluate, evaluate!
 import WithAlloc: whatalloc
-using ForwardDiff: Dual, extract_derivative 
+import ChainRulesCore: rrule, frule 
 
-function pullback end 
-function pullback! end 
-function pullback2 end 
-function pullback2! end 
-function pushforward end 
-function pushforward! end 
+using ForwardDiff: Dual, extract_derivative 
 
 export O3 
 
-include("utils.jl")
-include("ace/sparseprodpool.jl")
 
+include("generics.jl")
+
+
+include("ace/static_prod.jl")
+include("ace/sparseprodpool.jl")
+include("ace/sparsesymmprod.jl")
 
 include("yyvector.jl")
 include("O3.jl")
+
+include("utils/sparse.jl")
 
 end

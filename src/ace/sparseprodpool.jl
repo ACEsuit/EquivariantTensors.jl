@@ -23,16 +23,14 @@ where `spec` is a list of $(k_1, \dots, k_N)$ tuples or vectors, or
 """
 struct PooledSparseProduct{NB} <: AbstractETLayer 
    spec::Vector{NTuple{NB, Int}}
-   # ---- temporaries & caches 
-   meta::Dict{String, Any}
 end
 
 function PooledSparseProduct()
-   return PooledSparseProduct(NTuple{NB, Int}[], Dict{String, Any}())
+   return PooledSparseProduct(NTuple{NB, Int}[])
 end
 
 function PooledSparseProduct(spect::AbstractVector{<: Tuple})
-   return PooledSparseProduct(spect, Dict{String, Any}())
+   return PooledSparseProduct(spect)
 end
 
 # each column defines a basis element

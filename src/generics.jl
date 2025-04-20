@@ -1,4 +1,9 @@
-
+function pullback end 
+function pullback! end 
+function pullback2 end 
+function pullback2! end 
+function pushforward end 
+function pushforward! end 
 
 
 # a helper that converts all whatalloc outputs to tuple form 

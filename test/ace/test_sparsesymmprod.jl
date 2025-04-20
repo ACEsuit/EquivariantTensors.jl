@@ -1,27 +1,26 @@
 
-using Test, BenchmarkTools, Polynomials4ML
-using Polynomials4ML: SimpleProdBasis, SparseSymmProd, pullback, 
-                     evaluate
-using Polynomials4ML.Testing: println_slim, print_tf, generate_SO2_spec, 
-                              test_withalloc
-using Random
-
-using ACEbase.Testing: fdtest, dirfdtest
-using Lux
+using Test, Random, EquivariantTensors
+using EquivariantTensors: SparseSymmProd, evaluate
+using ACEbase.Testing: println_slim, print_tf, fdtest, dirfdtest
 using ChainRulesCore: rrule 
 
-P4ML = Polynomials4ML
+ET = EquivariantTensors
+
+isdefined(Main, :__TEST_ACE__) || include("utils_ace.jl")
+
+#TODO
+                              # test_withalloc
 
 ##
 
 M = 5 
-spec = generate_SO2_spec(5, 2*M)
+spec = Test_ACE.generate_SO2_spec(5, 2*M)
 A = randn(ComplexF64, 2*M+1)
 
 ## 
 
 @info("Test consistency of SparseSymmetricProduct with SimpleProdBasis")
-basis1 = SimpleProdBasis(spec)
+basis1 = Test_ACE.SimpleProdBasis(spec)
 AA1 = basis1(A)
 
 basis2 = SparseSymmProd(spec)
@@ -31,7 +30,7 @@ AA2 = basis2(A)
 println_slim(@test AA1 ≈ AA2)
 
 @info("reconstruct spec")
-spec_ = P4ML.reconstruct_spec(basis2)
+spec_ = ET.reconstruct_spec(basis2)
 println_slim(@test spec_ == spec)
 
 println_slim(@test basis2.hasconst == false)
@@ -40,12 +39,12 @@ println_slim(@test basis2.hasconst == false)
 
 @info("Test with a constant")
 spec_c = [ [Int[],]; spec]
-basis1_c = SimpleProdBasis(spec_c)
+basis1_c = Test_ACE.SimpleProdBasis(spec_c)
 basis2_c = SparseSymmProd(spec_c)
 
 println_slim(@test basis2_c.hasconst == true)
 
-spec_c_ = P4ML.reconstruct_spec(basis2_c)
+spec_c_ = ET.reconstruct_spec(basis2_c)
 println_slim(@test spec_c_ == spec_c)
 
 AA1_c = basis1_c(A)
@@ -77,7 +76,7 @@ for ntest = 1:10
    δA = randn(length(A)) ./ (1+length(A))
    g(t) = f(A + t * δA)
 
-   AA, pb = rrule(evaluate, basis2, A)
+   AA, pb = rrule(ET.evaluate, basis2, A)
    g0 = dot(Δ, AA)
    dg0 = dot(pb(Δ)[3], δA)
 
@@ -156,10 +155,10 @@ for ntest = 1:30
    uA = randn(length(A)) ./ (1:length(A))
    uΔ = randn(length(AA)) ./ (1:length(AA))
 
-   F(t) = dot(Δ², P4ML.pullback(Δ + t * uΔ, basis2, A + t * uA))
+   F(t) = dot(Δ², ET.pullback(Δ + t * uΔ, basis2, A + t * uA))
 
    dF(t) = begin 
-      val, pb = P4ML.rrule(P4ML.pullback, Δ + t * uΔ, basis2,  A + t * uA)
+      val, pb = rrule(ET.pullback, Δ + t * uΔ, basis2,  A + t * uA)
       _, ∇_Δ, _, ∇_A = pb(Δ²)
       return dot(∇_Δ, uΔ) + dot(∇_A, uA)
    end
@@ -184,9 +183,9 @@ for ntest = 1:30
    _Δ(t) = Δ + t * uΔ   
    _X(t) = bA + t * uA
 
-   F(t) = dot(Δ², P4ML.pullback(_Δ(t), basis2, _X(t)))
+   F(t) = dot(Δ², ET.pullback(_Δ(t), basis2, _X(t)))
    dF(t) = begin
-      val, pb = rrule(P4ML.pullback, _Δ(t), basis2, _X(t))
+      val, pb = rrule(ET.pullback, _Δ(t), basis2, _X(t))
       _, ∇_Δ, _, ∇_A = pb(Δ²)
       return dot(∇_Δ, uΔ) + dot(∇_A, uA)
    end
@@ -206,13 +205,13 @@ for ntest = 1:10
    local M, nX, spec, A, basis, AA1, AA2 
    M = rand(4:7)
    BO = rand(2:5)
-   spec = generate_SO2_spec(BO, 2*M)
+   spec = Test_ACE.generate_SO2_spec(BO, 2*M)
    A = randn(Float64, 2*M+1)
    ΔA = randn(length(A))
 
    basis = SparseSymmProd(spec)
    AA1 = basis(A)
-   AA2, ∂AA2 = P4ML.pushforward(basis, A, ΔA)
+   AA2, ∂AA2 = ET.pushforward(basis, A, ΔA)
    print_tf( @test AA1 ≈ AA2 )
 
    u = randn(length(AA1)) ./ (1:length(AA1))
@@ -221,13 +220,15 @@ for ntest = 1:10
 end 
 println() 
 
+##
+
 @info("Testing batched basic pushforward")
 
 for ntest = 1:10 
    local M, nX, spec, A, basis, AA1, AA2 
    M = rand(4:7)
    BO = rand(2:5)
-   spec = generate_SO2_spec(BO, 2*M)
+   spec = Test_ACE.generate_SO2_spec(BO, 2*M)
    basis = SparseSymmProd(spec)
 
    nX = rand(6:12)
@@ -235,7 +236,7 @@ for ntest = 1:10
    ΔA = randn(size(A))
 
    AA1 = basis(A)
-   AA2, ∂AA2 = P4ML.pushforward(basis, A, ΔA)
+   AA2, ∂AA2 = ET.pushforward(basis, A, ΔA)
    print_tf( @test AA1 ≈ AA2 )
 
    u = randn(size(AA1))
