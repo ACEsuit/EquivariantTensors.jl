@@ -24,6 +24,7 @@ ChainRulesCore = "1.25.1"
 Combinatorics = "1.0"
 ForwardDiff = "1.0.1"
 LinearAlgebra = "1.10"
+LocalRegistry = "0.5"
 LuxCore = "1.2.4"
 PartialWaveFunctions = "0.2.0"
 Random = "1.11.0"
@@ -34,13 +35,12 @@ julia = "1.10, 1.11"
 
 [extras]
 BlockDiagonals = "0a1fb500-61f7-11e9-3c65-f5ef3456f9f0"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 SpheriCart = "5caf2b29-02d9-47a3-9434-5931c85ba645"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
-Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [targets]
-test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", 
-         "Random", "Printf"]
+test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", "Random", "Printf"]
