@@ -6,21 +6,40 @@ using WignerD, Rotations, BlockDiagonals
 
 isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 
+# The full test set is quite large and takes a while, for a quick sanity test 
+# it is better to keep the test small so it runs quickly. 
+#
+___O3_TESTS___ = :small 
+# :___O3_TESTS___ = :large
+
 
 ##
 
+if ___O3_TESTS___ == :small
+   @info("Using SMALL couplings test set")
+   Lmax = 2
+   lmax = 4 
+   nmax = 4 
+   ORDmax = 3 
+elseif ___O3_TESTS___ == :large
+   @info("Using LARGE couplings test set")
+   Lmax = 4
+   lmax = 4 
+   nmax = 4 
+   ORDmax = 5 
+end
+
+
 @info("Equivariance and Linear Independence of coupled cSH & rSH based basis")
-Lmax = 3
+
 for L = 0:Lmax 
+   global Lmax, lmax, nmax, ORDmax
    local θ, ll, Ure, Ure_r, U_rpe, U_rpe_r, Mll, Mll_r 
    local X, Q, B1, B2, B3, B4, B5, B6, B7, B8
    local rk, rk_r, ntest
    local BB, BB_r, BB_sym, BB_sym_r
 
    # generate an nnll list for each L for testing
-   lmax = 4
-   nmax = 4
-   ORDmax = 5
    nnll_list = [] 
 
    for ORD = 2:ORDmax

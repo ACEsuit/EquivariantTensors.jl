@@ -10,5 +10,5 @@ These pages will contain the documentation for [EquivariantTensors](https://gith
 ```
 
 ```@autodocs
-Modules = [EquivariantTensors]
+Modules = [EquivariantTensors, EquivariantTensors.O3]
 ```

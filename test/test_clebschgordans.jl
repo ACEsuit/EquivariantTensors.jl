@@ -123,7 +123,7 @@ TOL = 1e-14
 NTEST = 30 
 
 for _ = 1:NTEST 
-      local θ
+      local θ, M 
       # two random Ylm  ...
       l1, l2 = rand(1:10), rand(1:10)
       m1, m2 = rand(-l1:l1), rand(-l2:l2)
