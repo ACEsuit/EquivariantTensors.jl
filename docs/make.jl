@@ -14,6 +14,10 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
+        "Public API" => "api.md",
+        "Docstrings" => "docstrings.md",
+        "Benchmarking" => "benchmarking.md",
+
     ],
 )
 
