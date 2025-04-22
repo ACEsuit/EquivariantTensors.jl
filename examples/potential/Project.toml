@@ -1,0 +1,4 @@
+[deps]
+EquivariantTensors = "5e107534-7145-4f8f-b06f-47a52840c895"
+Polynomials4ML = "03c4bcba-a943-47e9-bfa1-b1661fc2974f"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
