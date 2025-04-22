@@ -1,5 +1,4 @@
-/Manifest*.toml
-/docs/Manifest*.toml
+Manifest*.toml
 /docs/build/
 .vscode
 literate_tutorials

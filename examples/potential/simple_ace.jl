@@ -123,9 +123,9 @@ aabasis = ET.SparseSymmProd(𝔸spec)
 # [4] symmetrization
 # the symmetrization operator 𝔸 ↦ 𝔹 = 𝒞 ⋅ 𝔸 requires some information about 
 # the basis functions that we now have to reconstruct from the specification of 
-# the 𝔸, A, R, Y layers. It basically means rewriting 𝔸spec in a "readable" 
-# format. Luckily we already have this in the form of the `ii2bb` function. 
-# from that we generate the "readable" spec of 𝔸 and then a lookup table.
+# the 𝔸, A, R, Y layers. It basically means rewriting 𝔸spec in a format that  
+# identifies the n, l, m channels. Luckily we already have this in the form of 
+# the `ii2bb` function.
 nnllmm = [ ii2bb(ii) for ii in 𝔸spec ]
 
 # this function creates a unique way to lookup permutation-invariant features
