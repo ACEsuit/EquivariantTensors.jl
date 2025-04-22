@@ -216,8 +216,9 @@ gram(X::Matrix{<:Number}) = X * X'
 
 function lexi_ord(nn::SVector{N, Int64}, ll::SVector{N, Int64}) where N
     pairs = collect(zip(ll, nn))         # create (lᵢ, nᵢ) pairs
-    sort!(pairs)                         # sort lexicographically: first by lᵢ, then by nᵢ
-    return SVector{N}(last.(pairs)), SVector{N}(first.(pairs))
+    p = sortperm(pairs)
+    pairs_sorted = pairs[p]
+    return SVector{N}(last.(pairs)), SVector{N}(first.(pairs)), invperm(p)
 end
 
 """
@@ -284,24 +285,30 @@ end
 
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
-function _coupling_coeffs(L::Int64, ll::SVector{N, Int64}, nn::SVector{N, Int64}; 
+function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
                           PI = true, flag = :cSH) where N
 
     # TODO: when PI, (nn, ll) should be ordered 
+    #       turn off permutations for now 
     if PI
-        nn, ll = lexi_ord(nn, ll)
+        nn1, ll1, inv_perm = lexi_ord(nn, ll)
+        if nn1 != nn || ll1 != ll
+            error("The input (nn, ll) is not in lexicographical order")
+        end
+    # else
+    #     inv_perm = SVector{N, Int}((1:N)...)
     end
 
     Lset = SetLl(ll,L)
     r = length(Lset)
     T = L == 0 ? Float64 : SVector{2L+1,Float64}
     if r == 0 
-        return zeros(T, 1, 1), zeros(T, 1, 1), [zeros(Int,N)], [zeros(Int,N)]
+        return zeros(T, 0, 0), SVector{N, Int}[]
     else 
         MMmat, size_m = m_generate(nn,ll,L;flag=flag) # classes of m's
         FMatrix=zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
         UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefficients D
-        MM = [] # all possible m's
+        MM = SVector{N, Int}[] # all possible m's
         for i in 1:r
             c = 0
             for (j,m_class) in enumerate(MMmat)
@@ -315,8 +322,8 @@ function _coupling_coeffs(L::Int64, ll::SVector{N, Int64}, nn::SVector{N, Int64}
             @assert c==size_m
         end 
         for m_class in MMmat
-            for m in m_class
-                push!(MM,m)
+            for mm in m_class
+                push!(MM, mm)
             end
         end      
     end

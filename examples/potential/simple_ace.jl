@@ -3,14 +3,14 @@
 
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
-using StaticArrays, SparseArrays
+using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
 
 ##
 module ACE0 
 
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
-using StaticArrays
+using StaticArrays, LinearAlgebra
 
 # This struct defines a simple ACE-like model. The inputs are a cloud of points
 # 𝐫 = (r₁, r₂, ..., rₙ) in 3D space. The output of the model is a scalar that 
@@ -28,7 +28,7 @@ end
 function eval_with_grad(m::SimpleACE, 𝐫::AbstractVector{<: SVector{3}}) where {T} 
    # evaluate the Rn and Ylm embeddings
    #   Rn[j] = Rn(norm(𝐫[j])), Ylm[j] = Ylm(Rs[j])
-   r = norm.(Rs)
+   r = norm.(𝐫)
    𝐲 = 𝐫
    Rn = P4ML.evaluate(m.rbasis, r)
    Ylm = P4ML.evaluate(m.ybasis, 𝐲)
@@ -67,10 +67,12 @@ Dtot = 6   # total degree; specifies the trunction of embeddings and correlation
 maxL = 4    # maximum degree of spherical harmonics 
 ORD = 3     # correlation-order (body-order = ORD + 1)
 
+##
 # [1] first specify the radial and angular embeddings 
 rbasis = P4ML.legendre_basis(Dtot+1)
 ybasis = P4ML.real_sphericalharmonics(maxL)
 
+##
 # [2] Pooling and SparseProduct
 # this layer takes the embeddings of the individual particles and pools them 
 # to embed the entire set of particles. (point cloud) Note this is a sparse 
@@ -81,6 +83,7 @@ Aspec = [ (n+1, P4ML.lm2idx(l, m))
 abasis = ET.PooledSparseProduct(Aspec)
 @assert abasis.spec == Aspec
 
+##
 # [3] n-correlations 
 # generating sparse n-correlations is a little more involved, and here is it 
 # better to just automate this. But for a very small model we can still do it 
@@ -116,6 +119,7 @@ comb2 = [ ii for ii in comb1 if myfilter(ii) ]
 # and now we can finally generate the n-correlations layer 
 aabasis = ET.SparseSymmProd(𝔸spec)
 
+##
 # [4] symmetrization
 # the symmetrization operator 𝔸 ↦ 𝔹 = 𝒞 ⋅ 𝔸 requires some information about 
 # the basis functions that we now have to reconstruct from the specification of 
@@ -123,26 +127,59 @@ aabasis = ET.SparseSymmProd(𝔸spec)
 # format. Luckily we already have this in the form of the `ii2bb` function. 
 # from that we generate the "readable" spec of 𝔸 and then a lookup table.
 nnllmm = [ ii2bb(ii) for ii in 𝔸spec ]
-inv_nnllmm = Dict( bb => i for (i, bb) in enumerate(nnllmm) )
+
+# this function creates a unique way to lookup permutation-invariant features
+function sort_bb(nn, ll, mm) 
+   aa = sort( [ [nn[α], ll[α], mm[α] ] for α = 1:length(nn) ] ) 
+   return ntuple(i -> [ aa[α][i] for α = 1:length(nn) ], 3)
+end 
+
+inv_nnllmm = Dict( sort_bb(bb...) => i for (i, bb) in enumerate(nnllmm) )
 
 # from this we can extract all unique (nn, ll) blocks (the mm will just be used 
 # in generating the coupled / symmetrized basis functions)
 nnll = unique( [(nn, ll) for (nn, ll, mm) in nnllmm] )
 
-##
 # Now for each (nn, ll) block we can generate all possible invariant basis 
 # functions. 
 𝒞 = SparseVector{Float64, Int64}[]
 for (nn, ll) in nnll 
-   OUT = ET.O3.coupling_coeffs(0, ll, nn; PI = true)
-   @show OUT
    cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true)
-   @show MM 
-   numb = size(cc, 1)   # number of invariant basis functions for this block 
+   num_b = size(cc, 1)   # number of invariant basis functions for this block 
    # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
-   idx_𝔸 = [inv_nnllmm[(nn, ll, mm)] for mm in MM] 
-   for q = 1:numb 
+   idx_𝔸 = [inv_nnllmm[sort_bb(nn, ll, mm)] for mm in MM] 
+   for q = 1:num_b 
       push!(𝒞, SparseVector(length(𝔸spec), idx_𝔸, cc[q, :]))
    end
 end
 
+# we can now generate the symmetrization operator by concatenating the 
+# sparse coupling vectors stored in 𝒞. 
+symm = transpose(reduce(hcat, 𝒞))
+
+##
+# putting together everything we've construced we can now generate the model 
+# here we give the model some random parameters just for testing. 
+#
+model = ACE0.SimpleACE(
+   rbasis, ybasis, abasis, aabasis, symm, randn(length(𝒞)) )
+
+# we want to check whether the model is invariant under rotations, and whether 
+# the gradient is correctly implemented. 
+
+rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )
+rand_x() = (0.1 + 0.9 * rand()) * rand_sphere()
+rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
+
+# generate a random configuration of nX points in the unit ball
+nX = 7   # number of particles / points 
+𝐫 = [ rand_x() for _ = 1:nX ]
+
+φ, ∇φ = ACE0.eval_with_grad(model, 𝐫)
+
+Q = rand_rot() 
+Q𝐫 = Ref(Q) .* shuffle(𝐫)
+φQ, ∇φQ = ACE0.eval_with_grad(model, Q𝐫)
+
+@show φ
+@show φQ
