@@ -1,7 +1,7 @@
 using Test, EquivariantTensors, StaticArrays, SpheriCart, Combinatorics
 using EquivariantTensors.O3: Ctran, coupling_coeffs, gram
 using PartialWaveFunctions: clebschgordan
-using LinearAlgebra
+using LinearAlgebra, Random
 using WignerD, Rotations, BlockDiagonals
 
 isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
@@ -67,6 +67,8 @@ for L = 0:Lmax
    nnll_list = ultra_short_nnll_list
 
    for (itest, (nn, ll)) in enumerate(nnll_list)
+      nn = shuffle(nn)
+      ll = shuffle(ll)
       # @show nn, ll
       N = length(ll)
       @assert length(ll) == length(nn)
