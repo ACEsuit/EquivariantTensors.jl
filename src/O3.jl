@@ -87,9 +87,7 @@ function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
                 C += C_loc
             end
         end
-
-        # We actually expect real values 
-        return abs(C - real(C)) < 1e-12 ? real(C) : C 
+        return abs(C - real(C)) < 1e-9 ? real(C) : C # We actually expect real values 
     end
 
 end
@@ -369,10 +367,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         return UMatrix, [mm[inv_perm] for mm in MM] # MM
     else
         U, S, V = svd(gram(FMatrix))
-        # Somehow rank is not working properly here, might be a relative  
-        # tolerance issue.
-        # original code: rank(Diagonal(S); rtol =  1e-12) 
-        rk = findall(x -> x > 1e-12, S) |> length 
+        rk = findall(x -> x > 1e-9, S) |> length # rank(Diagonal(S); rtol =  1e-9) # Somehow rank is not working properly here
         # return the RE-PI coupling coeffs
         return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
                [ mm[inv_perm] for mm in MM_reduced ]
@@ -404,7 +399,7 @@ function pick(set,n; ordered = true)
 end
 
  # Given nn and ll, generate the Ltot RE basis which are PI for the first N1 variables and also PI for the rest
-function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::Int64) where N
+function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::Int64;flag=:cSH) where N
     @assert 0 < N1 < N
  
     ll1 = SA[ll[1:N1]...]
@@ -412,7 +407,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     nn1 = SA[nn[1:N1]...]
     nn2 = SA[nn[N1+1:end]...]
  
-    m_class = m_generate(nn,ll,Ltot)[1]
+    m_class = m_generate(nn,ll,Ltot; flag = flag)[1]
     MM = []
     for i = 1:length(m_class)
        for j = 1:length(m_class[i])
@@ -426,12 +421,8 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     counter = 0
     for L1 in 0:sum(ll1)
        for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
-          # if isodd(L1+L2+Ltot); continue; end # This is wrong - all orders of L1 L2 are needed
-          # global C1, _,_, M1 = re_rpe(nn1,ll1,L1)
-          # global C2, _,_, M2 = re_rpe(nn2,ll2,L2)
-          C1,M1 = rpe_basis_new(nn1,ll1,L1)
-          C2,M2 = rpe_basis_new(nn2,ll2,L2)
-          # global Basis_func = Ltot == 0 ? zeros(Float64, size(C1,1),size(C2,1),length(M1)*length(M2)) : zeros(SVector{2Ltot+1, Float64}, size(C1,1),size(C2,1),length(M1)*length(M2))
+          C1,M1 = _coupling_coeffs(L1,ll1,nn1; PI = true, flag = flag)
+          C2,M2 = _coupling_coeffs(L2,ll2,nn2; PI = true, flag = flag)
           for i1 in 1:size(C1,1)
              for i2 in 1:size(C2,1)
                 cc = [ zero(T) for _ = 1:length(MM) ]
@@ -440,26 +431,20 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
                       if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{Ltot,0}_{L1,0,L2,0} = 0 for odd L1+L2+Ltot
                       if abs(sum(m1)+sum(m2))<=Ltot
                          k = MM_dict[SA[m1...,m2...]] # findfirst(m -> m == SA[m1...,m2...], MM)
-                         # @assert !isnothing(k)
-                         # Basis_func[i1,i2,counter] = Ltot == 0 ? 
-                         #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
-                         #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:]
                          cc[k] = Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
                                              clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
                       end
                    end
                 end
-                if norm(cc) > 1e-12
+                if norm(cc) > 1e-9
                     push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
                     counter += 1
                 else
+                    @show L1, L2
                     @warn("zero dropped") # If we have some zero basis, the code will warn us
                 end
              end
           end
-          # BB = reshape(Basis_func,size(C1,1)*size(C2,1),length(M1)*length(M2))
-          # total_rank += rank(gram(BB))
-          # @show size(BB), rank(gram(BB))
        end
     end
     @assert length(C_re_semi_pi) == counter
@@ -468,15 +453,73 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     return C_re_semi_pi, MM
  end
 
- function rpe_basis_new(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, N1::Int64; symmetrization_method = :kernel) where N
+ """
+    O3.coupling_coeffs(L, ll, nn, N1; basis, symmetrization_method)
+Compute coupling coefficients for the spherical harmonics basis in a
+recursive manner (from the permutation invariance pespective), where 
+- `L` must be an `Integer`;
+- `ll, nn` must be vectors or tuples of `Integer` of the same length.
+- `N1`: either an integer or a vector of integers, indicating where 
+    ll and nn are divided;
+- `basis`: which basis is being coupled, default is `complex`, alternative
+choice is `real`, which is compatible with the `SpheriCart.jl` convention.  
+- `symmetrization_method`: the method used to make the basis PI, 
+    default is `:kernel`, alternative choice is `:explicit`.
+"""
+function coupling_coeffs(L::Integer, ll, nn, N1::Union{Integer,Vector{Integer}}; 
+                      basis = complex,
+                      symmetrization_method = :kernel)
+
+    # convert L into the format required internally 
+    _L = Int(L) 
+
+    # convert ll into an SVector{N, Int}, as required internally 
+    N = length(ll) 
+    _ll = try 
+        _ll = SVector{N, Int}(ll...)
+    catch 
+        error("""coupling_coeffs(L::Integer, ll, ...) requires ll to be 
+               a vector or tuple of integers""")
+    end
+
+    # convert nn into an SVector{N, Int}, as required internally 
+    if length(nn) != N 
+        error("""coupling_coeffs(L::Integer, ll, nn) requires ll and nn to be 
+               of the same length""")
+    else
+        _nn = try 
+            _nn = SVector{N, Int}(nn...)
+        catch 
+            error("""coupling_coeffs(L::Integer, ll, nn) requires nn to be 
+                   a vector or tuple of integers""")
+        end
+    end 
+
+    if basis == complex 
+        flag = :cSH 
+    elseif basis == real 
+        flag = :SpheriCart
+    elseif basis isa Symbol
+        flag = basis 
+    else 
+        error("unknown basis type: $basis")
+    end
+    
+    return _coupling_coeffs(_L, _ll, _nn, N1; flag = flag, symmetrization_method = symmetrization_method)
+end
+
+ function _coupling_coeffs(L::Int64, ll::SVector{N, Int64}, nn::SVector{N, Int64}, N1::Int64; flag = :cSH, symmetrization_method = :kernel) where N
+
+    nn, ll = lexi_ord(nn, ll) # In the recursive constructing, we want permutation invariance (PI) and hence nn and ll should be ordered
+
     nice_partition = Sn(nn,ll).-1 # a list of partitions that gives non-intersecting sets
     if length(nice_partition) > 2 && N1 in nice_partition[2:end-1]
         @assert length( intersect([(nn[i],ll[i]) for i = 1:N1], [(nn[i],ll[i]) for i = N1+1:N]) ) == 0
         println("Non-intersect partition - return directly rpe")
         println()
-        return re_semi_pi(nn,ll,L,N1)
+        return re_semi_pi(nn,ll,L,N1;flag=flag)
     else
-        C_re_semi_pi, MM = re_semi_pi(nn,ll,L,N1)
+        C_re_semi_pi, MM = re_semi_pi(nn,ll,L,N1;flag=flag)
         if size(C_re_semi_pi,1) == 0
             return C_re_semi_pi, MM
         end
@@ -506,7 +549,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
             
             C_tmp = [ C_new[i,j][sum(MM[j])+L+1] for i = 1:size(C_new,1), j = 1:size(C_new,2) ]
             U, S, V = svd(C_tmp)
-            rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-12)
+            rk = findall(x -> x > 1e-9, S) |> length # rank(Diagonal(S); rtol =  1e-9) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-9)
             return Diagonal(S[1:rk].^(-1)) * (U[:, 1:rk]' * C_new), MM
         elseif symmetrization_method == :kernel
             println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
@@ -520,19 +563,18 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
 
             # left_ker = nullspace(C_new_scalar', atol = 1e-8)' # not as efficient as an svd
             U, S, V = svd(C_new)
-            left_ker = U[:,S .< 1e-12]'
+            left_ker = U[:,S .< 1e-9]'
 
             return left_ker * C_re_semi_pi, MM
         end
     end
  end
 
- function rpe_basis_adhoc(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, NN::Vector{Int64}; symmetrization_method = :kernel) where N
+ function _coupling_coeffs(nn::SVector{N, Int64}, ll::SVector{N, Int64}, L::Int64, NN::Vector{Int64}; basis = :cSH, symmetrization_method = :kernel) where N
     # @assert all([ 0 < NN[i] < N ] for i = 1:length(NN))
-    Ltot = L
 
     if length(NN) == 1
-        return rpe_basis_new(nn,ll,L,NN[1]; symmetrization_method = symmetrization_method)
+        return _coupling_coeffs(L,ll,nn,NN[1]; symmetrization_method = symmetrization_method)
     end
  
     N1 = NN[1]
@@ -541,7 +583,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     nn1 = SA[nn[1:N1]...]
     nn2 = SA[nn[N1+1:end]...]
  
-    m_class = m_generate(nn,ll,Ltot)[1]
+    m_class = m_generate(nn,ll,L)[1]
     MM = []
     for i = 1:length(m_class)
        for j = 1:length(m_class[i])
@@ -550,35 +592,27 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
     end
     MM = identity.(MM)
     MM_dict = Dict(MM[i] => i for i = 1:length(MM))
-    T = Ltot == 0 ? Float64 : SVector{2Ltot+1, Float64}
+    T = L == 0 ? Float64 : SVector{2L+1, Float64}
     C_re_semi_pi = []
     counter = 0
     for L1 in 0:sum(ll1)
-       for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
-          # if isodd(L1+L2+Ltot); continue; end # This is wrong - all orders of L1 L2 are needed
-          # global C1, _,_, M1 = re_rpe(nn1,ll1,L1)
-          # global C2, _,_, M2 = re_rpe(nn2,ll2,L2)
-          C1,M1 = rpe_basis_new(nn1,ll1,L1)
-          C2,M2 = rpe_basis_adhoc(nn2,ll2,L2,NN[2:end].-N1; symmetrization_method = symmetrization_method)
-          # global Basis_func = Ltot == 0 ? zeros(Float64, size(C1,1),size(C2,1),length(M1)*length(M2)) : zeros(SVector{2Ltot+1, Float64}, size(C1,1),size(C2,1),length(M1)*length(M2))
+       for L2 in abs(L1-Ltot):minimum([L1+L,sum(ll2)])
+          C1,M1 = _coupling_coeffs(L1,ll1,nn1)
+          C2,M2 = _coupling_coeffs(L2,ll2,nn2,NN[2:end].-N1; symmetrization_method = symmetrization_method)
           for i1 in 1:size(C1,1)
              for i2 in 1:size(C2,1)
                 cc = [ zero(T) for _ = 1:length(MM) ]
                 for (k1,m1) in enumerate(M1)
                    for (k2,m2) in enumerate(M2)
-                      if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{Ltot,0}_{L1,0,L2,0} = 0 for odd L1+L2+Ltot
+                      if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{L,0}_{L1,0,L2,0} = 0 for odd L1+L2+L
                       if abs(sum(m1)+sum(m2))<=Ltot
                          k = MM_dict[SA[m1...,m2...]] # findfirst(m -> m == SA[m1...,m2...], MM)
-                         # @assert !isnothing(k)
-                         # Basis_func[i1,i2,counter] = Ltot == 0 ? 
-                         #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
-                         #       clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:]
-                         cc[k] = Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
-                                             clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
+                         cc[k] = L == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),L,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                                          clebschgordan(L1,sum(m1),L2,sum(m2),L,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+L+1,:] 
                       end
                    end
                 end
-                if norm(cc) > 1e-12
+                if norm(cc) > 1e-9
                     push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
                     counter += 1
                 else
@@ -623,7 +657,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
         
         C_tmp = [ C_new[i,j][sum(MM[j])+L+1] for i = 1:size(C_new,1), j = 1:size(C_new,2) ]
         U, S, V = svd(C_tmp)
-        rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-12)
+        rk = findall(x -> x > 1e-9, S) |> length # rank(Diagonal(S); rtol =  1e-9) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-9)
         return Diagonal(S[1:rk].^(-1)) * (U[:, 1:rk]' * C_new), MM
     elseif symmetrization_method == :kernel
         println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
@@ -637,7 +671,7 @@ function re_semi_pi(nn::SVector{N,Int64},ll::SVector{N,Int64},Ltot::Int64,N1::In
 
         # left_ker = nullspace(C_new_scalar', atol = 1e-8)' # not as efficient as an svd
         U, S, V = svd(C_new)
-        left_ker = U[:,S .< 1e-12]'
+        left_ker = U[:,S .< 1e-9]'
 
         return left_ker * C_re_semi_pi, MM
     end
