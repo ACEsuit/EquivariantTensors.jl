@@ -214,11 +214,12 @@ function gram(X::Matrix{SVector{N,T}}) where {N,T}
 
 gram(X::Matrix{<:Number}) = X * X'
 
-function lexi_ord(nn::SVector{N, Int64}, ll::SVector{N, Int64}) where N
+function lexi_ord(nn, ll) where N
+    @assert length(nn) == length(ll)
     pairs = collect(zip(ll, nn))         # create (lᵢ, nᵢ) pairs
     p = sortperm(pairs)
     pairs_sorted = pairs[p]
-    return SVector{N}(last.(pairs)), SVector{N}(first.(pairs)), invperm(p)
+    return SVector{N}(last.(pairs_sorted)), SVector{N}(first.(pairs_sorted)), invperm(p)
 end
 
 """
