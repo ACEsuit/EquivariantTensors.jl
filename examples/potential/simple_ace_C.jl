@@ -30,25 +30,11 @@ function eval_with_grad(m::SimpleACE, 𝐫::AbstractVector{<: SVector{3}}) where
    # evaluate the atomic basis:    A_nlm = ∑_j Rn[j] * Ylm[j]
    A = m.abasis((Rn, Ylm))
    # evaluate the n-correlations:  𝔸_𝐧𝐥𝐦 = ∏_t A_nₜlₜmₜ
-   𝔸 = m.aabasis(A)
+   𝔸 = real.(m.aabasis(A))
    # symmetrize the output:        𝔹 = C * 𝔸    
    𝔹 = m.symm * 𝔸
    
-   # the model output value is the dot product with the parameters 
-   φ = dot(m.params, 𝔹)
-
-   # compute the gradient w.r.t. inputs 𝐫 in reverse mode
-   ∂φ_∂𝔹 = m.params 
-   ∂φ_∂𝔸 = m.symm' * ∂φ_∂𝔹
-   ∂φ_∂A = ET.pullback(∂φ_∂𝔸, m.aabasis, A)
-   ∂φ_∂Rn, ∂φ_∂Ylm = ET.pullback(∂φ_∂A, m.abasis, (Rn, Ylm))
-   ∂φ_∂r = P4ML.pullback(∂φ_∂Rn, m.rbasis, r)
-   ∂φ_∂𝐲 = P4ML.pullback(∂φ_∂Ylm, m.ybasis, 𝐲)
-
-   # finally we have to transform the gradient w.r.t. r to a gradient w.r.t. 𝐫
-   ∇φ = [ ∂φ_∂r[j] * (𝐫[j] / r[j]) + ∂φ_∂𝐲[j]   for j = 1:length(𝐫) ]
-
-   return φ, ∇φ
+   return 𝔹
 end
 
 
@@ -63,7 +49,7 @@ ORD = 3     # correlation-order (body-order = ORD + 1)
 ##
 # [1] first specify the radial and angular embeddings 
 rbasis = P4ML.legendre_basis(Dtot+1)
-ybasis = P4ML.real_sphericalharmonics(maxL)
+ybasis = P4ML.complex_sphericalharmonics(maxL)
 
 ##
 # [2] Pooling and SparseProduct
@@ -94,8 +80,8 @@ myfilter = ii -> begin
       nn, ll, mm = ii2bb(ii);
       return ( (sum(nn + ll; init=0) <= Dtot) &&  # total degree trunction
                iseven(sum(ll; init=0)) &&         # reflection-invariance
-               (length(mm) == 0 || ET.O3.m_filter(mm,0;flag=:SpheriCart)) &&         # rotation-invariance
-               sum(ii) > 0 )           # drop 0-corr sure to bug 
+               ( length(mm) == 0 || (sum(mm) == 0) ) &&         # rotation-invariance
+               sum(ii) > 0 )           # drop 0-corr due to bug 
    end 
 
 @show length(comb1)
@@ -135,13 +121,15 @@ nnll = unique( [(nn, ll) for (nn, ll, mm) in nnllmm] )
 # Now for each (nn, ll) block we can generate all possible invariant basis 
 # functions. 
 𝒞 = SparseVector{Float64, Int64}[]
+spec = [] 
 for (nn, ll) in nnll 
-   cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = real)
+   cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = complex)
    num_b = size(cc, 1)   # number of invariant basis functions for this block 
    # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
    idx_𝔸 = [inv_nnllmm[bb_key(nn, ll, mm)] for mm in MM] 
    for q = 1:num_b 
       push!(𝒞, SparseVector(length(𝔸spec), idx_𝔸, cc[q, :]))
+      push!(spec, (nn, ll))
    end
 end
 
@@ -166,11 +154,11 @@ rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
 
-φ, ∇φ = eval_with_grad(model, 𝐫)
+B = eval_with_grad(model, 𝐫)
 
 Q = rand_rot() 
 Q𝐫 = Ref(Q) .* shuffle(𝐫)
-φQ, ∇φQ = eval_with_grad(model, Q𝐫)
+BQ = eval_with_grad(model, Q𝐫)
 
-@show φ
-@show φQ
+spec_nn_ll = spec 
+[B BQ spec_nn_ll]
