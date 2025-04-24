@@ -289,16 +289,9 @@ end
 function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
                           PI = true, flag = :cSH) where N
 
-    # TODO: when PI, (nn, ll) should be ordered 
-    #       turn off permutations for now 
-    if PI
-        nn, ll, inv_perm = lexi_ord(nn, ll)
-        # if nn1 != nn || ll1 != ll
-        #     error("The input (nn, ll) is not in lexicographical order")
-        # end
-    # else
-    #     inv_perm = SVector{N, Int}((1:N)...)
-    end
+    # NOTE: because of the use of m_generate, the input (nn, ll ) is required
+    # to be in lexicographical order.
+    nn, ll, inv_perm = lexi_ord(nn, ll)
 
     Lset = SetLl(ll,L)
     r = length(Lset)
@@ -331,7 +324,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
 
     if !PI
         # return RE coupling coeffs if the permutation invariance is not needed
-        return UMatrix, MM
+        return UMatrix, [mm[inv_perm] for mm in MM] # MM
     else
         U, S, V = svd(gram(FMatrix))
         rk = rank(Diagonal(S); rtol =  1e-12)
