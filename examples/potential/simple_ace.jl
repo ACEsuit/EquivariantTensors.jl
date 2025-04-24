@@ -6,11 +6,6 @@ import EquivariantTensors as ET
 using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
 
 ##
-module ACE0 
-
-import Polynomials4ML as P4ML 
-import EquivariantTensors as ET
-using StaticArrays, LinearAlgebra
 
 # This struct defines a simple ACE-like model. The inputs are a cloud of points
 # 𝐫 = (r₁, r₂, ..., rₙ) in 3D space. The output of the model is a scalar that 
@@ -56,15 +51,13 @@ function eval_with_grad(m::SimpleACE, 𝐫::AbstractVector{<: SVector{3}}) where
    return φ, ∇φ
 end
 
-end
-
 
 ## 
 # CONSTRUCTION OF THE ACE MODEL 
 
 # Some model parameters that we will use: 
-Dtot = 6   # total degree; specifies the trunction of embeddings and correlations
-maxL = 4    # maximum degree of spherical harmonics 
+Dtot = 5   # total degree; specifies the trunction of embeddings and correlations
+maxL = 5    # maximum degree of spherical harmonics 
 ORD = 3     # correlation-order (body-order = ORD + 1)
 
 ##
@@ -129,12 +122,12 @@ aabasis = ET.SparseSymmProd(𝔸spec)
 nnllmm = [ ii2bb(ii) for ii in 𝔸spec ]
 
 # this function creates a unique way to lookup permutation-invariant features
-function sort_bb(nn, ll, mm) 
-   aa = sort( [ [nn[α], ll[α], mm[α] ] for α = 1:length(nn) ] ) 
-   return ntuple(i -> [ aa[α][i] for α = 1:length(nn) ], 3)
+function bb_key(nn, ll, mm) 
+   return sort( [ (nn[α], ll[α], mm[α]) for α = 1:length(nn) ] )
+   # return ntuple(i -> [ aa[α][i] for α = 1:length(nn) ], 3)
 end 
 
-inv_nnllmm = Dict( sort_bb(bb...) => i for (i, bb) in enumerate(nnllmm) )
+inv_nnllmm = Dict( bb_key(bb...) => i for (i, bb) in enumerate(nnllmm) )
 
 # from this we can extract all unique (nn, ll) blocks (the mm will just be used 
 # in generating the coupled / symmetrized basis functions)
@@ -147,7 +140,7 @@ for (nn, ll) in nnll
    cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = real)
    num_b = size(cc, 1)   # number of invariant basis functions for this block 
    # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
-   idx_𝔸 = [inv_nnllmm[sort_bb(nn, ll, mm)] for mm in MM] 
+   idx_𝔸 = [inv_nnllmm[bb_key(nn, ll, mm)] for mm in MM] 
    for q = 1:num_b 
       push!(𝒞, SparseVector(length(𝔸spec), idx_𝔸, cc[q, :]))
    end
@@ -161,8 +154,7 @@ symm = transpose(reduce(hcat, 𝒞))
 # putting together everything we've construced we can now generate the model 
 # here we give the model some random parameters just for testing. 
 #
-model = ACE0.SimpleACE(
-   rbasis, ybasis, abasis, aabasis, symm, randn(length(𝒞)) )
+model = SimpleACE(rbasis, ybasis, abasis, aabasis, symm, randn(length(𝒞)) )
 
 # we want to check whether the model is invariant under rotations, and whether 
 # the gradient is correctly implemented. 
@@ -175,11 +167,11 @@ rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
 
-φ, ∇φ = ACE0.eval_with_grad(model, 𝐫)
+φ, ∇φ = eval_with_grad(model, 𝐫)
 
 Q = rand_rot() 
 Q𝐫 = Ref(Q) .* shuffle(𝐫)
-φQ, ∇φQ = ACE0.eval_with_grad(model, Q𝐫)
+φQ, ∇φQ = eval_with_grad(model, Q𝐫)
 
 @show φ
 @show φQ
