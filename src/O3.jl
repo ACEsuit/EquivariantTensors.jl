@@ -214,11 +214,12 @@ function gram(X::Matrix{SVector{N,T}}) where {N,T}
 
 gram(X::Matrix{<:Number}) = X * X'
 
-function lexi_ord(nn::SVector{N, Int64}, ll::SVector{N, Int64}) where N
+function lexi_ord(nn::T, ll::T) where T
+    @assert length(nn) == length(ll)
     pairs = collect(zip(ll, nn))         # create (lᵢ, nᵢ) pairs
     p = sortperm(pairs)
     pairs_sorted = pairs[p]
-    return SVector{N}(last.(pairs)), SVector{N}(first.(pairs)), invperm(p)
+    return T(last.(pairs_sorted)), T(first.(pairs_sorted)), invperm(p)
 end
 
 """
@@ -291,10 +292,10 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     # TODO: when PI, (nn, ll) should be ordered 
     #       turn off permutations for now 
     if PI
-        nn1, ll1, inv_perm = lexi_ord(nn, ll)
-        if nn1 != nn || ll1 != ll
-            error("The input (nn, ll) is not in lexicographical order")
-        end
+        nn, ll, inv_perm = lexi_ord(nn, ll)
+        # if nn1 != nn || ll1 != ll
+        #     error("The input (nn, ll) is not in lexicographical order")
+        # end
     # else
     #     inv_perm = SVector{N, Int}((1:N)...)
     end
@@ -335,7 +336,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         U, S, V = svd(gram(FMatrix))
         rk = rank(Diagonal(S); rtol =  1e-12)
         # return the RE-PI coupling coeffs
-        return Diagonal(S[1:rk]) * (U[:, 1:rk]' * UMatrix), MM
+        return Diagonal(S[1:rk]) * (U[:, 1:rk]' * UMatrix), [mm[inv_perm] for mm in MM] # MM
     end
 end
 

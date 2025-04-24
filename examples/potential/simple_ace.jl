@@ -101,7 +101,7 @@ myfilter = ii -> begin
       nn, ll, mm = ii2bb(ii);
       return ( (sum(nn + ll; init=0) <= Dtot) &&  # total degree trunction
                iseven(sum(ll; init=0)) &&         # reflection-invariance
-               (sum(mm; init=0) == 0)  &&         # rotation-invariance
+               (length(mm) == 0 || ET.O3.m_filter(mm,0;flag=:SpheriCart)) &&         # rotation-invariance
                sum(ii) > 0 )           # drop 0-corr sure to bug 
    end 
 
@@ -144,7 +144,7 @@ nnll = unique( [(nn, ll) for (nn, ll, mm) in nnllmm] )
 # functions. 
 𝒞 = SparseVector{Float64, Int64}[]
 for (nn, ll) in nnll 
-   cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true)
+   cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = real)
    num_b = size(cc, 1)   # number of invariant basis functions for this block 
    # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
    idx_𝔸 = [inv_nnllmm[sort_bb(nn, ll, mm)] for mm in MM] 
