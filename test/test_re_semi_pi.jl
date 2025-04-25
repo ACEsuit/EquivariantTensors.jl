@@ -1,6 +1,6 @@
 using StaticArrays, LinearAlgebra, EquivariantTensors, WignerD, Rotations, Combinatorics
 using Test, Random
-using EquivariantTensors.O3: gram, re_semi_pi, coupling_coeffs# rpe_basis_new, re_rpe
+using EquivariantTensors.O3: gram, re_semi_pi, coupling_coeffs
 
 isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 
@@ -92,15 +92,17 @@ for i = 1:length(nnll_list_short)
    # Partitionset = RepLieGroups.Sn(nn,ll)
    # if length(Partitionset) <= 2; continue; end
    # N1 = Partitionset[rand(2:length(Partitionset)-1)]-1
-   N1 = rand(1:length(ll)-1) # Instead of fine partition which gives two non-intersecting sets, we now allow random partition
+   # N1 = rand(1:length(ll)-1) # Instead of fine partition which gives two non-intersecting sets, we now allow random partition
+   k = rand(1:length(ll)-1) # we wanted to split nn and ll into k+1 blocks
+   N1 = sort(shuffle(collect(1:length(ll)-1))[1:k]) # position where we split
 
    for Ltot in (iseven(sum(ll)) ? (0:2:4) : (1:2:3))
       println("Case : nn = $nn, ll = $ll, Ltot = $Ltot, N1 = $N1")
       println()
-      t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1) # no longer needed and has been tested above - but shown here to see how long does the last symmetrization take
+      # t_re_semi_pi = @elapsed C_re_semi_pi, MM = re_semi_pi(nn,ll,Ltot,N1) # no longer needed and has been tested above - but shown here to see how long does the last symmetrization take
       t_rpe = @elapsed C_rpe,M = coupling_coeffs(Ltot,ll,nn)
-      t_recursive = @elapsed C_rpe_recursive, MM = coupling_coeffs(Ltot,ll,nn,N1; symmetrization_method = :explicit)
-      t_recursive_kernel = @elapsed C_rpe_recursive_kernel, MM_2 = coupling_coeffs(Ltot,ll,nn,N1; symmetrization_method = :kernel)
+      t_rpe_recursive = @elapsed C_rpe_recursive, MM = coupling_coeffs(Ltot,ll,nn,N1; symmetrization_method = :explicit)
+      t_rpe_recursive_kernel = @elapsed C_rpe_recursive_kernel, MM_2 = coupling_coeffs(Ltot,ll,nn,N1; symmetrization_method = :kernel)
       
       # make sure the order of the basis is the same
       if size(C_rpe_recursive,1) == size(C_rpe,1) == size(C_rpe_recursive_kernel,1) != 0
@@ -119,7 +121,7 @@ for i = 1:length(nnll_list_short)
          end
       end
 
-      @show t_re_semi_pi, t_recursive, t_recursive_kernel, t_rpe
+      @show t_rpe, t_rpe_recursive, t_rpe_recursive_kernel
       println()
 
       if rank(gram(C_rpe)) > 0
