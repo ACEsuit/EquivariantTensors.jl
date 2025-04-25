@@ -56,7 +56,7 @@ end
 # CONSTRUCTION OF THE ACE MODEL 
 
 # Some model parameters that we will use: 
-Dtot = 5   # total degree; specifies the trunction of embeddings and correlations
+Dtot = 7   # total degree; specifies the trunction of embeddings and correlations
 maxL = 5    # maximum degree of spherical harmonics 
 ORD = 3     # correlation-order (body-order = ORD + 1)
 
@@ -133,27 +133,33 @@ inv_nnllmm = Dict( bb_key(bb...) => i for (i, bb) in enumerate(nnllmm) )
 nnll = unique( [(nn, ll) for (nn, ll, mm) in nnllmm] )
 
 # Now for each (nn, ll) block we can generate all possible invariant basis 
-# functions. 
-𝒞 = Vector{Float64}[]
-for (nn, ll) in nnll 
+# functions. We assemble the symmetrization operator in triplet format, 
+# which can conveniently account for double-counting of entries.
+irow = Int[]; jcol = Int[]; val = Float64[]
+
+num𝔹 = 0 
+for (i, (nn, ll)) in enumerate(nnll)
    cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = real)
    num_b = size(cc, 1)   # number of invariant basis functions for this block 
    # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
    idx_𝔸 = [inv_nnllmm[bb_key(nn, ll, mm)] for mm in MM] 
    for q = 1:num_b 
-      push!(𝒞, collect( SparseVector(length(𝔸spec), idx_𝔸, cc[q, :]) ))
+      num𝔹 += 1
+      for j = 1:length(idx_𝔸)
+         push!(irow, num𝔹); push!(jcol, idx_𝔸[j]); push!(val, cc[q, j])
+      end
    end
 end
 
 # we can now generate the symmetrization operator by concatenating the 
 # sparse coupling vectors stored in 𝒞. 
-symm = sparse( transpose(reduce(hcat, 𝒞)) )
+symm = sparse(irow, jcol, val, num𝔹, length(𝔸spec)) 
 
 ##
 # putting together everything we've construced we can now generate the model 
 # here we give the model some random parameters just for testing. 
 #
-model = SimpleACE(rbasis, ybasis, abasis, aabasis, symm, randn(length(𝒞)) )
+model = SimpleACE(rbasis, ybasis, abasis, aabasis, symm, randn(num𝔹) )
 
 # we want to check whether the model is invariant under rotations, and whether 
 # the gradient is correctly implemented. 
@@ -165,12 +171,10 @@ rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 # generate a random configuration of nX points in the unit ball
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
-
-φ, ∇φ = eval_with_grad(model, 𝐫)
-
 Q = rand_rot() 
 Q𝐫 = Ref(Q) .* shuffle(𝐫)
+
+φ, ∇φ = eval_with_grad(model, 𝐫)
 φQ, ∇φQ = eval_with_grad(model, Q𝐫)
 
-@show φ
-@show φQ
+@show φ ≈ φQ
