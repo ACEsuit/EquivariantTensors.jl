@@ -214,12 +214,22 @@ function gram(X::Matrix{SVector{N,T}}) where {N,T}
 
 gram(X::Matrix{<:Number}) = X * X'
 
-function lexi_ord(nn::T, ll::T) where T
-    @assert length(nn) == length(ll)
-    pairs = collect(zip(ll, nn))         # create (lᵢ, nᵢ) pairs
-    p = sortperm(pairs)
-    pairs_sorted = pairs[p]
-    return T(last.(pairs_sorted)), T(first.(pairs_sorted)), invperm(p)
+# function lexi_ord(nn::T, ll::T) where T
+#     @assert length(nn) == length(ll)
+#     pairs = collect(zip(ll, nn))         # create (lᵢ, nᵢ) pairs
+#     p = sortperm(pairs)
+#     pairs_sorted = pairs[p]
+#     return T(last.(pairs_sorted)), T(first.(pairs_sorted)), invperm(p)
+# end
+
+function lexi_ord(nn, ll)
+   N = length(nn)
+   bb = [ (nn[i], ll[i]) for i = 1:N ]
+   p = sortperm(bb)
+   bb_sorted = bb[p]
+   return SVector{N, Int}(ntuple(i -> bb_sorted[i][1], N)), 
+          SVector{N, Int}(ntuple(i -> bb_sorted[i][2], N)), 
+          invperm(p)
 end
 
 """
@@ -291,7 +301,15 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
-    nn, ll, inv_perm = lexi_ord(nn, ll)
+    nn1, ll1, inv_perm = lexi_ord(nn, ll)
+    if (nn != nn1) || (ll != ll1 )
+        @show nn, nn1 
+        @show ll, ll1 
+        error("coupling_coeffs: nn and ll must be in lexicographical order")
+    end
+    @assert nn == nn1 
+    @assert ll == ll1
+    @assert inv_perm == 1:length(nn) # require already sorted 
 
     Lset = SetLl(ll,L)
     r = length(Lset)

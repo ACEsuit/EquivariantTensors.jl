@@ -20,7 +20,7 @@ struct SimpleACE{T, RB, YB, AB, AAB, BB}
    params::Vector{T}   # model parameters
 end
 
-function eval_with_grad(m::SimpleACE, 𝐫::AbstractVector{<: SVector{3}}) where {T} 
+function eval_bases(m::SimpleACE, 𝐫::AbstractVector{<: SVector{3}})
    # evaluate the Rn and Ylm embeddings
    #   Rn[j] = Rn(norm(𝐫[j])), Ylm[j] = Ylm(Rs[j])
    r = norm.(𝐫)
@@ -30,11 +30,10 @@ function eval_with_grad(m::SimpleACE, 𝐫::AbstractVector{<: SVector{3}}) where
    # evaluate the atomic basis:    A_nlm = ∑_j Rn[j] * Ylm[j]
    A = m.abasis((Rn, Ylm))
    # evaluate the n-correlations:  𝔸_𝐧𝐥𝐦 = ∏_t A_nₜlₜmₜ
-   𝔸 = real.(m.aabasis(A))
+   𝔸 = m.aabasis(A)
    # symmetrize the output:        𝔹 = C * 𝔸    
    𝔹 = m.symm * 𝔸
-   
-   return 𝔹
+   return A, 𝔸, 𝔹
 end
 
 
@@ -42,14 +41,14 @@ end
 # CONSTRUCTION OF THE ACE MODEL 
 
 # Some model parameters that we will use: 
-Dtot = 5   # total degree; specifies the trunction of embeddings and correlations
-maxL = 5    # maximum degree of spherical harmonics 
+Dtot = 7   # total degree; specifies the trunction of embeddings and correlations
+maxL = 4    # maximum degree of spherical harmonics 
 ORD = 3     # correlation-order (body-order = ORD + 1)
 
 ##
 # [1] first specify the radial and angular embeddings 
 rbasis = P4ML.legendre_basis(Dtot+1)
-ybasis = P4ML.complex_sphericalharmonics(maxL)
+ybasis = P4ML.real_sphericalharmonics(maxL)
 
 ##
 # [2] Pooling and SparseProduct
@@ -58,7 +57,8 @@ ybasis = P4ML.complex_sphericalharmonics(maxL)
 # operation; only the basis functions Aₙₗₘ are computed for which n + l ≤ Dtot.
 #
 Aspec = [ (n+1, P4ML.lm2idx(l, m)) 
-           for n = 0:Dtot for l = 0:maxL for m = -l:l if (n + l <= Dtot) ]
+           for n = 0:Dtot for l = 0:maxL for m = -l:l 
+            if (n + l <= Dtot) ] |> sort 
 abasis = ET.PooledSparseProduct(Aspec)
 @assert abasis.spec == Aspec
 
@@ -80,8 +80,9 @@ myfilter = ii -> begin
       nn, ll, mm = ii2bb(ii);
       return ( (sum(nn + ll; init=0) <= Dtot) &&  # total degree trunction
                iseven(sum(ll; init=0)) &&         # reflection-invariance
-               ( length(mm) == 0 || (sum(mm) == 0) ) &&         # rotation-invariance
-               sum(ii) > 0 )           # drop 0-corr due to bug 
+               all(ll .> 0)   &&    # get rid of boring cases 
+               # (length(nn) == 0 || ET.O3.m_filter(mm,0;flag=:SpheriCart)) &&         # rotation-invariance
+               length(findall(ii .> 0)) >= 3 )           # drop 0-, 1-, 2-corr to debug 
    end 
 
 @show length(comb1)
@@ -120,22 +121,30 @@ nnll = unique( [(nn, ll) for (nn, ll, mm) in nnllmm] )
 
 # Now for each (nn, ll) block we can generate all possible invariant basis 
 # functions. 
-𝒞 = SparseVector{Float64, Int64}[]
-spec = [] 
-for (nn, ll) in nnll 
-   cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = complex)
+𝒞 = Vector{Float64}[]
+nnll_sym = [] 
+
+ctr = 0 
+for (i, (nn, ll)) in enumerate(nnll)
+   cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = real)
    num_b = size(cc, 1)   # number of invariant basis functions for this block 
+   ctr += num_b
    # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
    idx_𝔸 = [inv_nnllmm[bb_key(nn, ll, mm)] for mm in MM] 
    for q = 1:num_b 
-      push!(𝒞, SparseVector(length(𝔸spec), idx_𝔸, cc[q, :]))
-      push!(spec, (nn, ll))
+      cvec = zeros(length(aabasis))
+      cvec[idx_𝔸] = cc[q, :]
+      push!(𝒞, cvec)
+      push!(nnll_sym, (nn, ll))
    end
 end
 
+
 # we can now generate the symmetrization operator by concatenating the 
 # sparse coupling vectors stored in 𝒞. 
-symm = transpose(reduce(hcat, 𝒞))
+# symm = sparse( transpose(reduce(hcat, collect.(𝒞) )))
+symm = sparse( reduce(vcat, transpose.(𝒞)) )
+
 
 ##
 # putting together everything we've construced we can now generate the model 
@@ -153,20 +162,12 @@ rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 # generate a random configuration of nX points in the unit ball
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
-
-B = eval_with_grad(model, 𝐫)
-
 Q = rand_rot() 
 Q𝐫 = Ref(Q) .* shuffle(𝐫)
-BQ = eval_with_grad(model, Q𝐫)
 
-spec_nn_ll = spec 
-[B BQ spec_nn_ll]
+A, 𝔸, 𝔹 = eval_bases(model, 𝐫)
+AQ, 𝔸Q, 𝔹Q = eval_bases(model, Q𝐫)
 
-## 
+[𝔹 𝔹Q nnll_sym]
 
-using EquivariantModels
-
-
-nnllmm_em = map(bb -> ( N = length(bb[1]); SVector{N}.(bb) ), nnllmm )
-CC = EquivariantModels.coupling_coeffs(nnllmm_em) 
+𝔹 ≈ 𝔹Q

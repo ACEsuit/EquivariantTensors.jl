@@ -134,20 +134,20 @@ nnll = unique( [(nn, ll) for (nn, ll, mm) in nnllmm] )
 
 # Now for each (nn, ll) block we can generate all possible invariant basis 
 # functions. 
-𝒞 = SparseVector{Float64, Int64}[]
+𝒞 = Vector{Float64}[]
 for (nn, ll) in nnll 
    cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = real)
    num_b = size(cc, 1)   # number of invariant basis functions for this block 
    # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
    idx_𝔸 = [inv_nnllmm[bb_key(nn, ll, mm)] for mm in MM] 
    for q = 1:num_b 
-      push!(𝒞, SparseVector(length(𝔸spec), idx_𝔸, cc[q, :]))
+      push!(𝒞, collect( SparseVector(length(𝔸spec), idx_𝔸, cc[q, :]) ))
    end
 end
 
 # we can now generate the symmetrization operator by concatenating the 
 # sparse coupling vectors stored in 𝒞. 
-symm = transpose(reduce(hcat, 𝒞))
+symm = sparse( transpose(reduce(hcat, 𝒞)) )
 
 ##
 # putting together everything we've construced we can now generate the model 
