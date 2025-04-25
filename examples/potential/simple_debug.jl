@@ -81,7 +81,7 @@ myfilter = ii -> begin
       return ( (sum(nn + ll; init=0) <= Dtot) &&  # total degree trunction
                iseven(sum(ll; init=0)) &&         # reflection-invariance
                all(ll .> 0)   &&    # get rid of boring cases 
-               # (length(nn) == 0 || ET.O3.m_filter(mm,0;flag=:SpheriCart)) &&         # rotation-invariance
+               # ET.O3.m_filter(mm,0;flag=:SpheriCart) &&         # rotation-invariance
                length(findall(ii .> 0)) >= 3 )           # drop 0-, 1-, 2-corr to debug 
    end 
 
@@ -160,7 +160,7 @@ rand_x() = (0.1 + 0.9 * rand()) * rand_sphere()
 rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 
 # generate a random configuration of nX points in the unit ball
-nX = 7   # number of particles / points 
+nX = 3   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
 Q = rand_rot() 
 Q𝐫 = Ref(Q) .* shuffle(𝐫)
@@ -168,6 +168,6 @@ Q𝐫 = Ref(Q) .* shuffle(𝐫)
 A, 𝔸, 𝔹 = eval_bases(model, 𝐫)
 AQ, 𝔸Q, 𝔹Q = eval_bases(model, Q𝐫)
 
-[𝔹 𝔹Q nnll_sym]
+display([𝔹 𝔹Q nnll_sym])
 
 𝔹 ≈ 𝔹Q
