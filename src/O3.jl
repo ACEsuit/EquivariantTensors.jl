@@ -374,7 +374,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     end
 end
 
-# ============================ RE_SEMI_PI basis ============================
+# ============================ RE_SEMI_PI basis and the recursive construction ============================
 
 function swap(xx::SVector{N,T},i::Int64,j::Int64) where {N, T} 
     i, j = sort([i,j])
@@ -625,9 +625,6 @@ end
                 end
              end
           end
-          # BB = reshape(Basis_func,size(C1,1)*size(C2,1),length(M1)*length(M2))
-          # total_rank += rank(gram(BB))
-          # @show size(BB), rank(gram(BB))
        end
     end
     @assert length(C_re_semi_pi) == counter
