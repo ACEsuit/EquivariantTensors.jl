@@ -7,8 +7,6 @@ isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 for ntest = 1:200
    ll = SA[rand(0:1, 6)...] |> sort
    nn = SA[rand(1:2, 6)...] |> sort
-   # nn = SA[1,1,1,1,2,2]
-   # ll = SA[1,2,3,1,2,3]
    N1 = rand(1:length(ll)-1) # random partition
    
    Ltot = rand(0:4)

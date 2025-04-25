@@ -518,8 +518,8 @@ end
     global nice_partition = Sn(nn,ll).-1 # a list of partitions that gives non-intersecting sets
     if length(nice_partition) > 2 && N1 in nice_partition[2:end-1]
         @assert length( intersect([(nn[i],ll[i]) for i = 1:N1], [(nn[i],ll[i]) for i = N1+1:N]) ) == 0
-        println("Non-intersect partition - return directly rpe")
-        println()
+        # println("Non-intersect partition - return directly rpe")
+        # println()
         return re_semi_pi(nn,ll,L,N1;flag=flag)
     else
         C_re_semi_pi, MM = re_semi_pi(nn,ll,L,N1;flag=flag)
@@ -530,8 +530,8 @@ end
 
         # Last symmetrization
         if symmetrization_method == :explicit
-            println("Two groups intersect - explicit symmetrization is to be performed")
-            println()
+            # println("Two groups intersect - explicit symmetrization is to be performed")
+            # println()
             n_block = findfirst(n -> n > N1, nice_partition)
             N_init = n_block == nothing ? 1 : nice_partition[n_block-1]+1
             N_final = n_block == nothing ? N : nice_partition[n_block]
@@ -555,8 +555,8 @@ end
             rk = findall(x -> x > 1e-9, S) |> length # rank(Diagonal(S); rtol =  1e-9) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-9)
             return Diagonal(S[1:rk].^(-1)) * (U[:, 1:rk]' * C_new), [SA[mm[inv_perm]...] for mm in MM] # MM
         elseif symmetrization_method == :kernel
-            println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
-            println()
+            # println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
+            # println()
 
             # since all the element in C_re_semi_pi are vectors having one nonzero && the position of nonzeros aligns with MM, we can extract the scalar part only
             C_new = [ C_re_semi_pi[i,j][sum(MM[j])+L+1] for i = 1:size(C_re_semi_pi,1), j = 1:size(C_re_semi_pi,2) ]
@@ -645,8 +645,8 @@ end
     else
 
     if symmetrization_method == :explicit
-        println("Two groups intersect - explicit symmetrization is to be performed")
-        println()
+        # println("Two groups intersect - explicit symmetrization is to be performed")
+        # println()
         n_block = findfirst(n -> n > N1, nice_partition)
         N_init = n_block == nothing ? 1 : nice_partition[n_block-1]+1
         N_final = n_block == nothing ? N : nice_partition[n_block]
@@ -670,8 +670,8 @@ end
         rk = findall(x -> x > 1e-9, S) |> length # rank(Diagonal(S); rtol =  1e-9) # Somehow rank is not working properly here - also this line is faster than sum(S.>1e-9)
         return Diagonal(S[1:rk].^(-1)) * (U[:, 1:rk]' * C_new), [ mm[inv_perm] for mm in MM ] # MM
     elseif symmetrization_method == :kernel
-        println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
-        println()
+        # println("Two groups intersect - symmetrization by finding the left kernel of C - C_{x1-y1} is to be performed")
+        # println()
 
         # since all the element in C_re_semi_pi are vectors having one nonzero && the position of nonzeros aligns with MM, we can extract the scalar part only
         C_new = [ C_re_semi_pi[i,j][sum(MM[j])+Ltot+1] for i = 1:size(C_re_semi_pi,1), j = 1:size(C_re_semi_pi,2) ]
