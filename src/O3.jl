@@ -1,7 +1,5 @@
 module O3
-
-import EquivariantTensors
-
+ 
 using PartialWaveFunctions
 using Combinatorics
 using LinearAlgebra
@@ -26,7 +24,9 @@ function Ctran(i::Int64,j::Int64;convention = :SpheriCart)
 		return i == j
 	end
 	
-	order_dict = Dict(:SpheriCart => [1,2,3,4], :CondonShortley => [4,3,2,1], :FHIaims => [4,2,3,1])
+	order_dict = Dict(:SpheriCart => [1,2,3,4], 
+                      :CondonShortley => [4,3,2,1], 
+                      :FHIaims => [4,2,3,1] )
 	val_list = [(-1)^(i), im, (-1)^(i+1)*im, 1] ./ sqrt(2)
 	if abs(i) != abs(j)
 		return 0 
@@ -43,14 +43,17 @@ function Ctran(i::Int64,j::Int64;convention = :SpheriCart)
 	end
 end
 
-Ctran(l::Int64; convention = :SpheriCart) = sparse(Matrix{ComplexF64}([ Ctran(m,μ;convention=convention) for m = -l:l, μ = -l:l ])) |> dropzeros
+Ctran(l::Int64; convention = :SpheriCart) = sparse(
+    Matrix{ComplexF64}([ Ctran(m,μ;convention=convention) 
+                         for m = -l:l, μ = -l:l ])) |> dropzeros
 
 
 # -----------------------------------------------------
 
 # The generalized Clebsch Gordan Coefficients; variables of this function are 
 # fully inherited from the first ACE paper. 
-function GCG(l::SVector{N,Int64},m::SVector{N,Int64},L::SVector{N,Int64},M_N::Int64;flag=:cSH) where N
+function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
+             M_N::Int64; flag=:cSH) where N
     # @assert -L[N] ≤ M_N ≤ L[N] 
     if m_filter(m, M_N;flag=flag) == false || L[1] < abs(m[1])
         return 0.
@@ -63,7 +66,8 @@ function GCG(l::SVector{N,Int64},m::SVector{N,Int64},L::SVector{N,Int64},M_N::In
             if L[k] < abs(M+m[k])
                 return 0.
             else
-                C *= PartialWaveFunctions.clebschgordan(L[k-1],M,l[k],m[k],L[k],M+m[k])
+                C *= PartialWaveFunctions.clebschgordan(
+                            L[k-1], M, l[k], m[k], L[k], M+m[k])
                 M += m[k]
             end
         end
@@ -77,33 +81,44 @@ function GCG(l::SVector{N,Int64},m::SVector{N,Int64},L::SVector{N,Int64},M_N::In
                 mm = SA[mm...]
                 @assert sum(mm) == M
                 C_loc = GCG(l,mm,L,M;flag=:cSH)
-                coeff = Ctran(M_N,M;convention=flag)' * prod( Ctran(m[i],mm[i];convention=flag) for i in 1:N )
+                coeff = Ctran(M_N,M;convention=flag)' * 
+                           prod( Ctran(m[i],mm[i];convention=flag) for i in 1:N )
                 C_loc *= coeff
                 C += C_loc
             end
         end
-        return abs(C - real(C)) < 1e-12 ? real(C) : C # We actually expect real values 
+
+        # We actually expect real values 
+        return abs(C - real(C)) < 1e-12 ? real(C) : C 
     end
 
 end
 
-# Only when M_N = sum(m) can the CG coefficient be non-zero, so when missing M_N, we return either 
-# (1)the full CG coefficient given l, m and L, as a rank 1 vector; 
-# (2)or the only one element that can possibly be non-zero on the above vector.
+# Only when M_N = sum(m) can the CG coefficient be non-zero, so when missing M_N, 
+# we return either 
+# (1) the full CG coefficient given l, m and L, as a rank 1 vector; 
+# (2) or the only one element that can possibly be non-zero on the above vector.
 # I suspect that the first option will not be used anyhow, but I keep it for now.
-function GCG(l::SVector{N,Int64},m::SVector{N,Int64},L::SVector{N,Int64};vectorize::Bool=true,flag=:cSH) where N 
+function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64};
+             vectorize::Bool=true, flag=:cSH) where N 
     if flag == :cSH
-        return vectorize ? GCG(l,m,L,sum(m);flag=flag) * Float64.(I(2L[N]+1)[sum(m)+L[N]+1,:]) : GCG(l,m,L,sum(m);flag=flag)
+        return (vectorize ? (GCG(l,m,L,sum(m);flag=flag) * 
+                                Float64.(I(2L[N]+1)[sum(m)+L[N]+1,:])) 
+                          : GCG(l,m,L,sum(m);flag=flag) )
     else
         if vectorize == false && L[N] != 0
-            error("For the rSH basis, the CG coefficient is always a vector execpt for the case of L=0.")
+            error("""For the rSH basis, the CG coefficient is always a vector 
+                     except for the case of L=0.""")
         else
-            return L[N] == 0 ? GCG(l,m,L,L[N];flag=flag) : SA[[ GCG(l,m,L,M_N;flag=flag) for M_N in -L[N]:L[N] ]...] 
+            return (L[N] == 0 ? GCG(l,m,L,L[N];flag=flag) 
+                              : SA[[ GCG(l,m,L,M_N;flag=flag) 
+                                     for M_N in -L[N]:L[N] ]...]  )
         end
     end
 end
 
-# Function that returns a L set given an `l`. The elements of the set start with l[1] and end with L. 
+# Function that returns a L set given an `l`. The elements of the set start with 
+# l[1] and end with L. 
 function SetLl(l::SVector{N,Int64}, L::Int64) where N
     T = typeof(l)
     if N==1
@@ -148,7 +163,8 @@ function Sn(nn,ll)
 end
 
 function submset(lmax, lth)
-    # lmax stands for the l value of the subsection while lth is the length of this subsection
+    # lmax stands for the l value of the subsection while lth is the length of 
+    # this subsection
     if lth == 1
         return [[l] for l in -lmax:lmax]
     else
@@ -162,21 +178,28 @@ function submset(lmax, lth)
     return mset
 end
 
-signed_m(m) = unique([m,-m]) # The set of integers that has the same absolute value as m
-signed_mmset(m) = Iterators.product([signed_m(m[i]) for i in 1:length(m)]...) |> collect # The set of vectors whose i-th element has the same absolute value as m[i] for all i
+# The set of integers that has the same absolute value as m
+signed_m(m) = unique([m,-m]) 
 
-function m_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64; flag=:cSH) where N
+# The set of vectors whose i-th element has the same absolute value as m[i] 
+# for all i
+signed_mmset(m) = Iterators.product([signed_m(m[i]) for i in 1:length(m)]...
+                                   ) |> collect 
+
+function m_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64; 
+                 flag=:cSH) where N
     if flag == :cSH
         return sum(mm) == k
     else
-        # for the rSH, the criterion is that whether there exists a combinition of [+/- m_i]_i, such that the sum of the combination equals to k
-     mmset = signed_mmset(mm)
-     for m in mmset
-      if sum(m) == k
-       return true
-      end
-     end
-     return false
+        # for the rSH, the criterion is that whether there exists a combinition 
+        # of [+/- m_i]_i, such that the sum of the combination equals to k
+        mmset = signed_mmset(mm)
+        for m in mmset
+            if sum(m) == k
+                return true
+            end
+        end
+        return false
     end
 end
 
@@ -195,7 +218,9 @@ function m_generate(n::T,l::T,L,k;flag=:cSH) where T
     for m_ord in Iterators.product(ordered_mset...)
         m_ord_reshape = vcat(m_ord...)
         if m_filter(m_ord_reshape, k; flag = flag)
-            class_m = vcat(Iterators.product([multiset_permutations(m_ord[i], S[i+1]-S[i]) for i in 1:Nperm]...)...)
+            class_m = vcat( Iterators.product( 
+                            [ multiset_permutations(m_ord[i], S[i+1]-S[i]) 
+                              for i in 1:Nperm]...)... )
             push!(MM, [vcat(mm...) for mm in class_m])
             Total_length += length(class_m)
         end
@@ -210,7 +235,7 @@ end
 #                  intersect
 m_generate(n,l,L;flag=:cSH) = 
         union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...), 
-        sum(length.(union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...))) #
+        sum(length.(union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...))) 
 
 function gram(X::Matrix{SVector{N,T}}) where {N,T}
     G = zeros(T, size(X,1), size(X,1))
@@ -314,7 +339,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     else 
         MMmat, size_m = m_generate(nn,ll,L;flag=flag) # classes of m's
         FMatrix=zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
-        UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefficients D
+        UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefs D
         MM = SVector{N, Int}[] # all possible m's
         for i in 1:r
             c = 0
@@ -340,9 +365,13 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         return UMatrix, [mm[inv_perm] for mm in MM] # MM
     else
         U, S, V = svd(gram(FMatrix))
-        rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here
+        # Somehow rank is not working properly here, might be a relative  
+        # tolerance issue.
+        # original code: rank(Diagonal(S); rtol =  1e-12) 
+        rk = findall(x -> x > 1e-12, S) |> length 
         # return the RE-PI coupling coeffs
-        return Diagonal(S[1:rk]) * (U[:, 1:rk]' * UMatrix), [mm[inv_perm] for mm in MM] # MM
+        return Diagonal(S[1:rk]) * (U[:, 1:rk]' * UMatrix), 
+               [ mm[inv_perm] for mm in MM ]
     end
 end
 
