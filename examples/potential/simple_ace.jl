@@ -20,7 +20,7 @@ struct SimpleACE{T, RB, YB, AB, AAB, BB}
    params::Vector{T}   # model parameters
 end
 
-function eval_with_grad(m::SimpleACE, 𝐫::AbstractVector{<: SVector{3}}) where {T} 
+function eval_with_grad(m::SimpleACE, 𝐫::AbstractVector{<: SVector{3}})
    # evaluate the Rn and Ylm embeddings
    #   Rn[j] = Rn(norm(𝐫[j])), Ylm[j] = Ylm(Rs[j])
    r = norm.(𝐫)
@@ -154,6 +154,7 @@ end
 # we can now generate the symmetrization operator by concatenating the 
 # sparse coupling vectors stored in 𝒞. 
 symm = sparse(irow, jcol, val, num𝔹, length(𝔸spec)) 
+@show num𝔹
 
 ##
 # putting together everything we've construced we can now generate the model 
@@ -172,9 +173,26 @@ rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
 Q = rand_rot() 
-Q𝐫 = Ref(Q) .* shuffle(𝐫)
+perm = randperm(nX)
+Q𝐫 = Ref(Q) .* 𝐫[perm]
 
 φ, ∇φ = eval_with_grad(model, 𝐫)
 φQ, ∇φQ = eval_with_grad(model, Q𝐫)
 
+# invariance of the model under rotations and permutations
 @show φ ≈ φQ
+# check co-variance of the gradient / forces 
+@show Ref(Q) .* ∇φ[perm] ≈ ∇φQ
+
+## check correctness of gradients 
+# ForwardDiff can handle Vector{SVector}, so we have to work around that 
+using ForwardDiff
+_2mat(𝐱::AbstractVector{SVector{3, T}}) where {T} = collect(reinterpret(reshape, T, 𝐱))
+_2vecs(X::AbstractMatrix{T}) where {T} = [ SVector{3, T}(X[:, i]) for i = 1:size(X, 2) ]
+
+F = R -> eval_with_grad(model, _2vecs(R))[1]
+∇F = R -> _2mat(eval_with_grad(model, _2vecs(R))[2])
+∇F_ad = R -> ForwardDiff.gradient(F, R)
+
+R = _2mat(𝐫)
+@show ∇F(R) ≈ ∇F_ad(R)
