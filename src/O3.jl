@@ -301,15 +301,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
-    nn1, ll1, inv_perm = lexi_ord(nn, ll)
-    if (nn != nn1) || (ll != ll1 )
-        @show nn, nn1 
-        @show ll, ll1 
-        error("coupling_coeffs: nn and ll must be in lexicographical order")
-    end
-    @assert nn == nn1 
-    @assert ll == ll1
-    @assert inv_perm == 1:length(nn) # require already sorted 
+    nn, ll, inv_perm = lexi_ord(nn, ll)
 
     Lset = SetLl(ll,L)
     r = length(Lset)
