@@ -13,11 +13,12 @@ export coupling_coeffs
 
 # ------------------------------------------------------- 
 
-## NOTE: Ctran(L) is the transformation matrix from rSH to cSH. More specifically, 
-#        if we write Polynomials4ML rSH as R_{lm} and cSH as Y_{lm} and their corresponding 
-#        vectors of order L as R_L and Y_L, respectively. Then R_L = Ctran(L) * Y_L.
-#        This suggests that the "D-matrix" for the Polynomials4ML rSH is Ctran(l) * D(l) * Ctran(L)', 
-#        where D, the D-matrix for cSH. This inspires the following new CG recursion.
+#  NOTE: Ctran(L) is the transformation matrix from rSH to cSH. More specifically, 
+#        if we write Polynomials4ML rSH as R_{lm} and cSH as Y_{lm} and their 
+#        corresponding vectors of order L as R_L and Y_L, respectively. 
+#        Then R_L = Ctran(L) * Y_L. This suggests that the "D-matrix" for the 
+#        Polynomials4ML rSH is Ctran(l) * D(l) * Ctran(L)', where D, the 
+#        D-matrix for cSH. This inspires the following new CG recursion.
 
 # transformation matrix from RSH to CSH for different conventions
 function Ctran(i::Int64,j::Int64;convention = :SpheriCart)
@@ -179,7 +180,11 @@ function m_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64; flag=:cSH
     end
 end
 
-# Function that generates the set of ordered m's given `n` and `l` with sum of m's equaling to k.
+# Function that generates the set of ordered m's given `n` and `l` with sum of 
+# m's equaling to k.
+#
+# NB: functino assumes lexicographical ordering
+#
 function m_generate(n::T,l::T,L,k;flag=:cSH) where T
     @assert abs(k) ≤ L
     S = Sn(n,l)
@@ -198,8 +203,14 @@ function m_generate(n::T,l::T,L,k;flag=:cSH) where T
     return [ T.(MM[i]) for i = 1:length(MM) ], Total_length
 end
 
-# Function that generates the set of ordered m's given `n` and `l` with the abosolute sum of m's being smaller than L.
-m_generate(n,l,L;flag=:cSH) = union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...), sum(length.(union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...))) # orginal version: sum(m_generate(n,l,L,k;flag)[2] for k in -L:L), but this cannot be true anymore b.c. the m_classes can intersect
+# Function that generates the set of ordered m's given `n` and `l` with the 
+# absolute sum of m's being smaller than L.
+# orginal version: sum(m_generate(n,l,L,k;flag)[2] for k in -L:L), 
+#                  but this cannot be true anymore b.c. the m_classes can 
+#                  intersect
+m_generate(n,l,L;flag=:cSH) = 
+        union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...), 
+        sum(length.(union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...))) #
 
 function gram(X::Matrix{SVector{N,T}}) where {N,T}
     G = zeros(T, size(X,1), size(X,1))
@@ -214,21 +225,13 @@ function gram(X::Matrix{SVector{N,T}}) where {N,T}
 
 gram(X::Matrix{<:Number}) = X * X'
 
-# function lexi_ord(nn::T, ll::T) where T
-#     @assert length(nn) == length(ll)
-#     pairs = collect(zip(ll, nn))         # create (lᵢ, nᵢ) pairs
-#     p = sortperm(pairs)
-#     pairs_sorted = pairs[p]
-#     return T(last.(pairs_sorted)), T(first.(pairs_sorted)), invperm(p)
-# end
-
 function lexi_ord(nn, ll)
    N = length(nn)
-   bb = [ (nn[i], ll[i]) for i = 1:N ]
+   bb = [ (ll[i], nn[i]) for i = 1:N ]
    p = sortperm(bb)
    bb_sorted = bb[p]
-   return SVector{N, Int}(ntuple(i -> bb_sorted[i][1], N)), 
-          SVector{N, Int}(ntuple(i -> bb_sorted[i][2], N)), 
+   return SVector{N, Int}(ntuple(i -> bb_sorted[i][2], N)), 
+          SVector{N, Int}(ntuple(i -> bb_sorted[i][1], N)), 
           invperm(p)
 end
 
