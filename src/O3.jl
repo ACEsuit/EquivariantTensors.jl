@@ -8,6 +8,18 @@ using SparseArrays
 
 export coupling_coeffs
 
+struct B_cSH end 
+struct B_SpheriCart end 
+struct B_CondonShortley end 
+struct B_FHIaims end
+
+_basis_symbols = Dict(:cSH => B_cSH(), 
+                      :SpheriCart => B_SpheriCart(), 
+                      real => B_SpheriCart(),
+                      complex => B_cSH(),
+                      B_cSH() => B_cSH(),
+                      B_SpheriCart() => B_SpheriCart() )
+
 
 # ------------------------------------------------------- 
 
@@ -19,32 +31,32 @@ export coupling_coeffs
 #        D-matrix for cSH. This inspires the following new CG recursion.
 
 # transformation matrix from RSH to CSH for different conventions
-function Ctran(i::Int64,j::Int64;convention = :SpheriCart)
-	if convention == :cSH
+function Ctran(i::Int64,j::Int64; basis = B_SpheriCart())
+	if typeof(basis) == B_cSH
 		return i == j
 	end
 	
-	order_dict = Dict(:SpheriCart => [1,2,3,4], 
-                      :CondonShortley => [4,3,2,1], 
-                      :FHIaims => [4,2,3,1] )
+	order_dict = Dict(B_SpheriCart() => [1,2,3,4], 
+                      B_CondonShortley() => [4,3,2,1], 
+                      B_FHIaims() => [4,2,3,1] )
 	val_list = [(-1)^(i), im, (-1)^(i+1)*im, 1] ./ sqrt(2)
 	if abs(i) != abs(j)
 		return 0 
 	elseif i == j == 0
 		return 1
 	elseif i > 0 && j > 0
-		return val_list[order_dict[convention][1]]
+		return val_list[order_dict[basis][1]]
 	elseif i < 0 && j < 0
-		return val_list[order_dict[convention][2]]
+		return val_list[order_dict[basis][2]]
 	elseif i < 0 && j > 0
-		return val_list[order_dict[convention][3]]
+		return val_list[order_dict[basis][3]]
 	elseif i > 0 && j < 0
-		return val_list[order_dict[convention][4]]
+		return val_list[order_dict[basis][4]]
 	end
 end
 
-Ctran(l::Int64; convention = :SpheriCart) = sparse(
-    Matrix{ComplexF64}([ Ctran(m,μ;convention=convention) 
+Ctran(l::Int64; basis = B_SpheriCart()) = sparse(
+    Matrix{ComplexF64}([ Ctran(m, μ; basis = basis) 
                          for m = -l:l, μ = -l:l ])) |> dropzeros
 
 
@@ -53,13 +65,13 @@ Ctran(l::Int64; convention = :SpheriCart) = sparse(
 # The generalized Clebsch Gordan Coefficients; variables of this function are 
 # fully inherited from the first ACE paper. 
 function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
-             M_N::Int64; flag=:cSH) where N
+             M_N::Int64; basis = B_cSH()) where N
     # @assert -L[N] ≤ M_N ≤ L[N] 
-    if m_filter(m, M_N;flag=flag) == false || L[1] < abs(m[1])
+    if m_filter(m, M_N, basis) == false || L[1] < abs(m[1])
         return 0.
     end
 
-    if flag == :cSH
+    if typeof(basis) == B_cSH
         M = m[1]
         C = 1.
         for k in 2:N
@@ -72,7 +84,7 @@ function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
             end
         end
         return C
-    else
+    elseif typeof(basis) == B_SpheriCart
         C = 0.
         for M in signed_m(M_N)
             ext_mset = filter( x -> sum(x) == M, signed_mmset(m) )
@@ -80,9 +92,9 @@ function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
             for mm in ext_mset
                 mm = SA[mm...]
                 @assert sum(mm) == M
-                C_loc = GCG(l,mm,L,M;flag=:cSH)
-                coeff = Ctran(M_N,M;convention=flag)' * 
-                           prod( Ctran(m[i],mm[i];convention=flag) for i in 1:N )
+                C_loc = GCG(l,mm,L,M; basis = B_cSH())
+                coeff = Ctran(M_N,M; basis = basis)' * 
+                           prod( Ctran(m[i],mm[i]; basis = basis) for i in 1:N )
                 C_loc *= coeff
                 C += C_loc
             end
@@ -90,6 +102,8 @@ function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
 
         # We actually expect real values 
         return abs(C - real(C)) < 1e-12 ? real(C) : C 
+    else
+        error("unknown basis type: $basis")
     end
 
 end
@@ -100,20 +114,22 @@ end
 # (2) or the only one element that can possibly be non-zero on the above vector.
 # I suspect that the first option will not be used anyhow, but I keep it for now.
 function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64};
-             vectorize::Bool=true, flag=:cSH) where N 
-    if flag == :cSH
-        return (vectorize ? (GCG(l,m,L,sum(m);flag=flag) * 
+             vectorize::Bool=true, basis = B_cSH()) where N 
+    if typeof(basis) == B_cSH
+        return ( vectorize ? (GCG(l,m,L,sum(m); basis = basis) * 
                                 Float64.(I(2L[N]+1)[sum(m)+L[N]+1,:])) 
-                          : GCG(l,m,L,sum(m);flag=flag) )
-    else
+                           : GCG(l,m,L,sum(m); basis = basis) )
+    elseif typeof(basis) == B_SpheriCart
         if vectorize == false && L[N] != 0
             error("""For the rSH basis, the CG coefficient is always a vector 
                      except for the case of L=0.""")
         else
-            return (L[N] == 0 ? GCG(l,m,L,L[N];flag=flag) 
-                              : SA[[ GCG(l,m,L,M_N;flag=flag) 
+            return (L[N] == 0 ? GCG(l,m,L,L[N]; basis = basis) 
+                              : SA[[ GCG(l,m,L,M_N; basis = basis) 
                                      for M_N in -L[N]:L[N] ]...]  )
         end
+    else
+        error("unknown basis type: $basis")
     end
 end
 
@@ -169,7 +185,7 @@ function submset(lmax, lth)
         return [[l] for l in -lmax:lmax]
     else
         tmp = submset(lmax, lth-1)
-        mset = Vector{Vector{Int64}}([])
+        mset = Vector{Int64}[]
         for t in tmp
             set = identity.([[t..., l] for l in t[end]:lmax])
             push!(mset, set...)
@@ -179,28 +195,64 @@ function submset(lmax, lth)
 end
 
 # The set of integers that has the same absolute value as m
-signed_m(m) = unique([m,-m]) 
+signed_m(m::T) where {T} = 
+        unique([-m, m])::Vector{T}   # m == 0 ? [m,] : [m, -m]
 
 # The set of vectors whose i-th element has the same absolute value as m[i] 
 # for all i
-signed_mmset(m) = Iterators.product([signed_m(m[i]) for i in 1:length(m)]...
-                                   ) |> collect 
+# The following implementation is elegant but inherentaly type-unstable 
+old_signed_mmset(mm) = Iterators.product([signed_m(m) for m in mm]...
+                                    ) |> collect 
 
-function m_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64; 
-                 flag=:cSH) where N
-    if flag == :cSH
-        return sum(mm) == k
-    else
-        # for the rSH, the criterion is that whether there exists a combinition 
-        # of [+/- m_i]_i, such that the sum of the combination equals to k
-        mmset = signed_mmset(mm)
-        for m in mmset
-            if sum(m) == k
-                return true
-            end
-        end
-        return false
+old_signed_mmset2(mm) = 
+        Iterators.product(ntuple(i -> signed_m(mm[i]), length(mm))...)
+                                    
+function signed_mmset(mm)
+   N = length(mm); len = 2^N; T = eltype(mm)
+   MM = Vector{Vector{T}}(undef, len) 
+   σ = zeros(Bool, N)
+   for i in 1:(2^N)
+      digits!(σ, i-1, base=2)
+      newmm = zeros(T, N)
+      for j = 1:N 
+         σ_j = (2*σ[j]-1) * (mm[j] != 0) + (mm[j] == 0)
+         newmm[j] = σ_j * mm[j]
+      end
+      MM[i] = newmm
+   end
+   return unique(MM)::Vector{Vector{T}}
+end
+
+function signed_mmset(mm::NTuple{N, T}, prune = true) where {N, T}
+    len = 2^N
+    MM = Vector{NTuple{N, T}}(undef, len)
+    σ = zeros(Bool, N)
+    for i in 1:(2^N)
+       digits!(σ, i-1, base=2)
+       newmm = ntuple(j -> ((2*σ[j]-1) * (mm[j] != 0) + (mm[j] == 0)) * mm[j], N)
+       MM[i] = newmm
     end
+    if prune 
+        return unique(MM)
+    else 
+        return MM 
+    end
+ end
+ 
+
+
+function m_filter(mm, k::Integer, basis::B_cSH)
+    return sum(mm) == k
+end
+
+function m_filter(mm, k::Integer, basis::B_SpheriCart)
+    mmset = signed_mmset(mm, false)
+    for mm1 in mmset
+        if sum(mm1) == k
+            return true
+        end
+    end
+    return false
 end
 
 # Function that generates the set of ordered m's given `n` and `l` with sum of 
@@ -208,7 +260,7 @@ end
 #
 # NB: functino assumes lexicographical ordering
 #
-function m_generate(n::T,l::T,L,k;flag=:cSH) where T
+function m_generate(n::T,l::T,L,k; basis = B_cSH() ) where T
     @assert abs(k) ≤ L
     S = Sn(n,l)
     Nperm = length(S)-1
@@ -217,7 +269,7 @@ function m_generate(n::T,l::T,L,k;flag=:cSH) where T
     Total_length = 0
     for m_ord in Iterators.product(ordered_mset...)
         m_ord_reshape = vcat(m_ord...)
-        if m_filter(m_ord_reshape, k; flag = flag)
+        if m_filter(m_ord_reshape, k, basis)
             class_m = vcat( Iterators.product( 
                             [ multiset_permutations(m_ord[i], S[i+1]-S[i]) 
                               for i in 1:Nperm]...)... )
@@ -233,11 +285,11 @@ end
 # orginal version: sum(m_generate(n,l,L,k;flag)[2] for k in -L:L), 
 #                  but this cannot be true anymore b.c. the m_classes can 
 #                  intersect
-m_generate(n,l,L;flag=:cSH) = 
-        union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...), 
-        sum(length.(union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...))) 
+m_generate(n,l,L; basis = B_cSH() ) = 
+        union([m_generate(n,l,L,k; basis = basis)[1] for k in -L:L]...), 
+        sum(length.(union([m_generate(n,l,L,k; basis = basis)[1] for k in -L:L]...)))
 
-function gram(X::Matrix{SVector{N,T}}) where {N,T}
+function gram(X::Matrix{SVector{N, T}}) where {N, T}
     G = zeros(T, size(X,1), size(X,1))
     for i = 1:size(X,1)
        for j = i:size(X,1)
@@ -246,9 +298,9 @@ function gram(X::Matrix{SVector{N,T}}) where {N,T}
        end
     end
     return G
- end
+end
 
-gram(X::Matrix{<:Number}) = X * X'
+gram(X::Matrix{<: Number}) = X * X'
 
 function lexi_ord(nn, ll)
    N = length(nn)
@@ -307,25 +359,16 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
                    a vector or tuple of integers""")
         end
     end 
-
-    if basis == complex 
-        flag = :cSH 
-    elseif basis == real 
-        flag = :SpheriCart
-    elseif basis isa Symbol
-        flag = basis 
-    else 
-        error("unknown basis type: $basis")
-    end
     
-    return _coupling_coeffs(_L, _ll, _nn; PI = PI, flag = flag)
+    return _coupling_coeffs(_L, _ll, _nn; 
+                            PI = PI, basis = _basis_symbols[basis])
 end
     
 
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
 function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
-                          PI = true, flag = :cSH) where N
+                          PI = true, basis = B_cSH() ) where N
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
@@ -337,7 +380,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     if r == 0 
         return zeros(T, 0, 0), SVector{N, Int}[]
     else 
-        MMmat, size_m = m_generate(nn,ll,L;flag=flag) # classes of m's
+        MMmat, size_m = m_generate(nn,ll,L; basis = basis) # classes of m's
         FMatrix=zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
         UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefs D
         MM = SVector{N, Int}[] # all possible m's
@@ -346,7 +389,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             for (j,m_class) in enumerate(MMmat)
                 for mm in m_class
                     c += 1
-                    cg_coef = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+                    cg_coef = GCG(ll,mm,Lset[i];vectorize=(L!=0), basis = basis)
                     FMatrix[i,j]+= cg_coef
                     UMatrix[i,c] = cg_coef
                 end
