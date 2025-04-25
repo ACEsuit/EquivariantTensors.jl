@@ -24,5 +24,6 @@ include("yyvector.jl")
 include("O3.jl")
 
 include("utils/sparse.jl")
+include("utils/symmop.jl")
 
 end
