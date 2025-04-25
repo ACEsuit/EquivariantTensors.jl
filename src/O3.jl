@@ -31,82 +31,96 @@ _basis_symbols = Dict(:cSH => B_cSH(),
 #        D-matrix for cSH. This inspires the following new CG recursion.
 
 # transformation matrix from RSH to CSH for different conventions
-function Ctran(i::Int64,j::Int64; basis = B_SpheriCart())
-	if typeof(basis) == B_cSH
-		return i == j
-	end
+
+Ctran(i::Integer, j::Integer, basis::B_cSH) = (i==j)
+
+function Ctran(i::Integer, j::Integer, 
+               basis::Union{B_SpheriCart, B_CondonShortley, B_FHIaims})
 	
-	order_dict = Dict(B_SpheriCart() => [1,2,3,4], 
-                      B_CondonShortley() => [4,3,2,1], 
-                      B_FHIaims() => [4,2,3,1] )
-	val_list = [(-1)^(i), im, (-1)^(i+1)*im, 1] ./ sqrt(2)
+    _order(::B_SpheriCart) = [1,2,3,4]
+    _order(::B_CondonShortley) = [4,3,2,1]
+    _order(::B_FHIaims) = [4,2,3,1]
+    
+    order = _order(basis)
+	val_list = ComplexF64[(-1)^(i), im, (-1)^(i+1)*im, 1] ./ sqrt(2)
 	if abs(i) != abs(j)
-		return 0 
+		return zero(ComplexF64)
 	elseif i == j == 0
-		return 1
+		return one(ComplexF64)
 	elseif i > 0 && j > 0
-		return val_list[order_dict[basis][1]]
+		return val_list[order[1]]
 	elseif i < 0 && j < 0
-		return val_list[order_dict[basis][2]]
+		return val_list[order[2]]
 	elseif i < 0 && j > 0
-		return val_list[order_dict[basis][3]]
-	elseif i > 0 && j < 0
-		return val_list[order_dict[basis][4]]
-	end
+		return val_list[order[3]]
+    end 
+    @assert i > 0 && j < 0
+    return val_list[order[4]]
 end
 
-Ctran(l::Int64; basis = B_SpheriCart()) = sparse(
-    Matrix{ComplexF64}([ Ctran(m, μ; basis = basis) 
-                         for m = -l:l, μ = -l:l ])) |> dropzeros
+Ctran(l::Integer; basis = B_SpheriCart()) = dropzeros(sparse(
+    Matrix{ComplexF64}([ Ctran(m, μ, basis) 
+                         for m = -l:l, μ = -l:l ])))
 
 
 # -----------------------------------------------------
 
 # The generalized Clebsch Gordan Coefficients; variables of this function are 
 # fully inherited from the first ACE paper. 
-function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
-             M_N::Int64; basis = B_cSH()) where N
+function GCG(ll::NTuple{N, T}, mm::NTuple{N, T}, LL::NTuple{N, T},
+             M_N::T, basis::B_cSH) where {N, T}
+
     # @assert -L[N] ≤ M_N ≤ L[N] 
-    if m_filter(m, M_N, basis) == false || L[1] < abs(m[1])
-        return 0.
+    if (m_filter(mm, M_N, basis) == false) || (LL[1] < abs(mm[1]))
+        return 0.0
     end
 
-    if typeof(basis) == B_cSH
-        M = m[1]
-        C = 1.
-        for k in 2:N
-            if L[k] < abs(M+m[k])
-                return 0.
-            else
-                C *= PartialWaveFunctions.clebschgordan(
-                            L[k-1], M, l[k], m[k], L[k], M+m[k])
-                M += m[k]
-            end
+    M = mm[1]
+    C = 1.0
+    for k in 2:N
+        if LL[k] < abs(M + mm[k])
+            return 0.0
+        else
+            cg = PartialWaveFunctions.clebschgordan(
+                        LL[k-1], M, ll[k], mm[k], LL[k], M + mm[k])
+            C *= cg
+            M += mm[k]
         end
-        return C
-    elseif typeof(basis) == B_SpheriCart
-        C = 0.
-        for M in signed_m(M_N)
-            ext_mset = filter( x -> sum(x) == M, signed_mmset(m) )
-        
-            for mm in ext_mset
-                mm = SA[mm...]
-                @assert sum(mm) == M
-                C_loc = GCG(l,mm,L,M; basis = B_cSH())
-                coeff = Ctran(M_N,M; basis = basis)' * 
-                           prod( Ctran(m[i],mm[i]; basis = basis) for i in 1:N )
-                C_loc *= coeff
-                C += C_loc
-            end
-        end
-
-        # We actually expect real values 
-        return abs(C - real(C)) < 1e-12 ? real(C) : C 
-    else
-        error("unknown basis type: $basis")
     end
 
+    return C
 end
+
+
+function GCG(ll::NTuple{N, T}, mm::NTuple{N, T}, LL::NTuple{N, T},
+             M_N::T, basis::B_SpheriCart) where {N, T}
+
+    if m_filter(mm, M_N, basis) == false || LL[1] < abs(mm[1])
+       return 0.0
+    end
+
+    C = zero(ComplexF64)
+    for M in signed_m(M_N)
+        ext_mset = filter( x -> sum(x) == M, signed_mmset(mm) )
+        
+        for mm1 in ext_mset
+            # @assert sum(mm1) == M
+            C_loc = GCG(ll, mm1, LL, M, B_cSH())
+            coeff = Ctran(M_N, M, basis)' * 
+                        prod( Ctran(mm[i], mm1[i], basis) for i in 1:N )
+            C_loc *= coeff
+            C += C_loc
+        end
+    end
+
+    # We actually expect real values 
+    if abs(C - real(C)) > 1e-10
+        error("GCG coefficient is not real: $C")
+    end
+
+    return real(C) 
+end
+
 
 # Only when M_N = sum(m) can the CG coefficient be non-zero, so when missing M_N, 
 # we return either 
@@ -132,6 +146,7 @@ function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64};
         error("unknown basis type: $basis")
     end
 end
+
 
 # Function that returns a L set given an `l`. The elements of the set start with 
 # l[1] and end with L. 
@@ -195,33 +210,17 @@ function submset(lmax, lth)
 end
 
 # The set of integers that has the same absolute value as m
-signed_m(m::T) where {T} = 
-        unique([-m, m])::Vector{T}   # m == 0 ? [m,] : [m, -m]
+signed_m(m::T) where {T} = unique([-m, m])::Vector{T}   
 
 # The set of vectors whose i-th element has the same absolute value as m[i] 
 # for all i
 # The following implementation is elegant but inherentaly type-unstable 
-old_signed_mmset(mm) = Iterators.product([signed_m(m) for m in mm]...
-                                    ) |> collect 
-
-old_signed_mmset2(mm) = 
-        Iterators.product(ntuple(i -> signed_m(mm[i]), length(mm))...)
-                                    
-function signed_mmset(mm)
-   N = length(mm); len = 2^N; T = eltype(mm)
-   MM = Vector{Vector{T}}(undef, len) 
-   σ = zeros(Bool, N)
-   for i in 1:(2^N)
-      digits!(σ, i-1, base=2)
-      newmm = zeros(T, N)
-      for j = 1:N 
-         σ_j = (2*σ[j]-1) * (mm[j] != 0) + (mm[j] == 0)
-         newmm[j] = σ_j * mm[j]
-      end
-      MM[i] = newmm
-   end
-   return unique(MM)::Vector{Vector{T}}
-end
+# old_signed_mmset(mm) = Iterators.product([signed_m(m) for m in mm]...
+#                                     ) |> collect 
+# the tuple implementation is stable, but the product still has overhead. 
+# old_signed_mmset2(mm) = 
+#         Iterators.product(ntuple(i -> signed_m(mm[i]), length(mm))...)
+# the following implementation is a bit cryptic but fairly efficient. 
 
 function signed_mmset(mm::NTuple{N, T}, prune = true) where {N, T}
     len = 2^N
@@ -240,13 +239,13 @@ function signed_mmset(mm::NTuple{N, T}, prune = true) where {N, T}
  end
  
 
-
 function m_filter(mm, k::Integer, basis::B_cSH)
     return sum(mm) == k
 end
 
 function m_filter(mm, k::Integer, basis::B_SpheriCart)
-    mmset = signed_mmset(mm, false)
+    # no need to make mmset unique, repetitions are not a problem here 
+    mmset = signed_mmset(mm, false) 
     for mm1 in mmset
         if sum(mm1) == k
             return true
@@ -335,7 +334,7 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
     # convert ll into an SVector{N, Int}, as required internally 
     N = length(ll) 
     _ll = try 
-        _ll = SVector{N, Int}(ll...)
+        _ll = NTuple{N, Int}(ll...)
     catch 
         error("""coupling_coeffs(L::Integer, ll, ...) requires ll to be 
                a vector or tuple of integers""")
@@ -344,16 +343,16 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
     # convert nn into an SVector{N, Int}, as required internally 
     if isnothing(nn) 
         if PI 
-            _nn = SVector{N, Int}(ntuple(i -> 0, N)...)
+            _nn = ntuple(i -> 0, N)
         else 
-            _nn = SVector{N, Int}((1:N)...)
+            _nn = ntuple(i -> i, N)
         end
     elseif length(nn) != N 
         error("""coupling_coeffs(L::Integer, ll, nn) requires ll and nn to be 
                of the same length""")
     else
         _nn = try 
-            _nn = SVector{N, Int}(nn...)
+            _nn = NTuple{N, Int}(nn...)
         catch 
             error("""coupling_coeffs(L::Integer, ll, nn) requires nn to be 
                    a vector or tuple of integers""")
@@ -367,8 +366,8 @@ end
 
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
-function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
-                          PI = true, basis = B_cSH() ) where N
+function _coupling_coeffs(L::Int, ll::NTuple{N, Int}, nn::NTuple{N, Int}; 
+                          PI = true, basis) where N
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
