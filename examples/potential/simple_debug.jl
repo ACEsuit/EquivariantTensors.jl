@@ -121,20 +121,24 @@ nnll = unique( [(nn, ll) for (nn, ll, mm) in nnllmm] )
 
 # Now for each (nn, ll) block we can generate all possible invariant basis 
 # functions. 
-𝒞 = Vector{Float64}[]
+irow = Int[] 
+jcol = Int[] 
+val = Float64[]
 nnll_sym = [] 
 
 ctr = 0 
 for (i, (nn, ll)) in enumerate(nnll)
    cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = real)
    num_b = size(cc, 1)   # number of invariant basis functions for this block 
-   ctr += num_b
    # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
    idx_𝔸 = [inv_nnllmm[bb_key(nn, ll, mm)] for mm in MM] 
    for q = 1:num_b 
-      cvec = zeros(length(aabasis))
-      cvec[idx_𝔸] = cc[q, :]
-      push!(𝒞, cvec)
+      ctr += 1
+      for j = 1:length(idx_𝔸)
+         push!(irow, ctr)
+         push!(jcol, idx_𝔸[j])
+         push!(val, cc[q, j])
+      end
       push!(nnll_sym, (nn, ll))
    end
 end
@@ -143,14 +147,15 @@ end
 # we can now generate the symmetrization operator by concatenating the 
 # sparse coupling vectors stored in 𝒞. 
 # symm = sparse( transpose(reduce(hcat, collect.(𝒞) )))
-symm = sparse( reduce(vcat, transpose.(𝒞)) )
+
+symm = sparse(irow, jcol, val, ctr, length(𝔸spec)) 
 
 
 ##
 # putting together everything we've construced we can now generate the model 
 # here we give the model some random parameters just for testing. 
 #
-model = SimpleACE(rbasis, ybasis, abasis, aabasis, symm, randn(length(𝒞)) )
+model = SimpleACE(rbasis, ybasis, abasis, aabasis, symm, randn(ctr) )
 
 # we want to check whether the model is invariant under rotations, and whether 
 # the gradient is correctly implemented. 
@@ -171,3 +176,40 @@ AQ, 𝔸Q, 𝔹Q = eval_bases(model, Q𝐫)
 display([𝔹 𝔹Q nnll_sym])
 
 𝔹 ≈ 𝔹Q
+
+##
+
+# nn = [0,0,0]
+# ll = [1,1,2]
+# symm[1,:]
+
+# cc, MM = ET.O3.coupling_coeffs(0, ll, nn; PI = true, basis = real)
+
+# function _eval_B(𝐫)
+#    Rn = rbasis(norm.(𝐫))
+#    Ylm = ybasis(𝐫)
+#    Anlm = [ sum( Rn[j, n] * Ylm[j, ilm] for j = 1:nX ) 
+#             for n = 1:size(Rn, 2), ilm = 1:size(Ylm, 2) ]
+#    AA = [ prod( Anlm[nn[t]+1, P4ML.lm2idx(ll[t], mm[t])]  for t = 1:3) 
+#          for mm in MM ]
+#    B = sum( cc[q] * AA[q] for q = 1:length(MM) )
+#    return B, AA 
+# end
+
+# B, AA = _eval_B(𝐫)
+# BQ, AAQ = _eval_B(Q𝐫)
+# B ≈ BQ
+
+# A, 𝔸, 𝔹 = eval_bases(model, 𝐫)
+# 𝔹[1]
+# idx𝔸 = [inv_nnllmm[bb_key(nn, ll, mm)] for mm in MM] 
+# 𝔸[idx𝔸] ≈ AA
+# symm[1, idx𝔸] ≈ cc[:]
+# dot(symm[1,:], 𝔸)
+# B
+
+# include("../../test/utils/utils_testO3.jl")
+
+# b = eval_sym_basis(𝐫; coeffs = cc, MM = MM, ll = ll, nn = nn .+ 2, Real = true)[1]
+# bQ = eval_sym_basis(Q𝐫; coeffs = cc, MM = MM, ll = ll, nn = nn .+ 2, Real = true)[1]
+# b ≈ bQ
