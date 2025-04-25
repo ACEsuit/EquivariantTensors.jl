@@ -327,7 +327,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         return UMatrix, [mm[inv_perm] for mm in MM] # MM
     else
         U, S, V = svd(gram(FMatrix))
-        rk = rank(Diagonal(S); rtol =  1e-12)
+        rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here
         # return the RE-PI coupling coeffs
         return Diagonal(S[1:rk]) * (U[:, 1:rk]' * UMatrix), [mm[inv_perm] for mm in MM] # MM
     end
