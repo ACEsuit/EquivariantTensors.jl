@@ -1,4 +1,4 @@
-module O3
+module O3alt
  
 using PartialWaveFunctions
 using Combinatorics
@@ -67,6 +67,7 @@ Ctran(l::Integer; basis = B_SpheriCart()) = dropzeros(sparse(
 
 # The generalized Clebsch Gordan Coefficients; variables of this function are 
 # fully inherited from the first ACE paper. 
+
 function GCG(ll::NTuple{N, T}, mm::NTuple{N, T}, LL::NTuple{N, T},
              M_N::T, basis::B_cSH) where {N, T}
 
@@ -150,7 +151,7 @@ end
 
 # Function that returns a L set given an `l`. The elements of the set start with 
 # l[1] and end with L. 
-function SetLl(l::SVector{N,Int64}, L::Int64) where N
+function SetLl(l::NTuple{N,Int64}, L::Int64) where N
     T = typeof(l)
     if N==1
         return l[1] == L ? [T(l[1])] : Vector{T}[]
@@ -178,7 +179,7 @@ function SetLl(l::SVector{N,Int64}, L::Int64) where N
     return T.(set)
 end
 
-SetLl(l::SVector{N,Int64}) where N = union([SetLl(l, L) for L in 0:sum(l)]...)
+SetLl(l::NTuple{N,Int64}) where N = union([SetLl(l, L) for L in 0:sum(l)]...)
 
 function Sn(nn, ll)
     # should assert that lexicographical order
@@ -266,11 +267,6 @@ function m_filter(mm, k::Integer, basis::B_SpheriCart)
     return any( sum(mm1) == k for mm1 in mmset )
 end
 
-function dynamic_product(sets)
-    N_sets = length(sets) 
-    
-end
-
 # Function that generates the set of ordered m's given `n` and `l` with sum of 
 # m's equaling to k.
 #
@@ -355,10 +351,9 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
     # convert ll into an SVector{N, Int}, as required internally 
     N = length(ll) 
     _ll = try 
-        _ll = NTuple{N, Int}(ll...)
+        _ll = ntuple(i -> ll[i], N)
     catch 
-        error("""coupling_coeffs(L::Integer, ll, ...) requires ll to be 
-               a vector or tuple of integers""")
+        error("coupling_coeffs(L::Integer, ll, ...) requires ll to be a vector or tuple of integers")
     end
 
     # convert nn into an SVector{N, Int}, as required internally 
@@ -373,7 +368,7 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
                of the same length""")
     else
         _nn = try 
-            _nn = NTuple{N, Int}(nn...)
+            _nn = ntuple(i -> nn[i], N)
         catch 
             error("""coupling_coeffs(L::Integer, ll, nn) requires nn to be 
                    a vector or tuple of integers""")
@@ -387,6 +382,16 @@ end
 
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
+
+function simple_MM_generate(ll::NTuple{N, Int}) where {N} 
+   ci = CartesianIndices(ntuple(t -> -ll[t]:ll[t], N))
+   MM = Vector{NTuple{N, Int}}(undef, length(ci))
+   for (i, I) in enumerate(ci)
+        MM[i] = I.I 
+   end 
+   return MM
+end
+
 function _coupling_coeffs(L::Int, ll::NTuple{N, Int}, nn::NTuple{N, Int}; 
                           PI = true, basis) where N
 
@@ -394,13 +399,15 @@ function _coupling_coeffs(L::Int, ll::NTuple{N, Int}, nn::NTuple{N, Int};
     # to be in lexicographical order.
     nn, ll, inv_perm = lexi_ord(nn, ll)
 
-    Lset = SetLl(ll,L)
+    Lset = SetLl(ll, L)
+    @show Lset 
     r = length(Lset)
     T = L == 0 ? Float64 : SVector{2L+1,Float64}
     if r == 0 
-        return zeros(T, 0, 0), SVector{N, Int}[]
+        return zeros(T, 0, 0), NTuple{N, Int}[]
     else 
-        MMmat, size_m = m_generate(nn, ll, L, basis) # classes of m's
+        # MMmat, size_m = m_generate(nn, ll, L, basis) # classes of m's
+        MMmat = simple_MM_generate(ll)
         FMatrix = zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
         UMatrix = zeros(T, r, size_m) # Matrix containing the the coupling coefs D
         MM = NTuple{N, Int}[] # all possible m's
