@@ -1,21 +1,18 @@
 
 
 using SparseArrays: SparseMatrixCSC     
-import Polynomials4ML
 
 
 struct SparseACE{T, TA, TAA}
    abasis::TA
    aabasis::TAA
    A2Bmap::SparseMatrixCSC{T, Int}
-   # ------- 
-   meta::Dict{String, Any}
 end
 
-Base.length(tensor::SparseEquivTensor) = size(tensor.A2Bmap, 1) 
+Base.length(tensor::SparseACE) = size(tensor.A2Bmap, 1) 
 
 
-function evaluate!(B, _AA, tensor::SparseEquivTensor{T}, Rnl, Ylm) where {T}
+function evaluate!(B, _AA, tensor::SparseACE{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
    TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
    A = zeros(TA, length(tensor.abasis))
@@ -35,13 +32,13 @@ function evaluate!(B, _AA, tensor::SparseEquivTensor{T}, Rnl, Ylm) where {T}
    return B, (_AA = _AA, )
 end
 
-function whatalloc(::typeof(evaluate!), tensor::SparseEquivTensor, Rnl, Ylm)
+function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
    TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
    TB = promote_type(TA, eltype(tensor.A2Bmap))
    return (TB, length(tensor),), (TA, length(tensor.aabasis),)
 end
 
-function evaluate(tensor::SparseEquivTensor, Rnl, Ylm)
+function evaluate(tensor::SparseACE, Rnl, Ylm)
    allocinfo = whatalloc(evaluate!, tensor, Rnl, Ylm)
    B = zeros(allocinfo[1]...)
    AA = zeros(allocinfo[2]...)
@@ -53,7 +50,7 @@ end
 
 
 function pullback!(∂Rnl, ∂Ylm, 
-                   ∂B, tensor::SparseEquivTensor, Rnl, Ylm, 
+                   ∂B, tensor::SparseACE, Rnl, Ylm, 
                    intermediates)
    _AA = intermediates._AA
    proj = tensor.aabasis.projection
@@ -85,14 +82,14 @@ function pullback!(∂Rnl, ∂Ylm,
 end
 
 function whatalloc(::typeof(pullback!),  
-                   ∂B, tensor::SparseEquivTensor{T}, Rnl, Ylm, 
+                   ∂B, tensor::SparseACE{T}, Rnl, Ylm, 
                    intermediates) where {T} 
    TA = promote_type(T, eltype(intermediates._AA), eltype(∂B), 
                      eltype(Rnl), eltype(eltype(Ylm)))
    return (TA, size(Rnl)...), (TA, size(Ylm)...)   
 end
 
-function pullback(∂B, tensor::SparseEquivTensor{T}, Rnl, Ylm, 
+function pullback(∂B, tensor::SparseACE{T}, Rnl, Ylm, 
                            intermediates) where {T} 
    alc_∂Rnl, alc_∂Ylm = whatalloc(pullback!, ∂B, tensor, Rnl, Ylm, intermediates)
    ∂Rnl = zeros(alc_∂Rnl...)
@@ -108,9 +105,9 @@ Get the specification of the BBbasis as a list (`Vector`) of vectors of `@NamedT
 
 ### Parameters 
 
-* `tensor` : a SparseEquivTensor, possibly from ACEModel
+* `tensor` : a SparseACE, possibly from ACEModel
 """
-function get_nnll_spec(tensor::SparseEquivTensor{T}) where {T}
+function get_nnll_spec(tensor::SparseACE{T}) where {T}
    _nl(bb) = [(n = b.n, l = b.l) for b in bb]
    # assume the new ACE model NEVER has the z channel
    spec = tensor.aabasis.meta["AA_spec"]
@@ -131,7 +128,7 @@ end
 # ----------------------------------------
 #  experimental pushforwards 
 
-function _pfwd(tensor::SparseEquivTensor{T}, Rnl, Ylm, ∂Rnl, ∂Ylm) where {T}
+function _pfwd(tensor::SparseACE{T}, Rnl, Ylm, ∂Rnl, ∂Ylm) where {T}
    A, ∂A = _pfwd(tensor.abasis, (Rnl, Ylm), (∂Rnl, ∂Ylm))
    _AA, _∂AA = _pfwd(tensor.aabasis, A, ∂A)
 
@@ -203,105 +200,3 @@ end
 
 
 
-# can we ignore the level function here? 
-function _make_A_spec(AA_spec, level)
-   NT_NLM = NamedTuple{(:n, :l, :m), Tuple{Int, Int, Int}}
-   A_spec = NT_NLM[]
-   for bb in AA_spec 
-      append!(A_spec, bb)
-   end
-   A_spec = unique(A_spec)
-   A_spec_level = [ level(b) for b in A_spec ]
-   p = sortperm(A_spec_level)
-   A_spec = A_spec[p]
-   return A_spec
-end 
-
-# TODO: this should go into sphericart or P4ML 
-function _make_Y_spec(maxl::Integer)
-   NT_LM = NamedTuple{(:l, :m), Tuple{Int, Int}}
-   y_spec = NT_LM[] 
-   for i = 1:P4ML.SpheriCart.sizeY(maxl)
-      l, m = P4ML.SpheriCart.idx2lm(i)
-      push!(y_spec, (l = l, m = m))
-   end
-   return y_spec 
-end
-
-function _make_idx_A_spec(A_spec, r_spec, y_spec)
-   inv_r_spec = _inv_list(r_spec)
-   inv_y_spec = _inv_list(y_spec)
-   A_spec_idx = [ (inv_r_spec[(n=b.n, l=b.l)], inv_y_spec[(l=b.l, m=b.m)]) 
-                  for b in A_spec ]
-   return A_spec_idx                  
-end
-
-function _make_idx_AA_spec(AA_spec, A_spec) 
-   inv_A_spec = _inv_list(A_spec)
-   AA_spec_idx = [ [ inv_A_spec[b] for b in bb ] for bb in AA_spec ]
-   sort!.(AA_spec_idx)
-   return AA_spec_idx
-end 
-
-
-function _generate_ace_model(rbasis, Ytype::Symbol, AA_spec::AbstractVector, 
-                             Vref, 
-                             level = TotalDegree(), 
-                             pair_basis = nothing, 
-                             ) 
-
-   # # storing E0s with unit
-   # model_meta = Dict{String, Any}("E0s" => deepcopy(E0s))
-   model_meta = Dict{String, Any}()
-
-   # generate the coupling coefficients 
-   cgen = EquivariantModels.Rot3DCoeffs_real(0)
-   AA2BB_map = EquivariantModels._rpi_A2B_matrix(cgen, AA_spec)
-
-   # find which AA basis functions are actually used and discard the rest 
-   keep_AA_idx = findall(sum(abs, AA2BB_map; dims = 1)[:] .> 0)
-   AA_spec = AA_spec[keep_AA_idx]
-   AA2BB_map = AA2BB_map[:, keep_AA_idx]
-
-   # generate the corresponding A basis spec
-   A_spec = _make_A_spec(AA_spec, level)
-
-   # from the A basis we can generate the Y basis since we now know the 
-   # maximum l value (though we probably already knew that from r_spec)
-   maxl = maximum([ b.l for b in A_spec ])   
-   ybasis = _make_Y_basis(Ytype, maxl)
-   
-   # now we need to take the human-readable specs and convert them into 
-   # the layer-readable specs 
-   r_spec = rbasis.spec
-   y_spec = _make_Y_spec(maxl)
-
-   # get the idx version of A_spec 
-   A_spec_idx = _make_idx_A_spec(A_spec, r_spec, y_spec)
-
-   # from this we can now generate the A basis layer                   
-   a_basis = Polynomials4ML.PooledSparseProduct(A_spec_idx)
-   a_basis.meta["A_spec"] = A_spec  #(also store the human-readable spec)
-
-   # get the idx version of AA_spec
-   AA_spec_idx = _make_idx_AA_spec(AA_spec, A_spec) 
-
-   # from this we can now generate the AA basis layer
-   aa_basis = Polynomials4ML.SparseSymmProdDAG(AA_spec_idx)
-   aa_basis.meta["AA_spec"] = AA_spec  # (also store the human-readable spec)
-
-   tensor = SparseEquivTensor(a_basis, aa_basis, AA2BB_map, 
-                              Dict{String, Any}())
-
-   return ACEModel(rbasis._i2z, rbasis, ybasis, 
-                   tensor, pair_basis, Vref, 
-                   model_meta )
-end
-
-# TODO: it is not entirely clear that the `level` is really needed here 
-#       since it is implicitly already encoded in AA_spec. We need a 
-#       function `auto_level` that generates level automagically from AA_spec.
-function ace_model(rbasis, Ytype, AA_spec::AbstractVector, level, 
-                   pair_basis, Vref)
-   return _generate_ace_model(rbasis, Ytype, AA_spec, Vref, level, pair_basis)
-end 

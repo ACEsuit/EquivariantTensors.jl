@@ -48,12 +48,25 @@ function symmetrisation_matrix(L::Integer,
       end
    end
 
-   if prune 
-      error("basis pruning not yet implemented")
-   end
-
    # assemble the symmetrization operator in compressed column format 
    symm = sparse(irow, jcol, val, num𝔹, length(𝔸spec)) 
 
-   return symm 
+   # prune rows with all-zero entries (if there are any then print a warning 
+   # because this indicates a bug in `coupling_coeffs`)
+   i_nz_rows = findall(!iszero, sum(abs, symm; dims = 2)[:])
+   if length(i_nz_rows) != num𝔹
+      @warn("symmetrization matrix has all-zero rows; this indicates a bug in `coupling_coeffs`")
+      symm = symm[i_nz_rows, :]
+   end
+
+   if prune 
+      i_nz_cols = sort( indall(!iszero, sum(abs, ; dims = 1)[:]) ) 
+      𝔸spec_pruned = 𝔸spec[i_nz_cols]
+      symm_pruned = symm[:, i_nz_cols]
+   else
+      𝔸spec_pruned = 𝔸spec 
+      symm_pruned = symm
+   end 
+
+   return symm_pruned, 𝔸spec_pruned
 end
