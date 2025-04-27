@@ -5,14 +5,14 @@
 function sparse_equivariant_tensor(;
                   L::Integer, 
                   mb_spec, 
-                  Rnl_spec = _auto_Rnl_spec(mb_spec), 
-                  Ylm_spec = _auto_Y_spec(mb_spec),
-                  basis = real)
+                  Rnl_spec, # = _auto_Rnl_spec(mb_spec), 
+                  Ylm_spec, # = _auto_Y_spec(mb_spec),
+                  basis, ) # = real)
    # check that the radial spec is compatible with the mb_spec                   
-   min_Rnl_spec = _auto_Rnl_spec(mb_spec)
-   if !(min_Rnl_spec ⊆ Rnl_spec)
-      error("mb_spec contains 1p basis functions that are not contained in Rnl_spec")
-   end
+   # min_Rnl_spec = _auto_Rnl_spec(mb_spec)
+   # if !(min_Rnl_spec ⊆ Rnl_spec)
+   #    error("mb_spec contains 1p basis functions that are not contained in Rnl_spec")
+   # end
 
    # generate a first naive 𝔸 specification that doesn't take into account 
    # any symmetries at all. 
@@ -48,7 +48,8 @@ function sparse_equivariant_tensor(;
                 "mb_spec" => mb_spec,
                 "L" => L,)
 
-   return SparseACE(Abasis, 𝔸basis, symm, meta)                
+   # return SparseACE(Abasis, 𝔸basis, symm, meta)                
+   return meta 
 end
 
 
@@ -62,7 +63,7 @@ i.e the specification of the one-body basis.
 """
 function _auto_Rnl_spec(mb_spec)
    TNL = typeof( (n = 0, l = 0) )
-   nl_set = Set{TN}()
+   nl_set = Set{TNL}()
    for bb in mb_spec, b in bb 
       push!(nl_set, (n = b.n, l = b.l))
    end
@@ -97,6 +98,7 @@ takes an nnll spec and generates a complete list of all possible nnllmm
 """
 function _auto_nnllmm_spec(nnll_spec)
    NT_NLM = typeof( (n = 0, l = 0, m = 0) ) 
+   @show eltype(nnll_spec)
    nnllmm = Vector{NT_NLM}[] 
    for bb in nnll_spec
       MM = setproduct( [ -b.l:b.l for b in bb ] )
@@ -112,13 +114,22 @@ end
 """
 convert readable A_spec into the internal representation of the A basis
 """
-function _make_idx_A_spec(A_spec, r_spec, y_spec)
+function _make_idx_A_spec(A_spec, r_spec::(@NamedTuple{n::Int64}), y_spec)
+   inv_r_spec = invmap(r_spec)
+   inv_y_spec = invmap(y_spec)
+   A_spec_idx = [ (inv_r_spec[(n=b.n, )], inv_y_spec[(l=b.l, m=b.m)]) 
+                  for b in A_spec ]
+   return A_spec_idx                  
+end
+
+function _make_idx_A_spec(A_spec, r_spec::(@NamedTuple{n::Int64, l::Int64}), y_spec)
    inv_r_spec = invmap(r_spec)
    inv_y_spec = invmap(y_spec)
    A_spec_idx = [ (inv_r_spec[(n=b.n, l=b.l)], inv_y_spec[(l=b.l, m=b.m)]) 
                   for b in A_spec ]
    return A_spec_idx                  
 end
+
 
 """
 convert readable AA_spec into the internal representation of the AA basis

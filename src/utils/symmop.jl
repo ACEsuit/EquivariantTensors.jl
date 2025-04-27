@@ -62,7 +62,7 @@ function symmetrisation_matrix(L::Integer,
    end
 
    if prune 
-      i_nz_cols = sort( indall(!iszero, sum(abs, ; dims = 1)[:]) ) 
+      i_nz_cols = sort( findall(!iszero, sum(abs, symm; dims = 1)[:]) ) 
       𝔸spec_pruned = 𝔸spec[i_nz_cols]
       symm_pruned = symm[:, i_nz_cols]
    else

@@ -62,55 +62,40 @@ ORD = 3     # correlation-order (body-order = ORD + 1)
 
 ##
 # [1] first specify the radial and angular embeddings 
-rbasis = P4ML.legendre_basis(Dtot+1)
+rbasis = P4ML.legendre_basis(Dtot+1) 
+Rn_spec = [ (n = n,) for n = 0:Dtot ]
 ybasis = P4ML.real_sphericalharmonics(maxL)
+Ylm_spec = P4ML.natural_indices(ybasis), 
+
+# generate the nnll basis pre-specification
+nnll_long = let Dtot = Dtot, maxL = maxL 
+   nl = [ (n=n, l=l) for n = 0:Dtot for l = 0:maxL if (n + l <= Dtot) ]
+   comb = with_replacement_combinations(0:length(nl), ORD)
+   ii2bb = ii -> eltype(nl)[ nl[i] for i in ii[ii .> 0] ]
+   myfilter = ii -> ( bb = ii2bb(ii); 
+                  ( length(bb) > 0 && 
+                    sum(b.n + b.l for b in bb; init=0) <= Dtot && 
+                    iseven(sum(b.l for b in bb; init=0)) ) ) 
+   return [ ii2bb(ii) for ii in comb if myfilter(ii) ]
+end
+
 
 ##
-# [2] Pooling and SparseProduct
-# this layer takes the embeddings of the individual particles and pools them 
-# to embed the entire set of particles. (point cloud) Note this is a sparse 
-# operation; only the basis functions Aₙₗₘ are computed for which n + l ≤ Dtot.
-#
-Aspec = [ (n+1, P4ML.lm2idx(l, m)) 
-           for n = 0:Dtot for l = 0:maxL for m = -l:l if (n + l <= Dtot) ]
-abasis = ET.PooledSparseProduct(Aspec)
-@assert abasis.spec == Aspec
+# in the pre-specification we only imposed the total degree truncation, everything 
+# else will be handled by the symmetrization operator within the model 
+# construction; along the way we will also prune the nnll list.
+ET.sparse_equivariant_tensor(; 
+            L = 0, mb_spec = nnll_long, 
+            Rnl_spec = Rn_spec, 
+            Ylm_spec = Ylm_spec, 
+            basis = real ) 
+
 
 ##
-# [3] n-correlations 
-# generating sparse n-correlations is a little more involved, and here is it 
-# better to just automate this. But for a very small model we can still do it 
-# by hand. 
-# first get all possible combinations of A basis functions, then we will filter 
-comb1 = with_replacement_combinations(0:length(Aspec), ORD)
-ii2bb = ii -> begin 
-      bb = [ Aspec[i] for i in ii[ii .> 0]  ];
-      nn = Int[b[1]-1 for b in bb]; 
-      ll = Int[P4ML.idx2lm(b[2])[1] for b in bb];
-      mm = Int[P4ML.idx2lm(b[2])[2] for b in bb];
-      return nn, ll, mm 
-   end
-myfilter = ii -> begin 
-      nn, ll, mm = ii2bb(ii);
-      return ( (sum(nn + ll; init=0) <= Dtot) &&  # total degree trunction
-               iseven(sum(ll; init=0)) &&         # reflection-invariance
-               (length(mm) == 0 || ET.O3.m_filter(mm,0;flag=:SpheriCart)) &&         # rotation-invariance
-               sum(ii) > 0 )           # drop 0-corr sure to bug 
-   end 
 
-@show length(comb1)
-comb2 = [ ii for ii in comb1 if myfilter(ii) ]
-@show length(comb2) 
-
-# notice the incredible reduction in the number of features due to imposing 
-# the filters given by the O(3) invariance constraints and the sparsification
-# (the latter can be thought of as a smoothness prior)
-
-# to finish the 𝔸spec we need to convert to 0-corr, 1-corr, 2-corr and 3-corr
-# by dropping the zeros from the combinations 
-𝔸spec = [ filter(!iszero, ii) for ii in comb2 ]
-# and now we can finally generate the n-correlations layer 
-aabasis = ET.SparseSymmProd(𝔸spec)
+# abasis = ET.PooledSparseProduct(Aspec)
+# @assert abasis.spec == Aspec
+# aabasis = ET.SparseSymmProd(𝔸spec)
 
 ##
 # [4] symmetrization
