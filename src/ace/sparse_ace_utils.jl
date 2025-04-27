@@ -80,16 +80,16 @@ function _auto_Ylm_spec(mb_spec, basis)
    return _get_natural_Ylm_spec(lmax, basis)
 end
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# TODO: not clear this should be here? But no better idea for now...
-import Polynomials4ML as _P4ML
+# # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# # TODO: not clear this should be here? But no better idea for now...
+# import Polynomials4ML as _P4ML
 
-_get_natural_Ylm_spec(lmax, ::typeof(real)) = 
-      _P4ML.natural_indices(_P4ML.real_sphericalharmonics(5))
+# _get_natural_Ylm_spec(lmax, ::typeof(real)) = 
+#       _P4ML.natural_indices(_P4ML.real_sphericalharmonics(5))
 
-_get_natural_Ylm_spec(lmax, ::typeof(complex)) = 
-      _P4ML.natural_indices(_P4ML.complex_sphericalharmonics(5))
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# _get_natural_Ylm_spec(lmax, ::typeof(complex)) = 
+#       _P4ML.natural_indices(_P4ML.complex_sphericalharmonics(5))
+# # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 """
