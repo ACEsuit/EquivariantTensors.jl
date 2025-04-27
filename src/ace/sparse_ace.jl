@@ -1,6 +1,7 @@
 
 using SparseArrays: SparseMatrixCSC
-
+using LinearAlgebra: mul!
+import ChainRulesCore: NoTangent, rrule
 
 struct SparseACE{T, TA, TAA}
    abasis::TA
@@ -13,37 +14,33 @@ end
 Base.length(tensor::SparseACE) = size(tensor.A2Bmap, 1) 
 
 
-function evaluate!(B, _AA, tensor::SparseACE{T}, Rnl, Ylm) where {T}
+function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
    TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
-   A = zeros(TA, length(tensor.abasis))
-   P4ML.evaluate!(A, tensor.abasis, (Rnl, Ylm))
+   A = zeros(TA, length(tensor.abasis))    # use Bumper here
+   evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
    # evaluate the AA basis
-   # _AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
-   P4ML.evaluate!(_AA, tensor.aabasis, A)
-   # project to the actual AA basis 
-   proj = tensor.aabasis.projection
-   AA = _AA[proj]     # use Bumper here, or view; needs experimentation. 
+   AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
+   evaluate!(AA, tensor.aabasis, A)
 
    # evaluate the coupling coefficients
    # B = tensor.A2Bmap * AA
    mul!(B, tensor.A2Bmap, AA)   
 
-   return B, (_AA = _AA, )
+   return B
 end
 
 function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
    TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
    TB = promote_type(TA, eltype(tensor.A2Bmap))
-   return (TB, length(tensor),), (TA, length(tensor.aabasis),)
+   return TB, length(tensor)
 end
 
 function evaluate(tensor::SparseACE, Rnl, Ylm)
    allocinfo = whatalloc(evaluate!, tensor, Rnl, Ylm)
-   B = zeros(allocinfo[1]...)
-   AA = zeros(allocinfo[2]...)
-   return evaluate!(B, AA, tensor, Rnl, Ylm)
+   B = zeros(allocinfo...)
+   return evaluate!(B, tensor, Rnl, Ylm)
 end
 
 
@@ -51,30 +48,24 @@ end
 
 
 function pullback!(∂Rnl, ∂Ylm, 
-                   ∂B, tensor::SparseACE, Rnl, Ylm, 
-                   intermediates)
-   _AA = intermediates._AA
-   proj = tensor.aabasis.projection
-   T_∂AA = promote_type(eltype(∂B), eltype(tensor.A2Bmap))
-   T_∂A = promote_type(T_∂AA, eltype(_AA))
+                   ∂B, tensor::SparseACE, Rnl, Ylm, A)
 
    @no_escape begin 
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                            
    # ∂Ei / ∂AA = ∂Ei / ∂B * ∂B / ∂AA = (WB[i_z0]) * A2Bmap
    # ∂AA = tensor.A2Bmap' * ∂B   
+   T_∂AA = promote_type(eltype(∂B), eltype(tensor.A2Bmap))
    ∂AA = @alloc(T_∂AA, size(tensor.A2Bmap, 2))
    mul!(∂AA, tensor.A2Bmap', ∂B)
-   _∂AA = @alloc(T_∂AA, length(_AA))
-   fill!(_∂AA, zero(T_∂AA))
-   _∂AA[proj] = ∂AA
 
    # ∂Ei / ∂A = ∂Ei / ∂AA * ∂AA / ∂A = pullback(aabasis, ∂AA)
+   T_∂A = promote_type(T_∂AA, eltype(A))
    ∂A = @alloc(T_∂A, length(tensor.abasis))
-   P4ML.unsafe_pullback!(∂A, _∂AA, tensor.aabasis, _AA)
+   pullback!(∂A, ∂AA, tensor.aabasis, A)
    
    # ∂Ei / ∂Rnl, ∂Ei / ∂Ylm = pullback(abasis, ∂A)
-   P4ML.pullback!((∂Rnl, ∂Ylm), ∂A, tensor.abasis, (Rnl, Ylm))
+   pullback!((∂Rnl, ∂Ylm), ∂A, tensor.abasis, (Rnl, Ylm))
 
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    end # no_escape
@@ -83,19 +74,41 @@ function pullback!(∂Rnl, ∂Ylm,
 end
 
 function whatalloc(::typeof(pullback!),  
-                   ∂B, tensor::SparseACE{T}, Rnl, Ylm, 
-                   intermediates) where {T} 
-   TA = promote_type(T, eltype(intermediates._AA), eltype(∂B), 
-                     eltype(Rnl), eltype(eltype(Ylm)))
-   return (TA, size(Rnl)...), (TA, size(Ylm)...)   
+                   ∂B, tensor::SparseACE{T}, Rnl, Ylm
+                   ) where {T} 
+   TA = promote_type(T, eltype(∂B), eltype(Rnl), eltype(eltype(Ylm)))
+   return (TA, size(Rnl)...), (TA, size(Ylm)...)
 end
 
-function pullback(∂B, tensor::SparseACE{T}, Rnl, Ylm, 
-                           intermediates) where {T} 
-   alc_∂Rnl, alc_∂Ylm = whatalloc(pullback!, ∂B, tensor, Rnl, Ylm, intermediates)
+function pullback(∂B, tensor::SparseACE{T}, Rnl, Ylm, A) where {T} 
+   alc_∂Rnl, alc_∂Ylm = whatalloc(pullback!, ∂B, tensor, Rnl, Ylm)
    ∂Rnl = zeros(alc_∂Rnl...)
    ∂Ylm = zeros(alc_∂Ylm...)
-   return pullback!(∂Rnl, ∂Ylm, ∂B, tensor, Rnl, Ylm, intermediates)
+   return pullback!(∂Rnl, ∂Ylm, ∂B, tensor, Rnl, Ylm, A)
+end
+
+
+# ChainRules integration 
+
+function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
+
+   # evaluate the A basis
+   TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
+   A = zeros(TA, length(tensor.abasis))    # use Bumper here
+   evaluate!(A, tensor.abasis, (Rnl, Ylm))
+
+   # evaluate the AA basis
+   AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
+   evaluate!(AA, tensor.aabasis, A)
+
+   # evaluate the coupling coefficients
+   B = tensor.A2Bmap * AA
+
+   function pb(∂B)
+      ∂Rnl, ∂Ylm = pullback(∂B, tensor, Rnl, Ylm, A)
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm
+   end
+   return B, pb
 end
 
 
