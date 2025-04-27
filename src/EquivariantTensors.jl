@@ -23,6 +23,7 @@ include("ace/sparsesymmprod.jl")
 include("yyvector.jl")
 include("O3.jl")
 
+include("utils/setproduct.jl")
 include("utils/sparse.jl")
 include("utils/symmop.jl")
 

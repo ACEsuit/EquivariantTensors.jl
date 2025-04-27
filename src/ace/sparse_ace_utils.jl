@@ -2,7 +2,8 @@
 """
    function build_sparse_ace()
 """
-function sparse_equivariant_tensor(; 
+function sparse_equivariant_tensor(;
+                  L::Integer, 
                   mb_spec, 
                   Rnl_spec = _auto_Rnl_spec(mb_spec), 
                   basis = real)
@@ -12,7 +13,13 @@ function sparse_equivariant_tensor(;
       error("mb_spec contains 1p basis functions that are not contained in Rnl_spec")
    end
 
-   
+   # generate a first naive 𝔸 specification that doesn't take into account 
+   # any symmetries at all. 
+   #   TODO: this should be shifted into the symmetrisation operator constructor
+   #
+   # NamedTuple{(:n, :l, :m), Tuple{Int, Int, Int}}
+   NT_NLM = typeof( (n = 0, l = 0, m = 0) )
+   𝔸spec = 
                      
    
 end
@@ -33,6 +40,20 @@ function _auto_Rnl_spec(mb_spec)
       push!(nl_set, (n = b.n, l = b.l))
    end
    return sort(collect(nl_set))
+end
+
+"""
+
+"""
+function _auto_nnllmm_spec(nnll_spec)
+   NT_NLM = typeof( (n = 0, l = 0, m = 0) ) 
+   nnllmm = Vector{NT_NLM}[] 
+   for bb in nnll_spec
+      for b in bb
+         push!(nnllmm, (n = b.n, l = b.l, m = b.m))
+      end
+   end
+
 end
 
 

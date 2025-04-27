@@ -7,6 +7,10 @@ isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 
 @testset "EquivariantTensors.jl" begin
 
+    @testset "Utils" begin 
+        @testset "SetProduct" begin include("utils/test_setproduct.jl"); end
+    end
+
     @testset "ACE" begin 
         @testset "SparseProdPool" begin
             include("ace/test_static_prod.jl")
