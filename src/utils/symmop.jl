@@ -20,6 +20,8 @@ function symmetrisation_matrix(L::Integer,
    _bb_key(bb) = _bb_key( _vecnt2nnllmm(bb)... )
 
    # create a lookup into 𝔸spec 
+   # (we aren't using `invmap` to avoid an intermediate allocation needed to 
+   #  transform from 𝔸spec to unique keys)
    inv_𝔸spec = Dict( _bb_key(bb) => i for (i, bb) in enumerate(𝔸spec) )
 
    # extract all unique (nn, ll) blocks, since the (ll, mm) will only be used 

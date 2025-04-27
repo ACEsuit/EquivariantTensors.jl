@@ -24,6 +24,7 @@ include("yyvector.jl")
 include("O3.jl")
 
 include("utils/setproduct.jl")
+include("utils/invmap.jl")
 include("utils/sparse.jl")
 include("utils/symmop.jl")
 

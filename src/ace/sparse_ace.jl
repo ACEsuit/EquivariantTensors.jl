@@ -7,6 +7,8 @@ struct SparseACE{T, TA, TAA}
    abasis::TA
    aabasis::TAA
    A2Bmap::SparseMatrixCSC{T, Int}
+   # ---- 
+   meta::Dict{String, Any}
 end
 
 Base.length(tensor::SparseACE) = size(tensor.A2Bmap, 1) 
