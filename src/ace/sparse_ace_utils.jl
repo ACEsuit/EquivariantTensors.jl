@@ -48,8 +48,7 @@ function sparse_equivariant_tensor(;
                 "mb_spec" => mb_spec,
                 "L" => L,)
 
-   # return SparseACE(Abasis, 𝔸basis, symm, meta)                
-   return meta 
+   return SparseACE(Abasis, 𝔸basis, symm, meta)                
 end
 
 
@@ -114,7 +113,9 @@ end
 """
 convert readable A_spec into the internal representation of the A basis
 """
-function _make_idx_A_spec(A_spec, r_spec::(@NamedTuple{n::Int64}), y_spec)
+function _make_idx_A_spec(A_spec, 
+                          r_spec::Vector{@NamedTuple{n::Int64}}, 
+                          y_spec)
    inv_r_spec = invmap(r_spec)
    inv_y_spec = invmap(y_spec)
    A_spec_idx = [ (inv_r_spec[(n=b.n, )], inv_y_spec[(l=b.l, m=b.m)]) 
@@ -122,7 +123,9 @@ function _make_idx_A_spec(A_spec, r_spec::(@NamedTuple{n::Int64}), y_spec)
    return A_spec_idx                  
 end
 
-function _make_idx_A_spec(A_spec, r_spec::(@NamedTuple{n::Int64, l::Int64}), y_spec)
+function _make_idx_A_spec(A_spec, 
+                          r_spec::Vector{@NamedTuple{n::Int64, l::Int64}}, 
+                          y_spec)
    inv_r_spec = invmap(r_spec)
    inv_y_spec = invmap(y_spec)
    A_spec_idx = [ (inv_r_spec[(n=b.n, l=b.l)], inv_y_spec[(l=b.l, m=b.m)]) 

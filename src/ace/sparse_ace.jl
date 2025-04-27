@@ -1,6 +1,5 @@
 
-
-using SparseArrays: SparseMatrixCSC     
+using SparseArrays: SparseMatrixCSC
 
 
 struct SparseACE{T, TA, TAA}
@@ -98,6 +97,9 @@ function pullback(∂B, tensor::SparseACE{T}, Rnl, Ylm,
    ∂Ylm = zeros(alc_∂Ylm...)
    return pullback!(∂Rnl, ∂Ylm, ∂B, tensor, Rnl, Ylm, intermediates)
 end
+
+
+#=
 
 # ----------------------------------------
 #  utilities 
@@ -202,3 +204,4 @@ end
 
 
 
+=#

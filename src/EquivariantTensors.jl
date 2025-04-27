@@ -19,6 +19,7 @@ include("generics.jl")
 include("ace/static_prod.jl")
 include("ace/sparseprodpool.jl")
 include("ace/sparsesymmprod.jl")
+include("ace/sparse_ace.jl")
 include("ace/sparse_ace_utils.jl")
 
 include("yyvector.jl")
