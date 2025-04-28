@@ -55,28 +55,26 @@ end
 # CONSTRUCTION OF THE ACE MODEL 
 
 # Some model parameters that we will use: 
-Dtot = 7   # total degree; specifies the trunction of embeddings and correlations
-maxL = 5    # maximum degree of spherical harmonics 
+Dtot = 8   # total degree; specifies the trunction of embeddings and correlations
+maxl = 6    # maximum degree of spherical harmonics 
 ORD = 3     # correlation-order (body-order = ORD + 1)
 
 ##
 # first specify the radial and angular embeddings 
 rbasis = P4ML.legendre_basis(Dtot+1)
 Rn_spec = [ (n = n,) for n = 0:Dtot ]
-ybasis = P4ML.real_sphericalharmonics(maxL)
+ybasis = P4ML.real_sphericalharmonics(maxl)
 Ylm_spec = P4ML.natural_indices(ybasis)
 
+##
+
 # generate the nnll basis pre-specification
-nnll_long = let Dtot = Dtot, maxL = maxL 
-   nl = [ (n=n, l=l) for n = 0:Dtot for l = 0:maxL if (n + l <= Dtot) ]
-   comb = with_replacement_combinations(0:length(nl), ORD)
-   ii2bb = ii -> eltype(nl)[ nl[i] for i in ii[ii .> 0] ]
-   myfilter = ii -> ( bb = ii2bb(ii); 
-                  ( length(bb) > 0 && 
-                    sum(b.n + b.l for b in bb; init=0) <= Dtot && 
-                    iseven(sum(b.l for b in bb; init=0)) ) ) 
-   [ ii2bb(ii) for ii in comb if myfilter(ii) ]
-end
+nnll_long = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
+                        minn = 0, maxn = Dtot, maxl = maxl, 
+                        level = bb -> sum((b.n + b.l) for b in bb; init=0), 
+                        maxlevel = Dtot)
+
+##
 
 # in the pre-specification we only imposed the total degree truncation, everything 
 # else will be handled by the symmetrization operator within the model 
