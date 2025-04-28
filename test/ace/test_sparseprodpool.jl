@@ -145,7 +145,7 @@ println()
 
 
 for ntest = 1:20 
-   local order, basis, BB, ΔBB, A1, ∂A1, A2, ∂A2 
+   local order, basis, BB, ΔBB, A1, ∂A1, A2, ∂A2, A
    order = mod1(ntest, 4)
    basis = _generate_basis(; order=order)
    BB = _generate_input(basis) 
