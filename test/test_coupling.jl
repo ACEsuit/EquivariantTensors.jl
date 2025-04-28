@@ -97,7 +97,7 @@ for L = 0:Lmax
                        == rank(gram(Ure), rtol = 1e-12) 
                        == rank(gram(Ure_r), rtol = 1e-12) ) )
 
-      X = [ rand_ball() for i in 1:length(ll) ]
+      X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
       θ = rand(3) * 2pi
       Q = RotZYZ(θ...)
       B1 = eval_basis(X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
@@ -169,7 +169,7 @@ for L = 0:Lmax
                        == rank(gram(Ure), rtol = 1e-12) 
                        == rank(gram(Ure_r), rtol = 1e-12) ) )
 
-      X = [ rand_sphere() for i in 1:length(ll) ]
+      X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
       θ = rand(3) * 2pi
       Q = RotZYZ(θ...)
       B1 = eval_basis(ll, Ure, Mll, X; Real = false)
