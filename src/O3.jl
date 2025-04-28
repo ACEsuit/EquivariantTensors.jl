@@ -341,6 +341,9 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         FMatrix=zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
         UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefs D
         MM = SVector{N, Int}[] # all possible m's
+        MM_reduced = SVector{N, Int}[] # reduced m's - in the PI case, only the ordered 
+                                      # m's are kept, i.e. the first element of
+                                      # each class of m's
         for i in 1:r
             c = 0
             for (j,m_class) in enumerate(MMmat)
@@ -354,6 +357,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             @assert c==size_m
         end 
         for m_class in MMmat
+            push!(MM_reduced, sort(m_class)[1])
             for mm in m_class
                 push!(MM, mm)
             end
@@ -370,8 +374,8 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         # original code: rank(Diagonal(S); rtol =  1e-12) 
         rk = findall(x -> x > 1e-12, S) |> length 
         # return the RE-PI coupling coeffs
-        return Diagonal(S[1:rk]) * (U[:, 1:rk]' * UMatrix), 
-               [ mm[inv_perm] for mm in MM ]
+        return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
+               [ mm[inv_perm] for mm in MM_reduced ]
     end
 end
 
