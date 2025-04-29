@@ -58,6 +58,8 @@ function pullback!(∂Rnl, ∂Ylm,
    T_∂AA = promote_type(eltype(∂B), eltype(tensor.A2Bmap))
    ∂AA = @alloc(T_∂AA, size(tensor.A2Bmap, 2))
    mul!(∂AA, tensor.A2Bmap', ∂B)
+   # ∂AA = tensor.A2Bmap' * ∂B
+   # T_∂AA = eltype(∂AA)
 
    # ∂Ei / ∂A = ∂Ei / ∂AA * ∂AA / ∂A = pullback(aabasis, ∂AA)
    T_∂A = promote_type(T_∂AA, eltype(A))
@@ -89,6 +91,7 @@ end
 
 
 # ChainRules integration 
+using ChainRulesCore: unthunk 
 
 function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
 
@@ -105,7 +108,7 @@ function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
    B = tensor.A2Bmap * AA
 
    function pb(∂B)
-      ∂Rnl, ∂Ylm = pullback(∂B, tensor, Rnl, Ylm, A)
+      ∂Rnl, ∂Ylm = pullback(unthunk(∂B), tensor, Rnl, Ylm, A)
       return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm
    end
    return B, pb

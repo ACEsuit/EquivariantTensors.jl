@@ -5,6 +5,7 @@ Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 EquivariantTensors = "5e107534-7145-4f8f-b06f-47a52840c895"
 Polynomials4ML = "03c4bcba-a943-47e9-bfa1-b1661fc2974f"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
 Combinatorics = "1"

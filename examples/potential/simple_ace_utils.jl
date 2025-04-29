@@ -6,7 +6,7 @@
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
 using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
-using ChainRulesCore: rrule
+using Zygote 
 
 ##
 
@@ -21,34 +21,22 @@ struct SimpleACE2{T, RB, YB, BB}
    params::Vector{T}   # model parameters
 end
 
-
-function eval_with_grad(m::SimpleACE2, 𝐫::AbstractVector{<: SVector{3}})
+function evaluate(m::SimpleACE2, 𝐫::AbstractVector{<: SVector{3}})
    # [1] Embeddings: evaluate the Rn and Ylm embeddings
    #   Rn[j] = Rn(norm(𝐫[j])), Ylm[j] = Ylm(Rs[j])
-   r = norm.(𝐫)
-   𝐲 = 𝐫
-   Rn = P4ML.evaluate(m.rbasis, r)
-   Ylm = P4ML.evaluate(m.ybasis, 𝐲)
-
+   Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
+   Ylm = P4ML.evaluate(m.ybasis, 𝐫)
    # [2] feed the Rn, Ylm embeddings through the sparse ACE model 
-   #     but we do this via an rrule so we get the pullback for free
-   𝔹, pb_𝔹 = rrule(ET.evaluate, m.symbasis, Rn, Ylm)
-   
+   𝔹 = ET.evaluate(m.symbasis, Rn, Ylm)
    # [3] the model output value is the dot product with the parameters 
-   φ = dot(m.params, 𝔹)
-
-   # compute the gradient w.r.t. inputs 𝐫 in reverse mode
-   ∂φ_∂𝔹 = m.params 
-   _, _, ∂φ_∂Rn, ∂φ_∂Ylm = pb_𝔹(∂φ_∂𝔹)
-   ∂φ_∂r = P4ML.pullback(∂φ_∂Rn, m.rbasis, r)
-   ∂φ_∂𝐲 = P4ML.pullback(∂φ_∂Ylm, m.ybasis, 𝐲)
-
-   # finally we have to transform the gradient w.r.t. r to a gradient w.r.t. 𝐫
-   ∇φ = [ ∂φ_∂r[j] * (𝐫[j] / r[j]) + ∂φ_∂𝐲[j]   for j = 1:length(𝐫) ]
-
-   return φ, ∇φ
+   return dot(m.params, 𝔹)
 end
 
+# convenience wrapper for evaluating the gradient 
+function eval_with_grad(m::SimpleACE2, 𝐫::AbstractVector{<: SVector{3}})
+   φ, (∇φ,) = Zygote.withgradient(x -> evaluate(model, x), 𝐫)
+   return φ, ∇φ
+end
 
 
 ## 
@@ -109,6 +97,9 @@ Q𝐫 = Ref(Q) .* 𝐫[perm]
 φ, ∇φ = eval_with_grad(model, 𝐫)
 φQ, ∇φQ = eval_with_grad(model, Q𝐫)
 
+
+##
+
 # invariance of the model under rotations and permutations
 @show φ ≈ φQ
 # check co-variance of the gradient / forces 
@@ -120,7 +111,7 @@ using ForwardDiff
 _2mat(𝐱::AbstractVector{SVector{3, T}}) where {T} = collect(reinterpret(reshape, T, 𝐱))
 _2vecs(X::AbstractMatrix{T}) where {T} = [ SVector{3, T}(X[:, i]) for i = 1:size(X, 2) ]
 
-F = R -> eval_with_grad(model, _2vecs(R))[1]
+F = R -> evaluate(model, _2vecs(R))
 ∇F = R -> _2mat(eval_with_grad(model, _2vecs(R))[2])
 ∇F_ad = R -> ForwardDiff.gradient(F, R)
 
