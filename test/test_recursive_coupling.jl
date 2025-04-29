@@ -1,6 +1,6 @@
 using StaticArrays, LinearAlgebra, EquivariantTensors, WignerD, Rotations, Combinatorics
 using Test, Random
-using EquivariantTensors.O3: gram, re_semi_pi, coupling_coeffs
+using EquivariantTensors.O3: gram, coupling_coeffs
 
 isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 
