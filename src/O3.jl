@@ -273,7 +273,10 @@ choice is `real`, which is compatible with the `SpheriCart.jl` convention.
 """
 function coupling_coeffs(L::Integer, ll, nn = nothing; 
                          PI = !(isnothing(nn)), 
-                         basis = complex)
+                         basis = complex,
+                         ordered = PI)
+
+    @assert ordered == false || PI == true
 
     # convert L into the format required internally 
     _L = Int(L) 
@@ -323,10 +326,12 @@ end
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
 function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
-                          PI = true, flag = :cSH) where N
+                          PI = true, flag = :cSH, ordered = PI) where N
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
+    @assert ordered == false || PI == true
+
     nn, ll, inv_perm = lexi_ord(nn, ll)
 
     Lset = SetLl(ll,L)
@@ -369,8 +374,8 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         U, S, V = svd(gram(FMatrix))
         rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here
         # return the RE-PI coupling coeffs
-        return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
-               [ mm[inv_perm] for mm in MM_reduced ]
+        return ordered ? (Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, [ mm[inv_perm] for mm in MM_reduced ]) : 
+                         (Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * UMatrix, [ mm[inv_perm] for mm in MM ]) # MM
     end
 end
 
