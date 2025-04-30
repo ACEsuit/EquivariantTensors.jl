@@ -14,7 +14,7 @@ for N = 6:10
 
    for Ltot in (iseven(sum(ll)) ? (0:2:4) : (1:2:3))
       t_rpe = @elapsed C_rpe, M = coupling_coeffs(Ltot,ll,nn) # reference time
-      t_rpe_recursive_kernel = @elapsed C_rpe_recursive, MM = coupling_coeffs(Ltot,ll,nn,N1; symmetrization_method = :kernel) 
+      t_rpe_recursive_kernel = @elapsed C_rpe_recursive, MM = coupling_coeffs(Ltot,ll,nn,N1) 
       # time for rpe_basis_new with kernel symmetrization - the time for explicit symmetrization is not shown here because it is less efficient
 
       println("Case : nn = $nn, ll = $ll, Ltot = $Ltot, N1 = $N1")

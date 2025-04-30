@@ -528,6 +528,7 @@ function _coupling_coeffs(Ltot::Int64,ll::SVector{N,Int64},nn::SVector{N,Int64},
                 else
                     @show L1, L2, norm(cc)
                     @warn("zero dropped") # If we have some zero basis, the code will warn us
+                    # For ordered mm recursion, it is possible to have some zeros because of the sum
                 end
              end
           end
