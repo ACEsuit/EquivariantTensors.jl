@@ -374,8 +374,8 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         U, S, V = svd(gram(FMatrix))
         rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here
         # return the RE-PI coupling coeffs
-        return ordered ? (Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, [ mm[inv_perm] for mm in MM_reduced ]) : 
-                         (Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * UMatrix, [ mm[inv_perm] for mm in MM ]) # MM
+        return ordered ? (Diagonal(sqrt.(S[1:rk]).^(-1)) * U[:, 1:rk]' * FMatrix, [ mm[inv_perm] for mm in MM_reduced ]) : 
+                         (Diagonal(sqrt.(S[1:rk]).^(-1)) * U[:, 1:rk]' * UMatrix, [ mm[inv_perm] for mm in MM ]) # MM
     end
 end
 
