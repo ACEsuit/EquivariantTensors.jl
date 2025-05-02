@@ -1,12 +1,41 @@
 using SparseArrays
 using LinearAlgebra: norm 
 
-function symmetrisation_matrix(L::Integer, 
-               𝔸spec::AbstractVector{<: Vector{<: NamedTuple}}; 
-               prune = false, kwargs...)
-   # for now assume a specific form of the 𝔸spec. Later we can generalize this 
-   # to allow for different types of 𝔸spec formats and transform to something 
-   # that is internally useful. 
+"""
+   symmetrisation_matrix(L, mb_spec; prune, kwargs...) -> 𝔸2𝔹, 𝔸_spec
+
+Generates the symmetrization operator for a sparse ACE basis. The basis is 
+# specified via the input `mb_spec`, which is a list of basis function 
+specifications of the form 
+```julia 
+mb_spec = [ [(n=0, l=0), (n=1, l=0)], [(n=1, l=1), (n=2, l=1)], ... ] 
+```
+i.e. a `Vector{Vector{NL}}`. where `NL = @NamedTuple{n::Int, l::Int}`.
+
+The parameter `L` determines the order of the ouput, e.g. L=0 for an invariant 
+scalar, L = 1 for a vector, and so forth. 
+
+The output is given in terms of a sparse matrix `𝔸2𝔹` in CCS format and a 
+specification of the `𝔸` basis as a `Vector{Vector{NLM}}` where 
+`NLM = @NamedTuple{n::Int, l::Int, m::Int}`. 
+"""
+function symmetrisation_matrix(L::Integer, mb_spec; 
+                               prune = false, kwargs...)
+
+   # for now assume a specific form of the mb_spec, namely 
+   #   Vector{Vector{NT_NLM}}   
+   #   where NT_NLM = typeof( (n = 0, l = 0) )
+
+   # generate a first naive 𝔸 specification that doesn't take into account 
+   # any symmetries at all. 
+   #   TODO: this should be shifted into the symmetrisation operator constructor
+   #
+   # 
+   # NOTE: this is not efficient and could be done on the fly while generating 
+   #       the symmetrization operator. But for now it works and is easy to use.
+   #
+   # Vector{Vector{NT_NLM}}
+   𝔸spec = _auto_nnllmm_spec(mb_spec)
    
    # convert an element of 𝔸spec to nn, ll, mm 
    function _vecnt2nnllmm(bb)
