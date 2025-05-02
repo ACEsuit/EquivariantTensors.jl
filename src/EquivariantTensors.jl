@@ -30,5 +30,6 @@ include("utils/setproduct.jl")
 include("utils/invmap.jl")
 include("utils/sparseprod.jl")
 include("utils/symmop.jl")
+include("utils/promotion.jl")
 
 end

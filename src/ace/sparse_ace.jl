@@ -16,7 +16,7 @@ Base.length(tensor::SparseACE) = size(tensor.A2Bmap, 1)
 
 function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
-   TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
+   TA = promote_type(eltype(Rnl), eltype(Ylm), eltype(T))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -32,8 +32,8 @@ function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
 end
 
 function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
-   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
-   TB = promote_type(TA, eltype(tensor.A2Bmap))
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   TB = _promote_mul_type(TA, eltype(tensor.A2Bmap))
    return TB, length(tensor)
 end
 

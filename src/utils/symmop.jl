@@ -1,4 +1,5 @@
 using SparseArrays
+using LinearAlgebra: norm 
 
 function symmetrisation_matrix(L::Integer, 
                𝔸spec::AbstractVector{<: Vector{<: NamedTuple}}; 
@@ -31,7 +32,10 @@ function symmetrisation_matrix(L::Integer,
    # Now for each (nn, ll) block we can generate all possible invariant basis 
    # functions. We assemble the symmetrization operator in triplet format, 
    # which can conveniently account for double-counting of entries.
-   irow = Int[]; jcol = Int[]; val = Float64[]
+
+   # NB : HACK TO DISTINGUISH L = 0 and L > 0 
+   TVAL = L == 0 ? Float64 : SVector{2*L+1, Float64}
+   irow = Int[]; jcol = Int[]; val = TVAL[]
 
    # counter for total number of invariant (or equivariant) basis functions
    num𝔹 = 0 
@@ -55,14 +59,14 @@ function symmetrisation_matrix(L::Integer,
 
    # prune rows with all-zero entries (if there are any then print a warning 
    # because this indicates a bug in `coupling_coeffs`)
-   i_nz_rows = findall(!iszero, sum(abs, symm; dims = 2)[:])
+   i_nz_rows = findall(!iszero, sum(norm, symm; dims = 2)[:])
    if length(i_nz_rows) != num𝔹
       @warn("symmetrization matrix has all-zero rows; this indicates a bug in `coupling_coeffs`")
       symm = symm[i_nz_rows, :]
    end
 
    if prune 
-      i_nz_cols = sort( findall(!iszero, sum(abs, symm; dims = 1)[:]) ) 
+      i_nz_cols = sort( findall(!iszero, sum(norm, symm; dims = 1)[:]) ) 
       𝔸spec_pruned = 𝔸spec[i_nz_cols]
       symm_pruned = symm[:, i_nz_cols]
    else
