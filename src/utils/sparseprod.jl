@@ -2,39 +2,36 @@
 using StaticArrays
 
 """
-`gensparse(...)` : utility function to generate high-dimensional sparse grids
+`sparse_product(...)` : utility function to generate high-dimensional sparse grids
 which are downsets.
 All arguments are keyword arguments (with defaults):
 * `NU` : maximum correlation order
 * `minvv = 0` : `minvv[i] gives the minimum value for `vv[i]`
 * `maxvv = Inf` : `maxvv[i] gives the minimum value for `vv[i]`
-* `tup2b = vv -> vv` :
+* `tup2bb = vv -> vv` :
 * `admissible = _ -> false` : determines whether a tuple belongs to the downset
 * `filter = _ -> true` : a callable object that returns true of tuple is to be kept and
 false otherwise (whether or not it is part of the downset!) This is used, e.g.
 to enfore conditions such as ∑ lₐ = even or |∑ mₐ| ≦ M
-* `INT = Int` : integer type to be used
 * `ordered = false` : whether only ordered tuples are produced; ordered tuples
 correspond to  permutation-invariant basis functions
 """
-gensparse(; NU::Integer = nothing,
+sparse_product(; NU::Integer, 
+                 admissible, 
             minvv = [0 for _=1:NU],
-            maxvv = [Inf for _=1:NU],
-            tup2b = vv -> vv,
-            admissible = _-> false,
+            maxvv = [(2^63-1) for _=1:NU],
+            tup2bb = vv -> vv,
             filter = _-> true,
-            INT = Int,
             ordered = false) =
-      _gensparse(Val(NU), tup2b, admissible, filter, INT, ordered,
+      _sparse_product(tup2bb, admissible, filter, ordered,
                  SVector(minvv...), SVector(maxvv...))
 
+
                  
-"""
-`_gensparse` : function barrier for `gensparse`
-"""
-function _gensparse(::Val{NU}, tup2b, admissible, filter, INT, ordered,
-                    minvv, maxvv) where {NU}
-   @assert INT <: Integer
+#  function barrier for `sparse_product`
+function _sparse_product(tup2bb, admissible, filter, ordered,
+                         minvv::SVector{NU, INT}, maxvv::SVector{NU, INT}
+                  ) where {NU, INT <: Integer}
 
    lastidx = 0
    vv = @MVector zeros(INT, NU)
@@ -62,7 +59,7 @@ function _gensparse(::Val{NU}, tup2b, admissible, filter, INT, ordered,
       if any(vv .> maxvv)
          isadmissible = false
       else
-         bb = tup2b(vv)
+         bb = tup2bb(vv)
          isadmissible = admissible(bb)
       end
 
@@ -92,23 +89,55 @@ function _gensparse(::Val{NU}, tup2b, admissible, filter, INT, ordered,
          end
          # reset
          vv[lastidx-1] += 1
-         if ordered   # ordered tuples (permutation symmetry)
-            vv[lastidx:end] .= vv[lastidx-1]
-         else         # unordered tuples (no permutation symmetry)
-            vv[lastidx:end] .= 0
-         end
+         vv[lastidx:end] .= 0
+         # if ordered   # ordered tuples (permutation symmetry)
+         #    vv[lastidx:end] .= vv[lastidx-1]
+         # else         # unordered tuples (no permutation symmetry)
+         #    vv[lastidx:end] .= 0
+         # end
          lastidx -= 1
       end
    end
 
    if ordered
       # sanity check, to make sure all is as intended...
-      @assert all(issorted, orig_spec)
-      @assert length(unique(orig_spec)) == length(orig_spec)
+      # @assert all(issorted, orig_spec)
+      # @assert length(unique(orig_spec)) == length(orig_spec)
+      spec = unique(sort.(spec))
    end
 
    # here we used to remove the constant term in the past, but this should now 
    # be done via the filtering mechanism. 
 
    return spec
+end
+
+
+
+function sparse_nnll_set(; L::Integer, 
+                           ORD::Integer, 
+                           minn = 0, 
+                           maxn::Integer, 
+                           maxl::Integer, 
+                           level, 
+                           maxlevel)
+   # generate a preliminary 1-particle basis spec, here we have to be very 
+   # careful to sort `nl` by level so that no basis functions are missed. 
+   nl = [ (n=n, l=l) for n = minn:maxn 
+          for l = 0:maxl if level(SA[(n=n, l=l),]) <= maxlevel ]
+   sort!(nl; by = b -> level(SA[b,]))
+
+   # convert a list of indices into nl to a list of NamedTuples (bb)
+   # vv[i] = 0 means this is ignored
+   tup2bb = vv -> eltype(nl)[ nl[i] for i in vv if i > 0 ]
+
+   spec = sparse_product(; NU = ORD, 
+      admissible = bb -> level(bb) <= maxlevel, 
+      filter = bb -> ( (length(bb) > 0) && 
+                      iseven(L + sum(b.l for b in bb; init=0)) ),
+      tup2bb = tup2bb, 
+      ordered = true, 
+      maxvv = [ length(nl) for _=1:ORD ], ) 
+
+   return tup2bb.(spec)      
 end

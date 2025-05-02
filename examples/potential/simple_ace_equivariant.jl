@@ -6,7 +6,6 @@
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
 using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
-using Zygote 
 
 ##
 
@@ -14,14 +13,14 @@ using Zygote
 # 𝐫 = (r₁, r₂, ..., rₙ) in 3D space. The output of the model is a scalar that 
 # is invariant under rotations, reflections and permutations. 
 
-struct SimpleACE2{T, RB, YB, BB}
+struct SimpleACE3{T, RB, YB, BB}
    rbasis::RB      # radial embedding Rn
    ybasis::YB      # angular embedding Ylm
    symbasis::BB    # symmetric basis 
    params::Vector{T}   # model parameters
 end
 
-function evaluate(m::SimpleACE2, 𝐫::AbstractVector{<: SVector{3}})
+function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}})
    # [1] Embeddings: evaluate the Rn and Ylm embeddings
    #   Rn[j] = Rn(norm(𝐫[j])), Ylm[j] = Ylm(Rs[j])
    Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
@@ -29,13 +28,7 @@ function evaluate(m::SimpleACE2, 𝐫::AbstractVector{<: SVector{3}})
    # [2] feed the Rn, Ylm embeddings through the sparse ACE model 
    𝔹 = ET.evaluate(m.symbasis, Rn, Ylm)
    # [3] the model output value is the dot product with the parameters 
-   return dot(m.params, 𝔹)
-end
-
-# convenience wrapper for evaluating the gradient 
-function eval_with_grad(m::SimpleACE2, 𝐫::AbstractVector{<: SVector{3}})
-   φ, (∇φ,) = Zygote.withgradient(x -> evaluate(model, x), 𝐫)
-   return φ, ∇φ
+   return sum(m.params .* 𝔹)
 end
 
 
@@ -57,7 +50,7 @@ Ylm_spec = P4ML.natural_indices(ybasis)
 ##
 
 # generate the nnll basis pre-specification
-nnll_long = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
+nnll_long = ET.sparse_nnll_set(; L = 1, ORD = ORD, 
                   minn = 0, maxn = Dtot, maxl = maxl, 
                   level = bb -> sum((b.n + b.l) for b in bb; init=0), 
                   maxlevel = Dtot)
@@ -68,7 +61,7 @@ nnll_long = ET.sparse_nnll_set(; L = 0, ORD = ORD,
 # else will be handled by the symmetrization operator within the model 
 # construction; along the way we will also prune the nnll list.
 𝔹basis = ET.sparse_equivariant_tensor(; 
-            L = 0, mb_spec = nnll_long, 
+            L = 1, mb_spec = nnll_long, 
             Rnl_spec = Rn_spec, 
             Ylm_spec = Ylm_spec, 
             basis = real )
@@ -77,7 +70,7 @@ nnll_long = ET.sparse_nnll_set(; L = 0, ORD = ORD,
 # putting together everything we've construced we can now generate the model 
 # here we give the model some random parameters just for testing. 
 #
-model = SimpleACE2(rbasis, ybasis, 𝔹basis, randn(length(𝔹basis)) )
+model = SimpleACE3(rbasis, ybasis, 𝔹basis, randn(length(𝔹basis)) )
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 
@@ -90,30 +83,16 @@ rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 # generate a random configuration of nX points in the unit ball
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
-Q = rand_rot() 
+
+using WignerD, Rotations
+θ = 2*π*rand(3) 
+Q = Rotations.RotZYZ(θ...)
+DQ = real.(ET.O3.Ctran(1) * conj.(WignerD.wignerD(1, θ...)) * ET.O3.Ctran(1)')
+
 perm = randperm(nX)
 Q𝐫 = Ref(Q) .* 𝐫[perm]
 
-φ, ∇φ = eval_with_grad(model, 𝐫)
-φQ, ∇φQ = eval_with_grad(model, Q𝐫)
+φ  = evaluate(model, 𝐫)
+φQ = evaluate(model, Q𝐫)
 
-
-##
-
-# invariance of the model under rotations and permutations
-@show φ ≈ φQ
-# check co-variance of the gradient / forces 
-@show Ref(Q) .* ∇φ[perm] ≈ ∇φQ
-
-## check correctness of gradients 
-# ForwardDiff can handle Vector{SVector}, so we have to work around that 
-using ForwardDiff
-_2mat(𝐱::AbstractVector{SVector{3, T}}) where {T} = collect(reinterpret(reshape, T, 𝐱))
-_2vecs(X::AbstractMatrix{T}) where {T} = [ SVector{3, T}(X[:, i]) for i = 1:size(X, 2) ]
-
-F = R -> evaluate(model, _2vecs(R))
-∇F = R -> _2mat(eval_with_grad(model, _2vecs(R))[2])
-∇F_ad = R -> ForwardDiff.gradient(F, R)
-
-R = _2mat(𝐫)
-@show ∇F(R) ≈ ∇F_ad(R)
+@show DQ * φ ≈ φQ

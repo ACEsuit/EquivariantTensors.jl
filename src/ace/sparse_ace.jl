@@ -16,7 +16,7 @@ Base.length(tensor::SparseACE) = size(tensor.A2Bmap, 1)
 
 function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
-   TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
+   TA = promote_type(eltype(Rnl), eltype(Ylm), eltype(T))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -32,8 +32,8 @@ function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
 end
 
 function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
-   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
-   TB = promote_type(TA, eltype(tensor.A2Bmap))
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   TB = _promote_mul_type(TA, eltype(tensor.A2Bmap))
    return TB, length(tensor)
 end
 
@@ -58,6 +58,8 @@ function pullback!(∂Rnl, ∂Ylm,
    T_∂AA = promote_type(eltype(∂B), eltype(tensor.A2Bmap))
    ∂AA = @alloc(T_∂AA, size(tensor.A2Bmap, 2))
    mul!(∂AA, tensor.A2Bmap', ∂B)
+   # ∂AA = tensor.A2Bmap' * ∂B
+   # T_∂AA = eltype(∂AA)
 
    # ∂Ei / ∂A = ∂Ei / ∂AA * ∂AA / ∂A = pullback(aabasis, ∂AA)
    T_∂A = promote_type(T_∂AA, eltype(A))
@@ -89,6 +91,7 @@ end
 
 
 # ChainRules integration 
+using ChainRulesCore: unthunk 
 
 function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
 
@@ -105,7 +108,7 @@ function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
    B = tensor.A2Bmap * AA
 
    function pb(∂B)
-      ∂Rnl, ∂Ylm = pullback(∂B, tensor, Rnl, Ylm, A)
+      ∂Rnl, ∂Ylm = pullback(unthunk(∂B), tensor, Rnl, Ylm, A)
       return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm
    end
    return B, pb
