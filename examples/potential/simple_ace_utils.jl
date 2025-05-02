@@ -50,7 +50,7 @@ ORD = 3     # correlation-order (body-order = ORD + 1)
 ##
 # first specify the radial and angular embeddings 
 rbasis = P4ML.legendre_basis(Dtot+1)
-Rn_spec = [ (n = n,) for n = 0:Dtot ]
+Rn_spec = P4ML.natural_indices(rbasis) 
 ybasis = P4ML.real_sphericalharmonics(maxl)
 Ylm_spec = P4ML.natural_indices(ybasis)
 
@@ -58,9 +58,9 @@ Ylm_spec = P4ML.natural_indices(ybasis)
 
 # generate the nnll basis pre-specification
 nnll_long = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
-                        minn = 0, maxn = Dtot, maxl = maxl, 
-                        level = bb -> sum((b.n + b.l) for b in bb; init=0), 
-                        maxlevel = Dtot)
+                  minn = 0, maxn = Dtot, maxl = maxl, 
+                  level = bb -> sum((b.n + b.l) for b in bb; init=0), 
+                  maxlevel = Dtot)
 
 ##
 
