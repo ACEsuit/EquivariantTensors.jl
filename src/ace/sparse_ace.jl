@@ -1,7 +1,7 @@
 
 using SparseArrays: SparseMatrixCSC
 using LinearAlgebra: mul!
-import ChainRulesCore: NoTangent, rrule
+import ChainRulesCore: NoTangent, rrule, ZeroTangent
 import LuxCore: AbstractLuxLayer, initialparameters, initialstates, apply 
 
 
@@ -56,7 +56,10 @@ function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
    return TB, length(tensor)
 end
 
-function evaluate(tensor::SparseACE, Rnl, Ylm, args...)
+evaluate(tensor::SparseACE, Rnl, Ylm) = 
+      evaluate(tensor, Rnl, Ylm, NamedTuple(), NamedTuple()) 
+
+function evaluate(tensor::SparseACE, Rnl, Ylm, ps, st)
    allocinfo = whatalloc(evaluate!, tensor, Rnl, Ylm)
    B = zeros(allocinfo...)
    return evaluate!(B, tensor, Rnl, Ylm)
@@ -112,7 +115,7 @@ end
 # ChainRules integration 
 using ChainRulesCore: unthunk 
 
-function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
+function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm, ps, st) where {T}
 
    # evaluate the A basis
    TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
@@ -128,7 +131,7 @@ function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
 
    function pb(∂B)
       ∂Rnl, ∂Ylm = pullback(unthunk(∂B), tensor, Rnl, Ylm, A)
-      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, ZeroTangent(), NoTangent() 
    end
    return B, pb
 end

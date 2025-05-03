@@ -84,32 +84,31 @@ ps, st = Lux.setup(rng, model)
 
 # NB: this isn't working yet, apparently we are mutating some array outside 
 #     of a custom rrule. 
-#=
 
 function ace_with_grad(m, 𝐫::AbstractVector{<: SVector{3}}, ps, st)
-   φ, (∇φ,) = Zygote.withgradient(x -> Lux.apply(model, x, ps, st), 𝐫)
+   φ, (∇φ,) = Zygote.withgradient(x -> Lux.apply(model, x, ps, st)[1], 𝐫)
    return φ, ∇φ
 end
 
 φ, ∇φ = ace_with_grad(model, 𝐫, ps, st)
-φQ, ∇φQ = eval_with_grad(model, Q𝐫)
+φQ, ∇φQ = ace_with_grad(model, Q𝐫, ps, st)
 
 # invariance of the model under rotations and permutations
 @show φ ≈ φQ
 # check co-variance of the gradient / forces 
 @show Ref(Q) .* ∇φ[perm] ≈ ∇φQ
 
-check correctness of gradients 
+# check correctness of gradients 
 # ForwardDiff can handle Vector{SVector}, so we have to work around that 
 using ForwardDiff
 _2mat(𝐱::AbstractVector{SVector{3, T}}) where {T} = collect(reinterpret(reshape, T, 𝐱))
 _2vecs(X::AbstractMatrix{T}) where {T} = [ SVector{3, T}(X[:, i]) for i = 1:size(X, 2) ]
 
-F = R -> evaluate(model, _2vecs(R))
-∇F = R -> _2mat(eval_with_grad(model, _2vecs(R))[2])
+F = R -> Lux.apply(model, _2vecs(R), ps, st)[1]
+∇F = R -> _2mat(ace_with_grad(model, _2vecs(R), ps, st)[2])
 ∇F_ad = R -> ForwardDiff.gradient(F, R)
 
 R = _2mat(𝐫)
 @show ∇F(R) ≈ ∇F_ad(R)
 
-=#
+
