@@ -1,6 +1,6 @@
 
 """
-   function build_sparse_ace()
+   sparse_equivariant_tensor(L, mb_spec, Rnl_spec, Ylm_spec, basis)
 """
 function sparse_equivariant_tensor(;
                   L::Integer, 
