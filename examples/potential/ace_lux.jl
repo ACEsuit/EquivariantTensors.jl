@@ -179,7 +179,16 @@ end
 
 
 
-
+# evaluate the second loss example 
 loss2(model, R, ps, st)
+
+# autodiff the second loss example 
 g2 = Zygote.gradient(p -> loss2(model, R, p, st), ps)[1]
+
+# test the gradient 
+g2_vec, _     = OPT.destructure(g2)
+ps_vec, _rest = OPT.destructure(ps)
+ps_vec = Float64.(ps_vec)
+g2_fd = ForwardDiff.gradient(p -> loss2(model, R, _rest(p), st), ps_vec)
+@show Float32.(g2_fd) ≈ g2_vec
 
