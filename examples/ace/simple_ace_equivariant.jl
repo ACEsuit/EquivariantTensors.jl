@@ -5,7 +5,7 @@
 
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
-using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
+using StaticArrays, SparseArrays, LinearAlgebra, Random
 
 ##
 
