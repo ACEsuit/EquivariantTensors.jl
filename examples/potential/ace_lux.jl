@@ -6,6 +6,7 @@
 
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
+import ChainRulesCore: rrule, NoTangent, ZeroTangent, @not_implemented 
 using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
 using Zygote, LuxCore, Lux
 
@@ -129,19 +130,56 @@ g1 = Zygote.gradient(p -> loss1(model, R, p, st), ps)[1]
 # a more difficult test is differentiation of a loss that also 
 # includes gradients. 
 
-#=
 
 function loss2(model, R, ps, st)
    _normsq(frc) = sum(frc.^2)
    function _loss(𝐫)
       φ, ∇φ = ace_with_grad(model, 𝐫, ps, st)
-      return 0.123 * φ^2 + sum(_normsq.(∇φ))
+      return 0.123 * φ^2 + sum(_normsq, ∇φ)
    end 
    a = [ _loss(𝐫) for 𝐫 in R ]
    return sum(a) 
 end
 
+# The following is a _GENERIC_ implementation of a trick that avoids 
+# reverse over reverse as long as all layers of the model are compatible 
+# with Dual numbers. 
+
+import ForwardDiff as FDiff 
+import Optimisers as OPT
+
+function rrule(::typeof(ace_with_grad), model, 𝐫, ps, st) 
+   φ, ∇φ = ace_with_grad(model, 𝐫, ps, st)
+
+   function _pb( ∂φ_∂∇φ )
+      ∂φ, 𝐮 = ∂φ_∂∇φ  
+      # 𝐮 = ∂∇φ but 𝐮 works well since it's really a virtual displacement
+
+      # gradient of φ w.r.t. ps is given by 
+      f_∇ₚφ(_𝐫) = Zygote.gradient(p -> model(_𝐫, p, st)[1], ps)[1]
+      # We also need the directional derivative 
+      #     d/dt ∇ₚφ (𝐫 + t 𝐮) |_{t=0}
+      # this can be computed using ForwardDiff. 
+      d_∇ₚφ = f_∇ₚφ(𝐫 + FDiff.Dual(0.0, 1.0) * 𝐮)
+      # this is a NamedTuple of Dual numbers, we need to extract the
+      # values and the gradient 
+      d_∇ₚφ_vec, _rest = OPT.destructure(d_∇ₚφ)
+      ∇ₚφ = FDiff.value.(d_∇ₚφ_vec)
+      ∇ₚ_𝐮_∇φ = [ FDiff.partials(a)[1] for a in d_∇ₚφ_vec ]
+
+      # put together the pullback 
+      ∂ps = _rest( ∂φ * ∇ₚφ + ∇ₚ_𝐮_∇φ )
+      ∂𝐫 = @not_implemented("∂𝐫 should never be needed")
+
+      return NoTangent(), NoTangent(), ∂𝐫, ∂ps, NoTangent()
+   end
+   
+   return (φ, ∇φ), _pb 
+end
+
+
+
+
 loss2(model, R, ps, st)
 g2 = Zygote.gradient(p -> loss2(model, R, p, st), ps)[1]
 
-=# 
