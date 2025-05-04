@@ -45,14 +45,14 @@ nnll_long = ET.sparse_nnll_set(; L = 0, ORD = ORD,
 # Now, instead of a custom made model struct, we just use a Lux Chain to 
 # build the model. 
 
-model = Chain(
-      Parallel(nothing, 
-               Chain( WrappedFunction(𝐫 -> norm.(𝐫)),  
-                      P4ML.lux(rbasis) ), 
-               P4ML.lux(ybasis)),
-      𝔹basis, 
-      Dense(length(𝔹basis) => 1), 
-      WrappedFunction(x -> x[1])
+model = Chain(; 
+      embed = Parallel(nothing; 
+               Rnl = Chain( WrappedFunction(𝐫 -> norm.(𝐫)),  
+                            P4ML.lux(rbasis) ), 
+               Ylm = P4ML.lux(ybasis)),
+      𝔹 = 𝔹basis, 
+      dot = Dense(length(𝔹basis) => 1), 
+      out = WrappedFunction(x -> x[1])
       )
 
 ##
@@ -111,4 +111,37 @@ F = R -> Lux.apply(model, _2vecs(R), ps, st)[1]
 R = _2mat(𝐫)
 @show ∇F(R) ≈ ∇F_ad(R)
 
+##
+# Differentiate w.r.t. the parameters
 
+# a small group of small inputs 
+R = [ [ rand_x() for _ = 1:rand(5:7) ] for _ = 1:3 ] 
+
+function loss1(model, R, ps, st)
+   a = [ Lux.apply(model, 𝐫, ps, st)[1] for 𝐫 in R ]
+   return sum(a.^2)
+end 
+
+loss1(model, R, ps, st)
+g1 = Zygote.gradient(p -> loss1(model, R, p, st), ps)[1]
+
+## 
+# a more difficult test is differentiation of a loss that also 
+# includes gradients. 
+
+#=
+
+function loss2(model, R, ps, st)
+   _normsq(frc) = sum(frc.^2)
+   function _loss(𝐫)
+      φ, ∇φ = ace_with_grad(model, 𝐫, ps, st)
+      return 0.123 * φ^2 + sum(_normsq.(∇φ))
+   end 
+   a = [ _loss(𝐫) for 𝐫 in R ]
+   return sum(a) 
+end
+
+loss2(model, R, ps, st)
+g2 = Zygote.gradient(p -> loss2(model, R, p, st), ps)[1]
+
+=# 
