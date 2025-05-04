@@ -7,7 +7,7 @@
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
 import ChainRulesCore: rrule, NoTangent, ZeroTangent, @not_implemented 
-using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
+using StaticArrays, SparseArrays, LinearAlgebra, Random
 using Zygote, LuxCore, Lux
 
 ## 
@@ -125,6 +125,13 @@ end
 
 loss1(model, R, ps, st)
 g1 = Zygote.gradient(p -> loss1(model, R, p, st), ps)[1]
+
+# test the gradient
+g1_vec, _     = OPT.destructure(g1)
+ps_vec, _rest = OPT.destructure(ps)
+ps_vec = Float64.(ps_vec)
+g1_fd = ForwardDiff.gradient(p -> loss1(model, R, _rest(p), st), ps_vec)
+@show Float32.(g1_fd) ≈ g1_vec
 
 ## 
 # a more difficult test is differentiation of a loss that also 
