@@ -17,8 +17,11 @@ using Zygote
 struct SimpleACE3{T, RB, YB, BB}
    rbasis::RB      # radial embedding Rn
    ybasis::YB      # angular embedding Ylm
-   symbasis::BB    # symmetric basis 
-   params::Vector{T}   # model parameters
+   symbasis0::BB0    # symmetric basis 
+   symbasis2::BB2    # symmetric basis 
+   params0::Vector{T}   # model parameters
+   params2::Vector{T}   # model parameters
+   # + transformation? Does it need a precomputation? 
 end
 
 function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}})
@@ -27,9 +30,13 @@ function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}})
    Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
    Ylm = P4ML.evaluate(m.ybasis, 𝐫)
    # [2] feed the Rn, Ylm embeddings through the sparse ACE model 
-   𝔹 = ET.evaluate(m.symbasis, Rn, Ylm)
+   𝔹0 = ET.evaluate(m.symbasis0, Rn, Ylm)
+   𝔹2 = ET.evaluate(m.symbasis2, Rn, Ylm)
    # [3] the model output value is the dot product with the parameters 
-   return sum(m.params .* 𝔹)
+   y0 = sum(m.params0 .* 𝔹0)
+   y2 = sum(m.params2 .* 𝔹2)
+
+   return trans_y_pp(y0, y2)
 end
 
 
