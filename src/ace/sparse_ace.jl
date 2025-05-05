@@ -1,9 +1,11 @@
 
 using SparseArrays: SparseMatrixCSC
 using LinearAlgebra: mul!
-import ChainRulesCore: NoTangent, rrule
+import ChainRulesCore: NoTangent, rrule, ZeroTangent
+import LuxCore: AbstractLuxLayer, initialparameters, initialstates, apply 
 
-struct SparseACE{T, TA, TAA}
+
+struct SparseACE{T, TA, TAA} <: AbstractLuxLayer
    abasis::TA
    aabasis::TAA
    A2Bmap::SparseMatrixCSC{T, Int}
@@ -13,6 +15,23 @@ end
 
 Base.length(tensor::SparseACE) = size(tensor.A2Bmap, 1) 
 
+function Base.show(io::IO, l::SparseACE)
+   print(io, "SparseACE(len = $(length(l)))")
+end
+
+
+# ----------------------------------------
+# Lux integration 
+
+(l::SparseACE)(BB::Tuple, ps, st) = evaluate(l, BB..., ps, st), st 
+
+initialstates(rng::AbstractRNG, layer::SparseACE) = NamedTuple() 
+
+initialparameters(rng::AbstractRNG, layer::SparseACE) = NamedTuple()
+
+
+# ----------------------------------------
+# evaluation kernels 
 
 function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
@@ -37,7 +56,10 @@ function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
    return TB, length(tensor)
 end
 
-function evaluate(tensor::SparseACE, Rnl, Ylm)
+evaluate(tensor::SparseACE, Rnl, Ylm) = 
+      evaluate(tensor, Rnl, Ylm, NamedTuple(), NamedTuple()) 
+
+function evaluate(tensor::SparseACE, Rnl, Ylm, ps, st)
    allocinfo = whatalloc(evaluate!, tensor, Rnl, Ylm)
    B = zeros(allocinfo...)
    return evaluate!(B, tensor, Rnl, Ylm)
@@ -93,7 +115,7 @@ end
 # ChainRules integration 
 using ChainRulesCore: unthunk 
 
-function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
+function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm, ps, st) where {T}
 
    # evaluate the A basis
    TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
@@ -109,39 +131,13 @@ function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
 
    function pb(∂B)
       ∂Rnl, ∂Ylm = pullback(unthunk(∂B), tensor, Rnl, Ylm, A)
-      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, ZeroTangent(), NoTangent() 
    end
    return B, pb
 end
 
 
 #=
-
-# ----------------------------------------
-#  utilities 
-
-"""
-Get the specification of the BBbasis as a list (`Vector`) of vectors of `@NamedTuple{n::Int, l::Int}`.
-
-### Parameters 
-
-* `tensor` : a SparseACE, possibly from ACEModel
-"""
-function get_nnll_spec(tensor::SparseACE{T}) where {T}
-   _nl(bb) = [(n = b.n, l = b.l) for b in bb]
-   # assume the new ACE model NEVER has the z channel
-   spec = tensor.aabasis.meta["AA_spec"]
-   nBB = size(tensor.A2Bmap, 1)
-   nnll_list = Vector{NT_NL_SPEC}[]
-   for i in 1:nBB
-      AAidx_nnz = tensor.A2Bmap[i, :].nzind
-      bbs = spec[AAidx_nnz]
-      @assert all([bb == _nl(bbs[1]) for bb in _nl.(bbs)])
-      push!(nnll_list, _nl(bbs[1]))
-   end
-   @assert length(nnll_list) == nBB
-   return nnll_list
-end
 
 
 

@@ -1,6 +1,6 @@
 
 """
-   function build_sparse_ace()
+   sparse_equivariant_tensor(L, mb_spec, Rnl_spec, Ylm_spec, basis)
 """
 function sparse_equivariant_tensor(;
                   L::Integer, 
@@ -14,18 +14,10 @@ function sparse_equivariant_tensor(;
    #    error("mb_spec contains 1p basis functions that are not contained in Rnl_spec")
    # end
 
-   # generate a first naive 𝔸 specification that doesn't take into account 
-   # any symmetries at all. 
-   #   TODO: this should be shifted into the symmetrisation operator constructor
-   #
-   # NT_NLM = typeof( (n = 0, l = 0, m = 0) )
-   # Vector{Vector{NT_NLM}}
-   𝔸spec_long = _auto_nnllmm_spec(mb_spec)
-
    # from this we can generate the coupling matrix and will also get a 
    # pruned 𝔸spec containing only those basis functions that are relevant 
    # for the symmetric basis 
-   symm, 𝔸spec = symmetrisation_matrix(L, 𝔸spec_long; 
+   symm, 𝔸spec = symmetrisation_matrix(L, mb_spec; 
                                        prune = true, PI = true, basis = basis)
 
    # now we work backwards to generate the Aspec 
@@ -97,7 +89,6 @@ takes an nnll spec and generates a complete list of all possible nnllmm
 """
 function _auto_nnllmm_spec(nnll_spec)
    NT_NLM = typeof( (n = 0, l = 0, m = 0) ) 
-   @show eltype(nnll_spec)
    nnllmm = Vector{NT_NLM}[] 
    for bb in nnll_spec
       MM = setproduct( [ -b.l:b.l for b in bb ] )
