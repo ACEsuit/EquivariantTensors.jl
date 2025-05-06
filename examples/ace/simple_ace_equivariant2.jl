@@ -10,6 +10,7 @@ using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
 using Zygote 
 
 include("lineartransform.jl")
+
 ##
 
 struct SimpleACE3{T, RB, YB, BB0, BB2}
@@ -19,7 +20,6 @@ struct SimpleACE3{T, RB, YB, BB0, BB2}
    symbasis2::BB2    # symmetric basis 
    params0::Vector{T}   # model parameters
    params2::Vector{T}   # model parameters
-   trans_params::Vector{T} # model parameters
 end
 
 function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}; basis = complex)
@@ -33,7 +33,7 @@ function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}; basis = co
    # [3] the model output value is the dot product with the parameters 
    y0 = sum(m.params0 .* 𝔹0)
    y2 = sum(m.params2 .* 𝔹2)
-   return trans_y_pp(y0, y2, m.trans_params; basis = basis)
+   return trans_y_pp(y0, y2; basis = basis)
 end
 
 ## 
@@ -80,7 +80,8 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
 # putting together everything we've construced we can now generate the model 
 # here we give the model some random parameters just for testing. 
 #
-model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, randn(length(𝔹basis0)), randn(length(𝔹basis2)), randn(2))
+model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
+                   randn(length(𝔹basis0)), randn(length(𝔹basis2)))
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 
@@ -134,7 +135,7 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
             basis = real )
 
 model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
-                  randn(length(𝔹basis0)),  randn(length(𝔹basis2)), randn(2))
+                  randn(length(𝔹basis0)),  randn(length(𝔹basis2)))
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 
