@@ -275,7 +275,8 @@ choice is `real`, which is compatible with the `SpheriCart.jl` convention.
 """
 function coupling_coeffs(L::Integer, ll, nn = nothing; 
                          PI = !(isnothing(nn)), 
-                         basis = complex)
+                         basis = complex,
+                         reduced = true)
 
     # convert L into the format required internally 
     _L = Int(L) 
@@ -318,14 +319,14 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
         error("unknown basis type: $basis")
     end
     
-    return _coupling_coeffs(_L, _ll, _nn; PI = PI, flag = flag)
+    return _coupling_coeffs(_L, _ll, _nn; PI = PI, flag = flag, reduced = reduced)
 end
     
 
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
 function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
-                          PI = true, flag = :cSH) where N
+                          PI = true, flag = :cSH, reduced = true) where N
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
@@ -340,21 +341,28 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         MMmat, size_m = m_generate(nn,ll,L;flag=flag) # classes of m's
         FMatrix=zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
         UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefs D
+        UMatrix_reduced = zeros(T, r,length(MMmat)) # Matrix containing the coupling coefs D for ordered m's only
         MM = SVector{N, Int}[] # all possible m's
         MM_reduced = SVector{N, Int}[] # reduced m's - in the PI case, only the ordered 
                                       # m's are kept, i.e. the first element of
                                       # each class of m's
         for i in 1:r
             c = 0
+            c_reduced = 0
             for (j,m_class) in enumerate(MMmat)
-                for mm in m_class
+                for (kk,mm) in enumerate(m_class)
                     c += 1
                     cg_coef = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
                     FMatrix[i,j]+= cg_coef
                     UMatrix[i,c] = cg_coef
+                    if kk == 1
+                        c_reduced += 1
+                        UMatrix_reduced[i,c_reduced] = cg_coef
+                    end
                 end
             end
             @assert c==size_m
+            @assert c_reduced==length(MMmat)
         end 
         for m_class in MMmat
             push!(MM_reduced, sort(m_class)[1])
@@ -368,14 +376,25 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         # return RE coupling coeffs if the permutation invariance is not needed
         return UMatrix, [mm[inv_perm] for mm in MM] # MM
     else
-        U, S, V = svd(gram(FMatrix))
-        # Somehow rank is not working properly here, might be a relative  
-        # tolerance issue.
-        # original code: rank(Diagonal(S); rtol =  1e-12) 
-        rk = findall(x -> x > 1e-12, S) |> length 
-        # return the RE-PI coupling coeffs
-        return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
-               [ mm[inv_perm] for mm in MM_reduced ]
+        if !reduced
+            U, S, V = svd(gram(FMatrix))
+            # Somehow rank is not working properly here, might be a relative  
+            # tolerance issue.
+            # original code: rank(Diagonal(S); rtol =  1e-12) 
+            rk = findall(x -> x > 1e-12, S) |> length 
+            # return the RE-PI coupling coeffs
+            return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
+                [ mm[inv_perm] for mm in MM_reduced ]
+        else
+            # return the RPE coupling coeffs
+            U, S, V = svd(gram(UMatrix_reduced))
+            # Somehow rank is not working properly here, might be a relative  
+            # tolerance issue.
+            # original code: rank(Diagonal(S); rtol =  1e-12) 
+            rk = findall(x -> x > 1e-12, S) |> length 
+            return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * UMatrix_reduced, 
+                [ mm[inv_perm] for mm in MM_reduced ]
+        end
     end
 end
 
