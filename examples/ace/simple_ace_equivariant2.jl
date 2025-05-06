@@ -9,17 +9,18 @@ import EquivariantTensors as ET
 using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
 using Zygote 
 
-include("lineartransform.jl")
+# include("lineartransform.jl")
 
 ##
 
-struct SimpleACE3{T, RB, YB, BB0, BB2}
+struct SimpleACE3{T, RB, YB, BB0, BB2, TT}
    rbasis::RB      # radial embedding Rn
    ybasis::YB      # angular embedding Ylm
    symbasis0::BB0    # symmetric basis 
    symbasis2::BB2    # symmetric basis 
    params0::Vector{T}   # model parameters
    params2::Vector{T}   # model parameters
+   trans::TT
 end
 
 function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}; basis = complex)
@@ -33,7 +34,7 @@ function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}; basis = co
    # [3] the model output value is the dot product with the parameters 
    y0 = sum(m.params0 .* 𝔹0)
    y2 = sum(m.params2 .* 𝔹2)
-   return trans_y_pp(y0, y2; basis = basis)
+   return model.trans(y0, y2)
 end
 
 ## 
@@ -81,7 +82,8 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
 # here we give the model some random parameters just for testing. 
 #
 model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
-                   randn(length(𝔹basis0)), randn(length(𝔹basis2)))
+                   randn(length(𝔹basis0)), randn(length(𝔹basis2)), 
+                   ET.O3.TYVec2pp(; basis=complex))
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 
@@ -135,7 +137,8 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
             basis = real )
 
 model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
-                  randn(length(𝔹basis0)),  randn(length(𝔹basis2)))
+                  randn(length(𝔹basis0)),  randn(length(𝔹basis2)), 
+                  ET.O3.TYVec2pp(; basis=real))
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 
