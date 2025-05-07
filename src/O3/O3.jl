@@ -9,6 +9,7 @@ using SparseArrays
 export coupling_coeffs
 
 include("O3_utils.jl")
+include("yyvector.jl")
 include("O3_transformations.jl")
 
 
