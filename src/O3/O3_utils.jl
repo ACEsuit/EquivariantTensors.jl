@@ -1,4 +1,5 @@
-
+using Rotations
+import PartialWaveFunctions, WignerD 
 
 #  NOTE: Ctran(L) is the transformation matrix from rSH to cSH. More specifically, 
 #        if we write Polynomials4ML rSH as R_{lm} and cSH as Y_{lm} and their 
@@ -90,3 +91,27 @@ function cgmatrix(l1, l2, λ; basis = real)
    end
    return sparse(cgm) 
 end
+
+
+# -----------------------------------------------------------------
+#  complex and real D matrices 
+
+function Q_from_angles(θ::AbstractVector{<: Real})
+   @assert length(θ) == 3
+   return Rotations.RotZYZ(θ...)
+end
+
+function D_from_angles(l::Integer, θ::AbstractVector{<: Real}, ::typeof(complex))
+   @assert length(θ) == 3
+   return real.( conj.( WignerD.wignerD(l, θ...) ) )
+end
+
+function D_from_angles(l::Integer, θ::AbstractVector{<: Real}, ::typeof(real))
+   @assert length(θ) == 3
+   cD = WignerD.wignerD(l, θ...)
+   T = Ctran(l)
+   return real.(T * conj.( cD ) * T')
+end
+
+QD_from_angles(l::Integer, θ::AbstractVector{<: Real}, RC) = 
+         Q_from_angles(θ), D_from_angles(l, θ, RC)

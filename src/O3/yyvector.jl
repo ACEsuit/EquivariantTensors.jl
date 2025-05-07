@@ -6,6 +6,8 @@ struct SYYVector{L, N, T}  <: StaticVector{N, T}
    data::NTuple{N, T}
 end
 
+SYYVector(v::AbstractVector) = SYYVector(tuple(v...))
+
 SYYVector(data::NTuple{N, T}) where {N, T} = 
          try SYYVector{Int(sqrt(N)-1), N, T}(data) 
          catch 
