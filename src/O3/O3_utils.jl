@@ -43,8 +43,6 @@ Ctran(l::Int64; convention = :SpheriCart) = sparse(
 # -----------------------------------------------------------------
 #  complex and real Clebsch-Gordan coefficients
 
-cg_m_condition(m1, m2, M) = (M == m1 + m2)
-
 function cg(l1, m1, l2, m2, L, M, basis::typeof(complex))
    return PartialWaveFunctions.clebschgordan(l1, m1, l2, m2, L, M)
 end
@@ -103,9 +101,16 @@ end
 
 function D_from_angles(l::Integer, θ::AbstractVector{<: Real}, ::typeof(complex))
    @assert length(θ) == 3
-   return real.( conj.( WignerD.wignerD(l, θ...) ) )
+   return conj.(WignerD.wignerD(l, θ...))
 end
 
+"""
+   D_from_angles(l, θ, basis)
+
+Here, `l::Integer` and `θ` a 3-element vector or tuple, `basis` must be either 
+`real` or `complex`. Output is a Wigner-D matrix such that `y ∘ Q = D * y` 
+with `y` real/complex spherical harmonics. 
+"""
 function D_from_angles(l::Integer, θ::AbstractVector{<: Real}, ::typeof(real))
    @assert length(θ) == 3
    cD = WignerD.wignerD(l, θ...)
@@ -113,5 +118,9 @@ function D_from_angles(l::Integer, θ::AbstractVector{<: Real}, ::typeof(real))
    return real.(T * conj.( cD ) * T')
 end
 
+"""
+produces a rotation Q and Wigner-D matrix D such that `y ∘ Q = D * y` with `y`
+real spherical harmonics. 
+"""
 QD_from_angles(l::Integer, θ::AbstractVector{<: Real}, RC) = 
          Q_from_angles(θ), D_from_angles(l, θ, RC)

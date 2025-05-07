@@ -2,26 +2,6 @@
 # TODO: these transformations should use static sparse arrays: 
 #       https://github.com/QuantumBFS/LuxurySparse.jl/blob/master/src/SSparseMatrixCSC.jl
 
-struct TYVec2pp{T0, T2}
-   cgm0::T0 
-   cgm2::T2
-end
-
-function TYVec2pp(; basis = real)
-   cgms = _get_cgms1(1, 1; basis = basis)
-   return TYVec2pp(cgms[1], cgms[2])
-end 
-
-(t::TYVec2pp)(y0, y2) = SMatrix{3,3}(t.cgm0 * y0 + t.cgm2 * y2)
-
-
-function _get_cgms1(l1, l2; basis = real)
-   fea_set = abs(l1-l2):2:l1+l2
-   return cgm = [ cgmatrix(l1, l2, λ; basis = basis) for λ in fea_set ]
-end
-
-# ------------------------------------------------------
-
 struct TYVec2YMat{L1, L2, TT}
    cgm::TT 
 end

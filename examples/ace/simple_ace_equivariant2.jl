@@ -9,8 +9,6 @@ import EquivariantTensors as ET
 using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
 using Zygote 
 
-# include("lineartransform.jl")
-
 ##
 
 struct SimpleACE3{T, RB, YB, BB0, BB2, TT}
@@ -34,7 +32,8 @@ function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}; basis = co
    # [3] the model output value is the dot product with the parameters 
    y0 = sum(m.params0 .* 𝔹0)
    y2 = sum(m.params2 .* 𝔹2)
-   return model.trans(y0, y2)
+   y = ET.O3.yvector(y0, nothing, y2)
+   return model.trans(y)
 end
 
 ## 
@@ -83,7 +82,7 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
 #
 model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
                    randn(length(𝔹basis0)), randn(length(𝔹basis2)), 
-                   ET.O3.TYVec2pp(; basis=complex))
+                   ET.O3.TYVec2YMat(1, 1; basis=complex))
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 
@@ -96,14 +95,8 @@ rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 # generate a random configuration of nX points in the unit ball
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
-
-using WignerD, Rotations
 θ = 2*π*rand(3) 
-Q = Rotations.RotZYZ(θ...)
-cD = conj.(WignerD.wignerD(1, θ...))
-rD = real.(ET.O3.Ctran(1) * cD * ET.O3.Ctran(1)')
-
-
+Q, cD = ET.O3.QD_from_angles(1, θ, complex)
 perm = randperm(nX)
 Q𝐫 = Ref(Q) .* 𝐫[perm]
 
@@ -138,7 +131,7 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
 
 model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
                   randn(length(𝔹basis0)),  randn(length(𝔹basis2)), 
-                  ET.O3.TYVec2pp(; basis=real))
+                  ET.O3.TYVec2YMat(1, 1; basis=real))
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 
@@ -146,12 +139,12 @@ model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2,
 
 rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )
 rand_x() = (0.1 + 0.9 * rand()) * rand_sphere()
-rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 
 # generate a random configuration of nX points in the unit ball
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
-
+θ = 2*π*rand(3) 
+Q, rD = ET.O3.QD_from_angles(1, θ, real)
 perm = randperm(nX)
 Q𝐫 = Ref(Q) .* 𝐫[perm]
 
