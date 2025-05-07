@@ -9,20 +9,19 @@ import EquivariantTensors as ET
 using StaticArrays, SparseArrays, Combinatorics, LinearAlgebra, Random
 using Zygote 
 
-include("lineartransform.jl")
 ##
 
-struct SimpleACE3{T, RB, YB, BB0, BB2}
+struct SimpleACE4{T, RB, YB, BB0, BB2, TT}
    rbasis::RB      # radial embedding Rn
    ybasis::YB      # angular embedding Ylm
    symbasis0::BB0    # symmetric basis 
    symbasis2::BB2    # symmetric basis 
    params0::Vector{T}   # model parameters
    params2::Vector{T}   # model parameters
-   trans_params::Vector{T} # model parameters
+   trans::TT
 end
 
-function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}; basis = complex)
+function evaluate(m::SimpleACE4, 𝐫::AbstractVector{<: SVector{3}}; basis = complex)
    # [1] Embeddings: evaluate the Rn and Ylm embeddings
    #   Rn[j] = Rn(norm(𝐫[j])), Ylm[j] = Ylm(Rs[j])
    Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
@@ -33,7 +32,8 @@ function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}; basis = co
    # [3] the model output value is the dot product with the parameters 
    y0 = sum(m.params0 .* 𝔹0)
    y2 = sum(m.params2 .* 𝔹2)
-   return trans_y_pp(y0, y2, m.trans_params; basis = basis)
+   y = ET.O3.yvector(y0, nothing, y2)
+   return model.trans(y)
 end
 
 ## 
@@ -80,7 +80,9 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
 # putting together everything we've construced we can now generate the model 
 # here we give the model some random parameters just for testing. 
 #
-model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, randn(length(𝔹basis0)), randn(length(𝔹basis2)), randn(2))
+model = SimpleACE4(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
+                   randn(length(𝔹basis0)), randn(length(𝔹basis2)), 
+                   ET.O3.TYVec2YMat(1, 1; basis=complex))
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 
@@ -93,14 +95,8 @@ rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 # generate a random configuration of nX points in the unit ball
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
-
-using WignerD, Rotations
 θ = 2*π*rand(3) 
-Q = Rotations.RotZYZ(θ...)
-cD = conj.(WignerD.wignerD(1, θ...))
-rD = real.(ET.O3.Ctran(1) * cD * ET.O3.Ctran(1)')
-
-
+Q, cD = ET.O3.QD_from_angles(1, θ, complex)
 perm = randperm(nX)
 Q𝐫 = Ref(Q) .* 𝐫[perm]
 
@@ -133,8 +129,9 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
             Ylm_spec = Ylm_spec, 
             basis = real )
 
-model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
-                  randn(length(𝔹basis0)),  randn(length(𝔹basis2)), randn(2))
+model = SimpleACE4(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
+                  randn(length(𝔹basis0)),  randn(length(𝔹basis2)), 
+                  ET.O3.TYVec2YMat(1, 1; basis=real))
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 
@@ -142,12 +139,12 @@ model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2,
 
 rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )
 rand_x() = (0.1 + 0.9 * rand()) * rand_sphere()
-rand_rot() = ( K = @SMatrix randn(3,3); exp(K - K') )
 
 # generate a random configuration of nX points in the unit ball
 nX = 7   # number of particles / points 
 𝐫 = [ rand_x() for _ = 1:nX ]
-
+θ = 2*π*rand(3) 
+Q, rD = ET.O3.QD_from_angles(1, θ, real)
 perm = randperm(nX)
 Q𝐫 = Ref(Q) .* 𝐫[perm]
 
