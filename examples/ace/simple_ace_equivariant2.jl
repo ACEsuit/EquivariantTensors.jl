@@ -11,7 +11,7 @@ using Zygote
 
 ##
 
-struct SimpleACE3{T, RB, YB, BB0, BB2, TT}
+struct SimpleACE4{T, RB, YB, BB0, BB2, TT}
    rbasis::RB      # radial embedding Rn
    ybasis::YB      # angular embedding Ylm
    symbasis0::BB0    # symmetric basis 
@@ -21,7 +21,7 @@ struct SimpleACE3{T, RB, YB, BB0, BB2, TT}
    trans::TT
 end
 
-function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}; basis = complex)
+function evaluate(m::SimpleACE4, 𝐫::AbstractVector{<: SVector{3}}; basis = complex)
    # [1] Embeddings: evaluate the Rn and Ylm embeddings
    #   Rn[j] = Rn(norm(𝐫[j])), Ylm[j] = Ylm(Rs[j])
    Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
@@ -80,7 +80,7 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
 # putting together everything we've construced we can now generate the model 
 # here we give the model some random parameters just for testing. 
 #
-model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
+model = SimpleACE4(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
                    randn(length(𝔹basis0)), randn(length(𝔹basis2)), 
                    ET.O3.TYVec2YMat(1, 1; basis=complex))
 
@@ -129,7 +129,7 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
             Ylm_spec = Ylm_spec, 
             basis = real )
 
-model = SimpleACE3(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
+model = SimpleACE4(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
                   randn(length(𝔹basis0)),  randn(length(𝔹basis2)), 
                   ET.O3.TYVec2YMat(1, 1; basis=real))
 

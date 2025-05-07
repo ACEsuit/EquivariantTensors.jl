@@ -52,29 +52,24 @@ function cg(l1, m1, l2, m2, L, M, basis::typeof(real))
 end
  
 function _real_clebschgordan(l1, m1, l2, m2, λ, νp)
-   C1 = Ctran(l1)
-   C2 = Ctran(l2)
-   Cλ = Ctran(λ)
- 
-   val = 0.0 + 0im
-   for n1 = -l1:l1
-      for n2 = -l2:l2
-         ν = n1 + n2
-         if abs(ν) <= λ
-            cg = PartialWaveFunctions.clebschgordan(l1, n1, l2, n2, λ, ν)
- 
-            i1 = m1 + l1 + 1
-            i2 = (l2 - m2) + 1  
-            j1 = n1 + l1 + 1
-            j2 = (l2 - n2) + 1 
-            k1 = νp + λ + 1
-            k2 = ν + λ + 1
- 
-            val += C1[i1, j1] * conj(C2[i2, j2]) * conj(Cλ[k1, k2]) * cg
-         end
-      end
+   result = 0.0 + 0im
+
+   # Only n values with |n| = |m| contribute due to Ctran(m, n) selection rule
+   n1_values = m1 == 0 ? [0] : [-m1, m1]
+   n2_values = m2 == 0 ? [0] : [-m2, m2]
+
+   for n1 in n1_values
+       for n2 in n2_values
+           ν = n1 + n2
+           # Selection rules: |ν| must be ≤ λ and match |νp|
+           if abs(ν) ≤ λ && abs(ν) == abs(νp)
+               cg = PartialWaveFunctions.clebschgordan(l1, n1, l2, n2, λ, ν)
+               result += Ctran(m1, n1) * conj(Ctran(-m2, -n2)) * conj(Ctran(νp, ν)) * cg
+           end
+       end
    end
-   return real(val)
+
+   return real(result)
 end
  
 
