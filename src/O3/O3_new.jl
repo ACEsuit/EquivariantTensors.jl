@@ -164,7 +164,7 @@ end
 # NB: This function assumes lexicographical ordering
 
 function mm_generate(L::Int, ll::T, nn::T; 
-                     PI = !(isnothing(nn)), 
+                     # PI = !(isnothing(nn)), 
                      flag = :cSH) where {T} 
     N = length(ll)
     @assert length(ll) == length(nn)
@@ -175,37 +175,11 @@ function mm_generate(L::Int, ll::T, nn::T;
         MM[i] = I.I 
     end 
 
-    # When PI, return the ordered mm's and when !PI, return all admissible mm's
-    _mm_filter = PI ? 
-                    x -> all(issorted(x[S[i]:S[i+1]-1]) for i in 1:length(S)-1) && mm_filter(x, L; flag) :
-                    x -> mm_filter(x, L; flag)
-
+    # No matter PI or not, this fcn always generates all admissible mm's
+    # and if PI, they are just filtered in _coupling_coeffs
+    _mm_filter = x -> mm_filter(x, L; flag)
+    
     return T.(MM[findall(x -> x==1, _mm_filter.(MM))])
-end
-
-function equivalent_class(mm::T, permutable_blocks::Vector{Vector{Int}}) where T
-    # Use multiset permutations for uniqueness
-    block_perms = [collect(multiset_permutations(mm[block],length(block))) for block in permutable_blocks]
-    nblocks = length(permutable_blocks)
-
-    mm_classes = Set{Vector{eltype(mm)}}()
-    current = similar(mm)
-
-    function sub_permute(block_idx)
-        # when we finish looping through all the blocks, we add the current and stop
-        if block_idx > nblocks
-            push!(mm_classes, copy(current))
-            return mm_classes
-        end
-
-        for perm in block_perms[block_idx]
-            current[permutable_blocks[block_idx]] = perm
-            sub_permute(block_idx + 1) # recursively call the function for the next block
-        end
-    end
-
-    sub_permute(1) # performing the permutations within each block - start from the first block
-    return T.(collect(mm_classes))
 end
 
 function gram(X::Matrix{SVector{N,T}}) where {N,T}
@@ -291,7 +265,17 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
     
     return _coupling_coeffs(_L, _ll, _nn; PI = PI, flag = flag)
 end
-    
+
+function _sort(x::T, permutable_blocks::Vector{Vector{Int}}) where T
+    # Sorts the vector x according to the indices in permutable_blocks
+    # This is used to sort the equivalent classes of m's
+    x = Vector{eltype(x)}(x)
+    for block in permutable_blocks
+        x[block] = sort(x[block])
+    end
+    return T(x)
+end
+
 
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
@@ -308,7 +292,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     if r == 0; return zeros(T, 0, 0), SVector{N, Int}[]; end
      
     if !PI
-        MM = mm_generate(L, ll, nn; PI = PI, flag=flag) # all m's
+        MM = mm_generate(L, ll, nn; flag=flag) # all m's
         UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
         for i in 1:r
             for (j,mm) in enumerate(MM)
@@ -317,18 +301,20 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         end 
         return UMatrix, [mm[inv_perm] for mm in MM]
     else
-        MM_reduced = mm_generate(L,ll,nn;flag=flag) # representatives of classes of mm's        
-        # generate the equivalent classes for those mm's
+        # permutation blocks - within which the nn and ll are identical
         S = Sn(nn,ll)
         permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
-        MMmat = [ equivalent_class(mm, permutable_blocks) for mm in MM_reduced ]
-        FMatrix=zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
+
+        MM = mm_generate(L, ll, nn; flag=flag) # all admissible mm's
+        MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM ] # sort the mm's within the permutable blocks
+        MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
+        D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
+        
+        FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
 
         for i in 1:r
-            for (j,m_class) in enumerate(MMmat)
-                for mm in m_class
-                    FMatrix[i,j]+= GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
-                end
+            for (j,mm) in enumerate(MM)
+                FMatrix[i,D_MM_reduced[MM_sorted[j]]]+= GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
             end
         end 
         
