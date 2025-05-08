@@ -154,65 +154,14 @@ function mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64;
     else
         # for the rSH, the criterion is that whether there exists a combinition 
         # of [+/- m_i]_i, such that the sum of the combination equals to k
-        return any([sum(mm1) <= L for mm1 in signed_mmset(mm)])
+        return any([abs.(sum(mm1)) <= L for mm1 in signed_mmset(mm)])
     end
 end
 
-
-# Function that generates the set of ordered m's given `n` and `l` with sum of 
-# m's equaling to k.
+# Function that generates the set of ordered m's given `n` and `l` with 
+# the absolute sum of  m's smaller than or equal to `L`.
 #
-# NB: functino assumes lexicographical ordering
-
-# function submset(lmax, lth)
-#     # lmax stands for the l value of the subsection while lth is the length of 
-#     # this subsection
-#     if lth == 1
-#         return [[l] for l in -lmax:lmax]
-#     else
-#         tmp = submset(lmax, lth-1)
-#         mset = Vector{Vector{Int64}}([])
-#         for t in tmp
-#             set = identity.([[t..., l] for l in t[end]:lmax])
-#             push!(mset, set...)
-#         end
-#     end
-#     return mset
-# end
-
-# function m_generate(n::T,l::T,L,k;flag=:cSH) where T
-#     @assert abs(k) ≤ L
-#     S = Sn(n,l)
-#     Nperm = length(S)-1
-#     ordered_mset = [submset(l[S[i]], S[i+1]-S[i]) for i = 1:Nperm]
-#     MM = []
-#     Total_length = 0
-#     for m_ord in Iterators.product(ordered_mset...)
-#         m_ord_reshape = vcat(m_ord...)
-#         if mm_filter_single(m_ord_reshape, k; flag = flag)
-#             class_m = vcat( Iterators.product( 
-#                             [ multiset_permutations(m_ord[i], S[i+1]-S[i]) 
-#                               for i in 1:Nperm]...)... )
-#             push!(MM, [vcat(mm...) for mm in class_m])
-#             Total_length += length(class_m)
-#         end
-#     end
-#     return [ T.(MM[i]) for i = 1:length(MM) ], Total_length
-# end
-
-# Function that generates the set of ordered m's given `n` and `l` with the 
-# absolute sum of m's being smaller than L.
-# orginal version: sum(m_generate(n,l,L,k;flag)[2] for k in -L:L), 
-#                  but this cannot be true anymore b.c. the m_classes can 
-#                  intersect
-# m_generate(n,l,L;flag=:cSH) = 
-#         union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...), 
-#         sum(length.(union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...))) 
-
-# Function that generates the set of ordered m's given `n` and `l` with sum of 
-# m's equaling to k.
-#
-# NB: functino assumes lexicographical ordering
+# NB: This function assumes lexicographical ordering
 
 function mm_generate(L::Int, ll::T, nn::T; 
                      PI = !(isnothing(nn)), 
@@ -355,45 +304,49 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     Lset = SetLl(ll,L)
     r = length(Lset)
     T = L == 0 ? Float64 : SVector{2L+1,Float64}
-    if r == 0 
-        return zeros(T, 0, 0), SVector{N, Int}[]
-    else 
+    if r == 0; return zeros(T, 0, 0), SVector{N, Int}[]; end
+     
+    if !PI
+        MM = mm_generate(L, ll, nn; PI = PI, flag=flag) # all m's
+        size_m = length(MM)
+        UMatrix = zeros(T, r, size_m) # Matrix containing the coupling coefs D
+        for i in 1:r
+            for (j,mm) in enumerate(MM)
+                UMatrix[i,j] = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+            end
+        end 
+        return UMatrix, [mm[inv_perm] for mm in MM]
+    else
         MM_reduced = mm_generate(L,ll,nn;flag=flag) # representatives of classes of mm's        
         # generate the equivalent classes of m's
         S = Sn(nn,ll)
         permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
         MMmat = [ equivalent_class(mm, permutable_blocks) for mm in MM_reduced ]
         size_m = sum(length(MMmat[i]) for i in 1:length(MMmat))
-        UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefs D
+        # UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefs D
         FMatrix=zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
-        MM = SVector{N, Int}[] # all possible m's
+        # MM = SVector{N, Int}[] # all possible m's
         # MM_reduced = SVector{N, Int}[] # reduced m's - in the PI case, only the ordered 
                                       # m's are kept, i.e. the first element of
                                       # each class of m's
         for i in 1:r
-            c = 0
+            # c = 0
             for (j,m_class) in enumerate(MMmat)
                 for mm in m_class
-                    c += 1
+                    # c += 1
                     cg_coef = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
                     FMatrix[i,j]+= cg_coef
-                    UMatrix[i,c] = cg_coef
+                    # UMatrix[i,c] = cg_coef
                 end
             end
-            @assert c==size_m
+            # @assert c==size_m
         end 
-        for m_class in MMmat
-            # push!(MM_reduced, sort(m_class)[1])
-            for mm in m_class
-                push!(MM, mm)
-            end
-        end      
-    end
-
-    if !PI
-        # return RE coupling coeffs if the permutation invariance is not needed
-        return UMatrix, [mm[inv_perm] for mm in MM] # MM
-    else
+        # for m_class in MMmat
+        #     # push!(MM_reduced, sort(m_class)[1])
+        #     for mm in m_class
+        #         push!(MM, mm)
+        #     end
+        # end      
         U, S, V = svd(gram(FMatrix))
         # Somehow rank is not working properly here, might be a relative  
         # tolerance issue.
