@@ -9,14 +9,37 @@ struct SparseACE{NL, TA, TAA, TSYM} <: AbstractLuxLayer
    abasis::TA
    aabasis::TAA
    A2Bmaps::TSYM
+   LL::NTuple{NL, Int} 
+   lens::NTuple{NL, Int} 
    # ---- 
    meta::Dict{String, Any}
 end
 
-# Base.length(tensor::SparseACE) = sum( size(A, 1) for A in tensor.A2Bmaps )
+function SparseACE(abasis, aabasis, A2Bmaps, meta) 
+   LL = []
+   lens = [] 
+   for i = 1:length(A2Bmaps)
+      tLp1 = length(A2Bmaps[i][1])
+      push!(LL, (tLp1 - 1) ÷ 2)
+      push!(lens, size(A2Bmaps[i], 1))
+   end
+   SparseACE(abasis, aabasis, A2Bmaps, 
+             tuple(LL...), tuple(lens...), meta)
+end
+
+Base.length(tensor::SparseACE) = sum(tensor.lens)
+
+function Base.length(tensor::SparseACE, L::Integer)
+   for (il, l) in enumerate(tensor.LL)
+      if l == L
+         return tensor.lens[il]
+      end
+   end
+   error("Layer does not have an for L = $L output")
+end
 
 function Base.show(io::IO, l::SparseACE)
-   print(io, "SparseACE(...)")
+   print(io, "SparseACE(L = $(l.LL))")
 end
 
 
@@ -51,13 +74,14 @@ function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
 
    return B
 end
-=#
 
 function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
    TA = promote_type(eltype(Rnl), eltype(Ylm))
    TB = _promote_mul_type(TA, eltype(tensor.A2Bmap))
    return TB, length(tensor)
 end
+
+=#
 
 evaluate(tensor::SparseACE, Rnl, Ylm) = 
       evaluate(tensor, Rnl, Ylm, NamedTuple(), NamedTuple()) 
@@ -80,8 +104,8 @@ function evaluate(tensor::SparseACE, Rnl, Ylm, ps, st)
    evaluate!(AA, tensor.aabasis, A)
 
    # evaluate the coupling coefficients
-   BB = tensor.A2Bmap .* Ref(AA)
-   return BB... 
+   BB = tensor.A2Bmaps .* Ref(AA)
+   return BB
 end 
 
 # ---------
@@ -95,11 +119,13 @@ function pullback!(∂Rnl, ∂Ylm,
                            
    # ∂Ei / ∂AA = ∂Ei / ∂B * ∂B / ∂AA = (WB[i_z0]) * A2Bmap
    # ∂AA = tensor.A2Bmap' * ∂B   
-   T_∂AA = promote_type(eltype(∂B), eltype(tensor.A2Bmap))
-   ∂AA = @alloc(T_∂AA, size(tensor.A2Bmap, 2))
-   mul!(∂AA, tensor.A2Bmap', ∂B)
+   # T_∂AA = promote_type(eltype(∂B), eltype(tensor.A2Bmap))
+   # ∂AA = @alloc(T_∂AA, size(tensor.A2Bmap, 2))
+   # mul!(∂AA, tensor.A2Bmap', ∂B)
    # ∂AA = tensor.A2Bmap' * ∂B
    # T_∂AA = eltype(∂AA)
+   ∂AA = tensor.A2Bmaps[1]' * ∂B 
+   T_∂AA = eltype(∂AA)
 
    # ∂Ei / ∂A = ∂Ei / ∂AA * ∂AA / ∂A = pullback(aabasis, ∂AA)
    T_∂A = promote_type(T_∂AA, eltype(A))
@@ -116,13 +142,18 @@ function pullback!(∂Rnl, ∂Ylm,
 end
 
 function whatalloc(::typeof(pullback!),  
-                   ∂B, tensor::SparseACE{T}, Rnl, Ylm
-                   ) where {T} 
-   TA = promote_type(T, eltype(∂B), eltype(Rnl), eltype(eltype(Ylm)))
+                   ∂B, tensor::SparseACE, Rnl, Ylm
+                   )
+   TA = promote_type(eltype(∂B), eltype(Rnl), eltype(eltype(Ylm)))
    return (TA, size(Rnl)...), (TA, size(Ylm)...)
 end
 
-function pullback(∂B, tensor::SparseACE{T}, Rnl, Ylm, A) where {T} 
+function pullback(∂BB, tensor::SparseACE{T}, Rnl, Ylm, A) where {T}
+   # NOTE: this currently works only with invariant anyhow, i.e. scalar 
+   #       ouputs, so let's implicitly assume this and make it fail when 
+   #       it doesn't. 
+   @assert length(∂BB) == 1 
+   ∂B = ∂BB[1] 
    alc_∂Rnl, alc_∂Ylm = whatalloc(pullback!, ∂B, tensor, Rnl, Ylm)
    ∂Rnl = zeros(alc_∂Rnl...)
    ∂Ylm = zeros(alc_∂Ylm...)
@@ -133,10 +164,10 @@ end
 # ChainRules integration 
 using ChainRulesCore: unthunk 
 
-function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm, ps, st) where {T}
+function rrule(::typeof(evaluate), tensor::SparseACE, Rnl, Ylm, ps, st)
 
    # evaluate the A basis
-   TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
+   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -145,13 +176,13 @@ function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm, ps, st) where
    evaluate!(AA, tensor.aabasis, A)
 
    # evaluate the coupling coefficients
-   B = tensor.A2Bmap * AA
+   BB = tensor.A2Bmaps .* Ref(AA)
 
-   function pb(∂B)
-      ∂Rnl, ∂Ylm = pullback(unthunk(∂B), tensor, Rnl, Ylm, A)
+   function pb(∂BB)
+      ∂Rnl, ∂Ylm = pullback(unthunk.(∂BB), tensor, Rnl, Ylm, A)
       return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, ZeroTangent(), NoTangent() 
    end
-   return B, pb
+   return BB, pb
 end
 
 

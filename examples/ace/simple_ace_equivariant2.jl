@@ -11,11 +11,10 @@ using Zygote
 
 ##
 
-struct SimpleACE4{T, RB, YB, BB0, BB2, TT}
+struct SimpleACE4{T, RB, YB, BB, TT}
    rbasis::RB      # radial embedding Rn
    ybasis::YB      # angular embedding Ylm
-   symbasis0::BB0    # symmetric basis 
-   symbasis2::BB2    # symmetric basis 
+   symbasis::BB    # symmetric basis -> L = 0, 2
    params0::Vector{T}   # model parameters
    params2::Vector{T}   # model parameters
    trans::TT
@@ -27,8 +26,7 @@ function evaluate(m::SimpleACE4, 𝐫::AbstractVector{<: SVector{3}}; basis = co
    Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
    Ylm = P4ML.evaluate(m.ybasis, 𝐫)
    # [2] feed the Rn, Ylm embeddings through the sparse ACE model 
-   𝔹0 = ET.evaluate(m.symbasis0, Rn, Ylm)
-   𝔹2 = ET.evaluate(m.symbasis2, Rn, Ylm)
+   𝔹0, 𝔹2, = ET.evaluate(m.symbasis, Rn, Ylm)
    # [3] the model output value is the dot product with the parameters 
    y0 = sum(m.params0 .* 𝔹0)
    y2 = sum(m.params2 .* 𝔹2)
@@ -65,23 +63,17 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
 # combined into a model for the matrix φ_pp ; first we try it with the 
 # complex spherical harmonics. 
 
-𝔹basis0 = ET.sparse_equivariant_tensor(; 
-            L = 0, mb_spec = nnll_long, 
+𝔹basis = ET.sparse_equivariant_tensors(; 
+            LL = (0, 2), mb_spec = nnll_long, 
             Rnl_spec = Rn_spec, 
             Ylm_spec = Ylm_spec, 
             basis = complex )
 
-𝔹basis2 = ET.sparse_equivariant_tensor(; 
-            L = 2, mb_spec = nnll_long, 
-            Rnl_spec = Rn_spec, 
-            Ylm_spec = Ylm_spec, 
-            basis = complex )
-#
 # putting together everything we've construced we can now generate the model 
 # here we give the model some random parameters just for testing. 
 #
-model = SimpleACE4(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
-                   randn(length(𝔹basis0)), randn(length(𝔹basis2)), 
+model = SimpleACE4(rbasis, ybasis, 𝔹basis, 
+                   randn(length(𝔹basis, 0)), randn(length(𝔹basis, 2)), 
                    ET.O3.TYVec2YMat(1, 1; basis=complex))
 
 ##
@@ -118,19 +110,14 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
                   level = bb -> sum((b.n + b.l) for b in bb; init=0), 
                   maxlevel = Dtot)
 
-𝔹basis0 = ET.sparse_equivariant_tensor(; 
-            L = 0, mb_spec = nnll_long, 
-            Rnl_spec = Rn_spec, 
-            Ylm_spec = Ylm_spec, 
-            basis = real )
-𝔹basis2 = ET.sparse_equivariant_tensor(; 
-            L = 2, mb_spec = nnll_long, 
+𝔹basis = ET.sparse_equivariant_tensors(; 
+            LL = (0, 2), mb_spec = nnll_long, 
             Rnl_spec = Rn_spec, 
             Ylm_spec = Ylm_spec, 
             basis = real )
 
-model = SimpleACE4(rbasis, ybasis, 𝔹basis0, 𝔹basis2, 
-                  randn(length(𝔹basis0)),  randn(length(𝔹basis2)), 
+model = SimpleACE4(rbasis, ybasis, 𝔹basis,
+                  randn(length(𝔹basis, 0)),  randn(length(𝔹basis, 2)), 
                   ET.O3.TYVec2YMat(1, 1; basis=real))
 
 ##
