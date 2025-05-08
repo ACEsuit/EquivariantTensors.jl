@@ -175,6 +175,7 @@ function mm_generate(L::Int, ll::T, nn::T;
         MM[i] = I.I 
     end 
 
+    # When PI, return the ordered mm's and when !PI, return all admissible mm's
     _mm_filter = PI ? 
                     x -> all(issorted(x[S[i]:S[i+1]-1]) for i in 1:length(S)-1) && mm_filter(x, L; flag) :
                     x -> mm_filter(x, L; flag)
@@ -190,7 +191,7 @@ function equivalent_class(mm::T, permutable_blocks::Vector{Vector{Int}}) where T
     mm_classes = Set{Vector{eltype(mm)}}()
     current = similar(mm)
 
-    function backtrack(block_idx)
+    function sub_permute(block_idx)
         # when we finish looping through all the blocks, we add the current and stop
         if block_idx > nblocks
             push!(mm_classes, copy(current))
@@ -199,11 +200,11 @@ function equivalent_class(mm::T, permutable_blocks::Vector{Vector{Int}}) where T
 
         for perm in block_perms[block_idx]
             current[permutable_blocks[block_idx]] = perm
-            backtrack(block_idx + 1) # recursively call the function for the next block
+            sub_permute(block_idx + 1) # recursively call the function for the next block
         end
     end
 
-    backtrack(1) # performing the permutations within each block - start from the first block
+    sub_permute(1) # performing the permutations within each block - start from the first block
     return T.(collect(mm_classes))
 end
 
@@ -308,8 +309,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
      
     if !PI
         MM = mm_generate(L, ll, nn; PI = PI, flag=flag) # all m's
-        size_m = length(MM)
-        UMatrix = zeros(T, r, size_m) # Matrix containing the coupling coefs D
+        UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
         for i in 1:r
             for (j,mm) in enumerate(MM)
                 UMatrix[i,j] = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
@@ -318,35 +318,21 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         return UMatrix, [mm[inv_perm] for mm in MM]
     else
         MM_reduced = mm_generate(L,ll,nn;flag=flag) # representatives of classes of mm's        
-        # generate the equivalent classes of m's
+        # generate the equivalent classes for those mm's
         S = Sn(nn,ll)
         permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
         MMmat = [ equivalent_class(mm, permutable_blocks) for mm in MM_reduced ]
-        size_m = sum(length(MMmat[i]) for i in 1:length(MMmat))
-        # UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefs D
         FMatrix=zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
-        # MM = SVector{N, Int}[] # all possible m's
-        # MM_reduced = SVector{N, Int}[] # reduced m's - in the PI case, only the ordered 
-                                      # m's are kept, i.e. the first element of
-                                      # each class of m's
+
         for i in 1:r
-            # c = 0
             for (j,m_class) in enumerate(MMmat)
                 for mm in m_class
-                    # c += 1
-                    cg_coef = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
-                    FMatrix[i,j]+= cg_coef
-                    # UMatrix[i,c] = cg_coef
+                    FMatrix[i,j]+= GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
                 end
             end
-            # @assert c==size_m
         end 
-        # for m_class in MMmat
-        #     # push!(MM_reduced, sort(m_class)[1])
-        #     for mm in m_class
-        #         push!(MM, mm)
-        #     end
-        # end      
+        
+        # Linear dependence
         U, S, V = svd(gram(FMatrix))
         # Somehow rank is not working properly here, might be a relative  
         # tolerance issue.

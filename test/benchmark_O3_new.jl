@@ -154,7 +154,7 @@ for L = 0:Lmax
       end
       print_tf(@test Mll_r_rpe == Mll_r_rpe_new)
       print_tf(@test rank(O3new.gram(Urpe_r)) == rank(O3new.gram(Urpe_r_new)) == rank(O3new.gram([Urpe_r;Urpe_r_new])))
-
+      println()
    end
    println()
 end
