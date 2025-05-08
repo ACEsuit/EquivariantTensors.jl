@@ -26,7 +26,7 @@ function evaluate(m::SimpleACE2, 𝐫::AbstractVector{<: SVector{3}})
    Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
    Ylm = P4ML.evaluate(m.ybasis, 𝐫)
    # [2] feed the Rn, Ylm embeddings through the sparse ACE model 
-   𝔹 = ET.evaluate(m.symbasis, Rn, Ylm)
+   𝔹, = ET.evaluate(m.symbasis, Rn, Ylm)
    # [3] the model output value is the dot product with the parameters 
    return dot(m.params, 𝔹)
 end
@@ -76,7 +76,7 @@ nnll_long = ET.sparse_nnll_set(; L = 0, ORD = ORD,
 # putting together everything we've construced we can now generate the model 
 # here we give the model some random parameters just for testing. 
 #
-model = SimpleACE2(rbasis, ybasis, 𝔹basis, randn(length(𝔹basis)) )
+model = SimpleACE2(rbasis, ybasis, 𝔹basis, randn(length(𝔹basis, 0)) )
 
 ##
 # we want to check whether the model is invariant under rotations, and whether 

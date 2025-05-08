@@ -1,3 +1,62 @@
+using SparseArrays: findnz
+
+function sparse_equivariant_tensors(;
+                  LL, 
+                  mb_spec, 
+                  Rnl_spec, 
+                  Ylm_spec, 
+                  basis, )
+   A2Bmaps = [] 
+   𝔸specs = [] 
+   for L in LL 
+      symm_L, 𝔸spec_L = symmetrisation_matrix(L, mb_spec; 
+                                 prune = true, PI = true, basis = basis)
+      push!(A2Bmaps, symm_L)
+      push!(𝔸specs, 𝔸spec_L)                                 
+   end
+
+   # the combined 𝔸spec is just the union of all individual 𝔸specs 
+   # NB: this sorting operation looks very hacky and brittle and should be 
+   #     looked at very carefully; maybe one could introduce a default 
+   #     ordering of the basis that is always automatically enforces and checked.
+   𝔸spec = sort( union(𝔸specs...), by = bb -> (length(bb), bb) )
+   inv_𝔸 = invmap(𝔸spec)
+
+   # now we need to re-index the symmetrization operators. 
+   for i = 1:length(𝔸specs)
+      # map 𝔸spec_i -> 𝔸spec
+      rows, cols, vals = findnz(A2Bmaps[i])
+      for j = 1:length(cols) 
+         bb = 𝔸specs[i][cols[j]]
+         cols[j] = inv_𝔸[bb]
+      end
+      A2Bmaps[i] = sparse(rows, cols, vals, 
+                          size(A2Bmaps[i], 1), length(𝔸spec))
+   end 
+
+   # turn the A2Bmaps into a tuple... 
+   symm = tuple(A2Bmaps...)
+
+   # now we work backwards to generate the Aspec, then the layers, 
+   # see `sparse_equivariant_tensor` for for documentation of what is 
+   # happening here. 
+   Aspec = sort( unique( reduce(vcat, 𝔸spec) ) )
+   Aspec_raw = _make_idx_A_spec(Aspec, Rnl_spec, Ylm_spec)
+   𝔸spec_raw = _make_idx_AA_spec(𝔸spec, Aspec)
+   Abasis = PooledSparseProduct(Aspec_raw)
+   𝔸basis = SparseSymmProd(𝔸spec_raw)
+
+   meta = Dict("Rnl_spec" => Rnl_spec, 
+                "Ylm_spec" => Ylm_spec, 
+                "Aspec" => Aspec, 
+                "𝔸spec" => 𝔸spec, 
+                "mb_spec" => mb_spec,
+                "LL" => LL,)
+
+   return SparseACE(Abasis, 𝔸basis, symm, meta)
+end
+
+
 
 """
    sparse_equivariant_tensor(L, mb_spec, Rnl_spec, Ylm_spec, basis)
@@ -40,7 +99,7 @@ function sparse_equivariant_tensor(;
                 "mb_spec" => mb_spec,
                 "L" => L,)
 
-   return SparseACE(Abasis, 𝔸basis, symm, meta)                
+   return SparseACE(Abasis, 𝔸basis, (symm,), meta)                
 end
 
 
