@@ -16,16 +16,19 @@ function sparse_equivariant_tensors(;
    end
 
    # the combined 𝔸spec is just the union of all individual 𝔸specs 
-   𝔸spec = sort(union(𝔸specs...))
+   # NB: this sorting operation looks very hacky and brittle and should be 
+   #     looked at very carefully; maybe one could introduce a default 
+   #     ordering of the basis that is always automatically enforces and checked.
+   𝔸spec = sort( union(𝔸specs...), by = bb -> (length(bb), bb) )
    inv_𝔸 = invmap(𝔸spec)
 
    # now we need to re-index the symmetrization operators. 
    for i = 1:length(𝔸specs)
       # map 𝔸spec_i -> 𝔸spec
-      col_in_𝔸 = [ inv_𝔸[bb] for bb in 𝔸specs[i]  ]
       rows, cols, vals = findnz(A2Bmaps[i])
       for j = 1:length(cols) 
-         cols[j] = col_in_𝔸[cols[j]]
+         bb = 𝔸specs[i][cols[j]]
+         cols[j] = inv_𝔸[bb]
       end
       A2Bmaps[i] = sparse(rows, cols, vals, 
                           size(A2Bmaps[i], 1), length(𝔸spec))
