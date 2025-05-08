@@ -9,6 +9,9 @@ import EquivariantTensors as ET
 import ChainRulesCore: rrule, NoTangent, ZeroTangent, @not_implemented 
 using StaticArrays, SparseArrays, LinearAlgebra, Random
 using Zygote, LuxCore, Lux
+import Optimisers as OPT
+import ForwardDiff as FDiff 
+
 
 ## 
 # CONSTRUCTION OF THE ACE MODEL 
@@ -52,6 +55,7 @@ model = Chain(;
                             P4ML.lux(rbasis) ), 
                Ylm = P4ML.lux(ybasis)),
       𝔹 = 𝔹basis, 
+      𝔹0 = WrappedFunction(𝔹 -> 𝔹[1]),  # because 𝔹 is now a tuple 
       dot = Dense(length(𝔹basis) => 1), 
       out = WrappedFunction(x -> x[1])
       )
@@ -152,8 +156,6 @@ end
 # reverse over reverse as long as all layers of the model are compatible 
 # with Dual numbers. 
 
-import ForwardDiff as FDiff 
-import Optimisers as OPT
 
 function rrule(::typeof(ace_with_grad), model, 𝐫, ps, st) 
    φ, ∇φ = ace_with_grad(model, 𝐫, ps, st)
