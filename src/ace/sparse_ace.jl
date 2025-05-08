@@ -5,18 +5,18 @@ import ChainRulesCore: NoTangent, rrule, ZeroTangent
 import LuxCore: AbstractLuxLayer, initialparameters, initialstates, apply 
 
 
-struct SparseACE{T, TA, TAA} <: AbstractLuxLayer
+struct SparseACE{NL, TA, TAA, TSYM} <: AbstractLuxLayer
    abasis::TA
    aabasis::TAA
-   A2Bmap::SparseMatrixCSC{T, Int}
+   A2Bmaps::TSYM
    # ---- 
    meta::Dict{String, Any}
 end
 
-Base.length(tensor::SparseACE) = size(tensor.A2Bmap, 1) 
+# Base.length(tensor::SparseACE) = sum( size(A, 1) for A in tensor.A2Bmaps )
 
 function Base.show(io::IO, l::SparseACE)
-   print(io, "SparseACE(len = $(length(l)))")
+   print(io, "SparseACE(...)")
 end
 
 
@@ -33,9 +33,10 @@ initialparameters(rng::AbstractRNG, layer::SparseACE) = NamedTuple()
 # ----------------------------------------
 # evaluation kernels 
 
+#=
 function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
-   TA = promote_type(eltype(Rnl), eltype(Ylm), eltype(T))
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -45,10 +46,12 @@ function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
 
    # evaluate the coupling coefficients
    # B = tensor.A2Bmap * AA
+
    mul!(B, tensor.A2Bmap, AA)   
 
    return B
 end
+=#
 
 function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
    TA = promote_type(eltype(Rnl), eltype(Ylm))
@@ -59,12 +62,27 @@ end
 evaluate(tensor::SparseACE, Rnl, Ylm) = 
       evaluate(tensor, Rnl, Ylm, NamedTuple(), NamedTuple()) 
 
+#=
 function evaluate(tensor::SparseACE, Rnl, Ylm, ps, st)
    allocinfo = whatalloc(evaluate!, tensor, Rnl, Ylm)
    B = zeros(allocinfo...)
    return evaluate!(B, tensor, Rnl, Ylm)
 end
+=#
 
+function evaluate(tensor::SparseACE, Rnl, Ylm, ps, st)
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   A = zeros(TA, length(tensor.abasis))    # use Bumper here
+   evaluate!(A, tensor.abasis, (Rnl, Ylm))
+
+   # evaluate the AA basis
+   AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
+   evaluate!(AA, tensor.aabasis, A)
+
+   # evaluate the coupling coefficients
+   BB = tensor.A2Bmap .* Ref(AA)
+   return BB... 
+end 
 
 # ---------
 

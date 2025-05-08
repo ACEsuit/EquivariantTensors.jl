@@ -1,3 +1,59 @@
+using SparseArrays: findnz
+
+function sparse_equivariant_tensors(;
+                  LL, 
+                  mb_spec, 
+                  Rnl_spec, 
+                  Ylm_spec, 
+                  basis, )
+   A2Bmaps = [] 
+   𝔸specs = [] 
+   for L in LL 
+      symm_L, 𝔸spec_L = symmetrisation_matrix(L, mb_spec; 
+                                 prune = true, PI = true, basis = basis)
+      push!(A2Bmaps, symm_L)
+      push!(𝔸specs, 𝔸spec_L)                                 
+   end
+
+   # the combined 𝔸spec is just the union of all individual 𝔸specs 
+   𝔸spec = sort(union(𝔸specs...))
+   inv_𝔸 = invmap(𝔸spec)
+
+   # now we need to re-index the symmetrization operators. 
+   for i = 1:length(𝔸specs)
+      # map 𝔸spec_i -> 𝔸spec
+      col_in_𝔸 = [ inv_𝔸[bb] for bb in 𝔸specs[i]  ]
+      rows, cols, vals = findnz(A2Bmaps[i])
+      for j = 1:length(cols) 
+         cols[j] = col_in_𝔸[cols[j]]
+      end
+      A2Bmaps[i] = sparse(rows, cols, vals, 
+                          size(A2Bmaps[i], 1), length(𝔸spec))
+   end 
+
+   # turn the A2Bmaps into a tuple... 
+   symm = tuple(A2Bmaps...)
+
+   # now we work backwards to generate the Aspec, then the layers, 
+   # see `sparse_equivariant_tensor` for for documentation of what is 
+   # happening here. 
+   Aspec = sort( unique( reduce(vcat, 𝔸spec) ) )
+   Aspec_raw = _make_idx_A_spec(Aspec, Rnl_spec, Ylm_spec)
+   𝔸spec_raw = _make_idx_AA_spec(𝔸spec, Aspec)
+   Abasis = PooledSparseProduct(Aspec_raw)
+   𝔸basis = SparseSymmProd(𝔸spec_raw)
+
+   meta = Dict("Rnl_spec" => Rnl_spec, 
+                "Ylm_spec" => Ylm_spec, 
+                "Aspec" => Aspec, 
+                "𝔸spec" => 𝔸spec, 
+                "mb_spec" => mb_spec,
+                "LL" => LL,)
+
+   return SparseACE(Abasis, 𝔸basis, symm, meta)
+end
+
+
 
 """
    sparse_equivariant_tensor(L, mb_spec, Rnl_spec, Ylm_spec, basis)
