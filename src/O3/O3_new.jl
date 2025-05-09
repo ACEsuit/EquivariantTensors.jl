@@ -294,8 +294,8 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     if !PI
         MM = mm_generate(L, ll, nn; flag=flag) # all m's
         UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
-        for i in 1:r
-            for (j,mm) in enumerate(MM)
+        for (j,mm) in enumerate(MM)
+            for i in 1:r
                 UMatrix[i,j] = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
             end
         end 
