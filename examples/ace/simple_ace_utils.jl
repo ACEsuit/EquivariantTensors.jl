@@ -42,8 +42,8 @@ end
 # CONSTRUCTION OF THE ACE MODEL 
 
 # Some model parameters that we will use: 
-Dtot = 8   # total degree; specifies the trunction of embeddings and correlations
-maxl = 6    # maximum degree of spherical harmonics 
+Dtot = 16   # total degree; specifies the trunction of embeddings and correlations
+maxl = 10    # maximum degree of spherical harmonics 
 ORD = 3     # correlation-order (body-order = ORD + 1)
 
 ##
@@ -116,3 +116,6 @@ F = R -> evaluate(model, _2vecs(R))
 
 R = _2mat(𝐫)
 @show ∇F(R) ≈ ∇F_ad(R)
+
+##
+
