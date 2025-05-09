@@ -23,6 +23,7 @@ include("ace/sparse_ace_utils.jl")
 
 # O3 symmetrization
 include("O3/O3.jl")
+include("O3/O3_new.jl")
 # O3/O3_transformations.jl
 # O3/yyvector.jl 
 # O3/O3_utils.jl 
