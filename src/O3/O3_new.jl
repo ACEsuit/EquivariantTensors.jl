@@ -168,7 +168,7 @@ function mm_generate(L::Int, ll::T, nn::T;
                      flag = :cSH) where {T} 
     N = length(ll)
     @assert length(ll) == length(nn)
-    S = Sn(nn,ll)
+    # S = Sn(nn,ll)
     ci = CartesianIndices(ntuple(t -> -ll[t]:ll[t], N))
     MM = Vector{T}(undef, length(ci))
     for (i, I) in enumerate(ci)
@@ -179,7 +179,7 @@ function mm_generate(L::Int, ll::T, nn::T;
     # and if PI, they are just filtered in _coupling_coeffs
     _mm_filter = x -> mm_filter(x, L; flag)
     
-    return T.(MM[findall(x -> x==1, _mm_filter.(MM))])
+    return MM[findall(x -> x==1, _mm_filter.(MM))]
 end
 
 function gram(X::Matrix{SVector{N,T}}) where {N,T}
@@ -312,9 +312,10 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         
         FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
 
-        for i in 1:r
-            for (j,mm) in enumerate(MM)
-                FMatrix[i,D_MM_reduced[MM_sorted[j]]]+= GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+        for (j,mm) in enumerate(MM)
+            col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
+            for i in 1:r
+                FMatrix[i,col] += GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
             end
         end 
         
