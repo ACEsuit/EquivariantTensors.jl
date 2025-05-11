@@ -75,11 +75,24 @@ function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64};
         if vectorize == false && L[N] != 0
             error("""For the rSH basis, the CG coefficient is always a vector 
                      except for the case of L=0.""")
-        else
-            return (L[N] == 0 ? GCG(l,m,L,L[N];flag=flag) 
-                              : SA[[ GCG(l,m,L,M_N;flag=flag) 
-                                     for M_N in -L[N]:L[N] ]...]  )
         end
+        # return (L[N] == 0 ? GCG(l,m,L,L[N];flag=flag) 
+        #                   : SA[[ GCG(l,m,L,M_N;flag=flag) 
+        #                          for M_N in -L[N]:L[N] ]...]  )
+        admissible_m = filter( x -> abs(sum(x)) <= L[N], signed_mmset(m) )
+        C = zeros(ComplexF64, 2L[N]+1)
+        for mm in admissible_m
+            mm = SA[mm...]
+            GCG_loc = GCG(l,mm,L,sum(mm);flag=:cSH)
+            for M_N in signed_m(sum(mm))
+                C[M_N+L[N]+1] += GCG_loc * 
+                                Ctran(M_N,sum(mm);convention=flag)' * 
+                                prod( Ctran(m[i],mm[i];convention=flag) 
+                                      for i in 1:N )
+            end
+        end
+
+        return L[N] == 0 ? real(C[1]) : real(C)
     end
 end
 
