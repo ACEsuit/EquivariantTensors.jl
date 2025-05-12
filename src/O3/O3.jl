@@ -1,4 +1,4 @@
-module O3new
+module O3
  
 using PartialWaveFunctions
 using Combinatorics

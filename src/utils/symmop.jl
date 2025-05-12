@@ -1,8 +1,6 @@
 using SparseArrays
 using LinearAlgebra: norm 
 
-using Test: @inferred
-
 """
    symmetrisation_matrix(L, mb_spec; prune, kwargs...) -> 𝔸2𝔹, 𝔸_spec
 
