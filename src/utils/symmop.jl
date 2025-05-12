@@ -1,6 +1,8 @@
 using SparseArrays
 using LinearAlgebra: norm 
 
+using Test: @inferred
+
 """
    symmetrisation_matrix(L, mb_spec; prune, kwargs...) -> 𝔸2𝔹, 𝔸_spec
 
@@ -46,13 +48,18 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    end
 
    # convert nn, ll, mm to a search key, by lexicographical sorting 
-   _bb_key(nn, ll, mm) = sort([ (n, l, m) for (n, l, m) in zip(nn, ll, mm) ])
-   _bb_key(bb) = _bb_key( _vecnt2nnllmm(bb)... )
+   # _bb_key(nn, ll, mm) = sort([ (n, l, m) for (n, l, m) in zip(nn, ll, mm) ])
+   # _bb_key(bb) = _bb_key( _vecnt2nnllmm(bb)... )
+   _bb_key(nn, ll, mm) = hash(sort([ (n, l, m) for (n, l, m) in zip(nn, ll, mm) ]))
+   _bb_key(bb::Vector{<: NamedTuple}) = hash(sort([ (b.n, b.l, b.m) for b in bb ]))
 
    # create a lookup into 𝔸spec 
    # (we aren't using `invmap` to avoid an intermediate allocation needed to 
    #  transform from 𝔸spec to unique keys)
-   inv_𝔸spec = Dict( _bb_key(bb) => i for (i, bb) in enumerate(𝔸spec) )
+   inv_𝔸spec = Dict{UInt, Int}() 
+   for (i, bb) in enumerate(𝔸spec)
+      inv_𝔸spec[_bb_key(bb)] = i 
+   end
 
    # extract all unique (nn, ll) blocks, since the (ll, mm) will only be used 
    # in generating the coupled / symmetrized basis functions
@@ -70,7 +77,7 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    num𝔹 = 0 
    for (nn, ll) in nnll
       # here the kwargs... should be PI and basis 
-      cc, MM = O3.coupling_coeffs(L, ll, nn; kwargs...)
+      cc, MM = O3new.coupling_coeffs(L, ll, nn; kwargs...)
       num_b = size(cc, 1)   
       # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
       idx_𝔸 = [inv_𝔸spec[_bb_key(nn, ll, mm)] for mm in MM] 

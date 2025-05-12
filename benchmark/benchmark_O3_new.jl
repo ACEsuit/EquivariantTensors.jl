@@ -14,8 +14,8 @@ isdefined(Main, :___UTILS_FOR_TESTS___) || include("../test/utils/utils_testO3.j
 # The full test set is quite large and takes a while, for a quick sanity test 
 # it is better to keep the test small so it runs quickly. 
 #
-___O3_TESTS___ = :small 
-# :___O3_TESTS___ = :large
+# ___O3_TESTS___ = :small 
+___O3_TESTS___ = :large
 
 
 ##
@@ -69,7 +69,8 @@ for L = 0:Lmax
    verbose = true 
 
    @info("Using ultra short nnll list for testing the case L = $L")
-   nnll_list = ultra_short_nnll_list
+   # nnll_list = ultra_short_nnll_list
+   nnll_list = short_nnll_list
 
    for (itest, (nn, ll)) in enumerate(nnll_list)
       nn = shuffle(nn)
@@ -78,21 +79,21 @@ for L = 0:Lmax
       N = length(ll)
       @assert length(ll) == length(nn)
 
-      @btime Ure, Mll = O3.coupling_coeffs($L, $ll, $nn; PI = false) # cSH based re_basis
+      # @btime Ure, Mll = O3.coupling_coeffs($L, $ll, $nn; PI = false) # cSH based re_basis
       Ure, Mll = O3.coupling_coeffs(L, ll, nn; PI = false) # cSH based re_basis
-      @btime Ure_new, Mll_new = O3new.coupling_coeffs($L, $ll, $nn; PI = false) # cSH based re_basis
+      # @btime Ure_new, Mll_new = O3new.coupling_coeffs($L, $ll, $nn; PI = false) # cSH based re_basis
       Ure_new, Mll_new = O3new.coupling_coeffs(L, ll, nn; PI = false) # cSH based re_basis
-      @btime Ure_r, Mll_r = O3.coupling_coeffs($L, $ll, $nn; PI = false, basis = real) # rSH based re_basis
+      # @btime Ure_r, Mll_r = O3.coupling_coeffs($L, $ll, $nn; PI = false, basis = real) # rSH based re_basis
       Ure_r, Mll_r = O3.coupling_coeffs(L, ll, nn; PI = false, basis = real) # rSH based re_basis
-      @btime Ure_r_new, Mll_r_new = O3new.coupling_coeffs($L, $ll, $nn; PI = false, basis = real) # rSH based re_basis
+      # @btime Ure_r_new, Mll_r_new = O3new.coupling_coeffs($L, $ll, $nn; PI = false, basis = real) # rSH based re_basis
       Ure_r_new, Mll_r_new = O3new.coupling_coeffs(L, ll, nn; PI = false, basis = real) # rSH based re_basis
-      @btime Urpe, Mll_rpe = O3.coupling_coeffs($L, $ll, $nn) # cSH based rpe_basis
+      # @btime Urpe, Mll_rpe = O3.coupling_coeffs($L, $ll, $nn) # cSH based rpe_basis
       Urpe, Mll_rpe = O3.coupling_coeffs(L, ll, nn) # cSH based rpe_basis
-      @btime Urpe_new, Mll_rpe_new = O3new.coupling_coeffs($L, $ll, $nn) # cSH based rpe_basis
+      # @btime Urpe_new, Mll_rpe_new = O3new.coupling_coeffs($L, $ll, $nn) # cSH based rpe_basis
       Urpe_new, Mll_rpe_new = O3new.coupling_coeffs(L, ll, nn) # cSH based rpe_basis
-      @btime Urpe_r, Mll_r_rpe = O3.coupling_coeffs($L, $ll, $nn; basis = real) # rSH based rpe_basis
+      # @btime Urpe_r, Mll_r_rpe = O3.coupling_coeffs($L, $ll, $nn; basis = real) # rSH based rpe_basis
       Urpe_r, Mll_r_rpe = O3.coupling_coeffs(L, ll, nn; basis = real) # rSH based rpe_basis
-      @btime Urpe_r_new, Mll_r_rpe_new = O3new.coupling_coeffs($L, $ll, $nn; basis = real) # rSH based rpe_basis
+      # @btime Urpe_r_new, Mll_r_rpe_new = O3new.coupling_coeffs($L, $ll, $nn; basis = real) # rSH based rpe_basis
       Urpe_r_new, Mll_r_rpe_new = O3new.coupling_coeffs(L, ll, nn; basis = real) # rSH based rpe_basis
 
       # The idea is that we don't check the equivariance here because they are within the other two test files
