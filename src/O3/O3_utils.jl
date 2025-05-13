@@ -83,7 +83,7 @@ function rAA2cAA(MM_c, MM_r; convention = :SpheriCart)
    CC = spzeros(ComplexF64, length(MM_c), length(MM_r))
 
    # By the following, we don't need nested loops
-   @time for (key, c_inds) in group_c
+   for (key, c_inds) in group_c
        if haskey(group_r, key)
            r_inds = group_r[key]
            for i in c_inds
