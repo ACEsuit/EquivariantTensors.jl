@@ -1,8 +1,6 @@
 using SparseArrays
 using LinearAlgebra: norm 
 
-using Test: @inferred
-
 """
    symmetrisation_matrix(L, mb_spec; prune, kwargs...) -> 𝔸2𝔹, 𝔸_spec
 
@@ -77,7 +75,7 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    num𝔹 = 0 
    for (nn, ll) in nnll
       # here the kwargs... should be PI and basis 
-      cc, MM = O3new.coupling_coeffs(L, ll, nn; kwargs...)
+      cc, MM = O3.coupling_coeffs(L, ll, nn; kwargs...)
       num_b = size(cc, 1)   
       # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
       idx_𝔸 = [inv_𝔸spec[_bb_key(nn, ll, mm)] for mm in MM] 
