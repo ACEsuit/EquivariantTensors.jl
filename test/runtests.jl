@@ -9,6 +9,7 @@ isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 
 @testset "Utils" begin 
     @testset "SetProduct" begin include("utils/test_setproduct.jl"); end
+    @testset "InvMap" begin include("utils/test_invmap.jl"); end
 end
 
 @testset "ACE" begin 
