@@ -120,9 +120,9 @@ for L = 0:Lmax
          D = transpose(WignerD.wignerD(L, θ...))
          D_r = Ctran(L) * D * Ctran(L)'
          print_tf(@test norm(B1 - Ref(D) .* B2)   < 1e-12)
-         print_tf(@test norm(B3 - Ref(D_r) .* B4) < 1e-12)
+         print_tf(@test norm(B3 - Ref(D) .* B4) < 1e-12)
          print_tf(@test norm(B5 - Ref(D) .* B6)   < 1e-12)
-         print_tf(@test norm(B7 - Ref(D_r) .* B8) < 1e-12)
+         print_tf(@test norm(B7 - Ref(D) .* B8) < 1e-12)
       end
 
       # @info("Check the linear independence of the basis")
@@ -192,9 +192,9 @@ for L = 0:Lmax
          D = transpose(WignerD.wignerD(L, θ...))
          D_r = Ctran(L) * D * Ctran(L)'
          print_tf(@test norm(B1 - Ref(D) .* B2)   < 1e-12)
-         print_tf(@test norm(B3 - Ref(D_r) .* B4) < 1e-12)
+         print_tf(@test norm(B3 - Ref(D) .* B4) < 1e-12)
          print_tf(@test norm(B5 - Ref(D) .* B6)   < 1e-12)
-         print_tf(@test norm(B7 - Ref(D_r) .* B8) < 1e-12)
+         print_tf(@test norm(B7 - Ref(D) .* B8) < 1e-12)
       end
 
       # @info("Check the linear independence of the basis")

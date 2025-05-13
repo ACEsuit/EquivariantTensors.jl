@@ -39,6 +39,29 @@ Ctran(l::Int64; convention = :SpheriCart) = sparse(
     Matrix{ComplexF64}([ Ctran(m,μ;convention=convention) 
                          for m = -l:l, μ = -l:l ]))
 
+# Type unstable for now
+Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}; convention = :SpheriCart) where N = abs.(mm1) == abs.(mm2) ? 
+prod(Ctran(mm2[i], mm1[i]; convention=convention)' 
+        for i in 1:N) : 0.0 + 0im
+
+Ctran(mm1::Vector{Int}, mm2::Vector{Int}; convention = :SpheriCart) = abs.(mm1) == abs.(mm2) ? 
+prod(Ctran(mm2[i], mm1[i]; convention=convention)' 
+        for i in 1:length(mm1)) : 0.0 + 0im
+
+# We also need to define the transformation matrix from product cSH to product rSH
+
+function rAA2cAA(MM_c,MM_r;convention = :SpheriCart)
+   CC = sparse(zeros(ComplexF64, length(MM_c), length(MM_r)))
+   for i in 1:length(MM_c)
+      for j in 1:length(MM_r)
+         if abs.(MM_c[i]) == abs.(MM_r[j])
+            CC[i,j] = Ctran(MM_c[i], MM_r[j]; convention=convention)
+         end
+      end
+   end
+   return CC
+end
+
 
 # -----------------------------------------------------------------
 #  complex and real Clebsch-Gordan coefficients

@@ -167,7 +167,7 @@ function mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64;
     else
         # for the rSH, the criterion is that whether there exists a combinition 
         # of [+/- m_i]_i, such that the sum of the combination equals to k
-        return any([abs.(sum(mm1)) <= L for mm1 in signed_mmset(mm)])
+        return any([abs(sum(mm1)) <= L for mm1 in signed_mmset(mm)])
     end
 end
 
@@ -304,6 +304,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     T = L == 0 ? Float64 : SVector{2L+1,Float64}
     if r == 0; return zeros(T, 0, 0), SVector{N, Int}[]; end
      
+    if flag == :cSH
     if !PI
         MM = mm_generate(L, ll, nn; flag=flag) # all m's
         UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
@@ -341,6 +342,45 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         # return the RE-PI coupling coeffs
         return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
                [ mm[inv_perm] for mm in MM_reduced ]
+    end
+    else
+        MM_r = mm_generate(L, ll, nn; flag=flag) # all admissible mm's
+        Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, flag = :cSH)
+        C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r)
+        # for the rSH basis, we need to generate the coupling coefficients 
+        # for all admissible m's, and then filter them out
+        Ure_r = Ure_c * C_r2c
+        
+        if !PI
+            return Ure_r, [ mm[inv_perm] for mm in MM_r ]
+        else
+            S = Sn(nn,ll)
+            permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
+            MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM_r ] # sort the mm's within the permutable blocks
+            MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
+
+            
+            D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
+        
+            FMatrix=complex.(zeros(T, r, length(MM_reduced))) # Matrix containing f(m,i)
+
+            for (j,mm) in enumerate(MM_r)
+                col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
+                for i in 1:r
+                    FMatrix[i,col] += Ure_r[i,j]
+                end
+            end 
+        
+            # Linear dependence
+            U, S, V = svd(gram(FMatrix))
+            # Somehow rank is not working properly here, might be a relative  
+            # tolerance issue.
+            # original code: rank(Diagonal(S); rtol =  1e-12) 
+            rk = findall(x -> x > 1e-12, S) |> length 
+            # return the RE-PI coupling coeffs
+            return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
+                [ mm[inv_perm] for mm in MM_reduced ]
+        end
     end
 end
 
