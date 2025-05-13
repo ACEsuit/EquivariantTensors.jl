@@ -114,7 +114,7 @@ end
 
 
 
-function sparse_nnll_set(; L::Integer, 
+function sparse_nnll_set(; L = nothing, 
                            ORD::Integer, 
                            minn = 0, 
                            maxn::Integer, 
@@ -131,10 +131,17 @@ function sparse_nnll_set(; L::Integer,
    # vv[i] = 0 means this is ignored
    tup2bb = vv -> eltype(nl)[ nl[i] for i in vv if i > 0 ]
 
+   if isnothing(L) 
+      evenfilter = bb -> true 
+   elseif L isa Integer 
+      evenfilter = bb -> iseven(L + sum(b.l for b in bb; init=0))
+   else 
+      error("L = $L; I dont know what to do with this")
+   end
+
    spec = sparse_product(; NU = ORD, 
       admissible = bb -> level(bb) <= maxlevel, 
-      filter = bb -> ( (length(bb) > 0) && 
-                      iseven(L + sum(b.l for b in bb; init=0)) ),
+      filter = bb -> ( (length(bb) > 0) && evenfilter(bb) ),
       tup2bb = tup2bb, 
       ordered = true, 
       maxvv = [ length(nl) for _=1:ORD ], ) 
