@@ -26,7 +26,7 @@ function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}})
    Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
    Ylm = P4ML.evaluate(m.ybasis, 𝐫)
    # [2] feed the Rn, Ylm embeddings through the sparse ACE model 
-   𝔹 = ET.evaluate(m.symbasis, Rn, Ylm)
+   𝔹, = ET.evaluate(m.symbasis, Rn, Ylm)
    # [3] the model output value is the dot product with the parameters 
    return sum(m.params .* 𝔹)
 end
