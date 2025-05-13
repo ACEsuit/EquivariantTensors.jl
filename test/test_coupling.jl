@@ -67,6 +67,7 @@ for L = 0:Lmax
    nnll_list = ultra_short_nnll_list
 
    for (itest, (nn, ll)) in enumerate(nnll_list)
+      local N 
       nn = shuffle(nn)
       ll = shuffle(ll)
       # @show nn, ll
@@ -145,6 +146,7 @@ for L = 0:Lmax
    @info("Using short ll list for testing the case L = $L with the absence of nn")
    ll_list = [ nnll_list[i][2] for i in 1:length(nnll_list) ] |> unique
    for (itest, ll) in enumerate(ll_list)
+      local N 
       N = length(ll)
 
       Ure, Mll = coupling_coeffs(L, ll; PI = false) # cSH based re_basis

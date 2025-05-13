@@ -147,6 +147,8 @@ end
 takes an nnll spec and generates a complete list of all possible nnllmm
 """
 function _auto_nnllmm_spec(nnll_spec)
+   _sortby(bb) = (length(bb), bb) 
+
    NT_NLM = typeof( (n = 0, l = 0, m = 0) ) 
    nnllmm = Vector{NT_NLM}[] 
    for bb in nnll_spec
@@ -156,7 +158,7 @@ function _auto_nnllmm_spec(nnll_spec)
                          for (b, m) in zip(bb, mm) ] )
       end
    end
-   return nnllmm
+   return unique(sort( sort!.(nnllmm), by = _sortby ))
 end
 
 
