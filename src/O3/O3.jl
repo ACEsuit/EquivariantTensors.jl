@@ -142,12 +142,25 @@ function Sn(nn,ll)
 end
 
 # The set of integers that has the same absolute value as m
-signed_m(m) = unique([m,-m]) 
+signed_m(m::T) where T = unique([m,-m])::Vector{T}
 
 # The set of vectors whose i-th element has the same absolute value as m[i] 
 # for all i
-signed_mmset(m) = Iterators.product([signed_m(m[i]) for i in 1:length(m)]...
-                                   ) |> collect 
+# signed_mmset(m) = Iterators.product([signed_m(m[i]) for i in 1:length(m)]...
+#                                    ) |> collect 
+
+function signed_mmset(mm::T) where {T}
+    N = length(mm); len = 2^N
+    MM = Vector{T}(undef, len)
+    σ = zeros(Bool, N)
+    for i in 1:(2^N)
+       digits!(σ, i-1, base=2)
+       newmm = [ ((2*σ[j]-1) * (mm[j] != 0) + (mm[j] == 0)) * mm[j]
+                 for j = 1:N ] 
+       MM[i] = newmm
+    end
+    return unique(MM)
+ end
 
 function mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64; 
                  flag=:cSH) where N
@@ -190,9 +203,16 @@ function mm_generate(L::Int, ll::T, nn::T;
 
     # No matter PI or not, this fcn always generates all admissible mm's
     # and if PI, they are just filtered in _coupling_coeffs
-    _mm_filter = x -> mm_filter(x, L; flag)
-    
-    return MM[findall(x -> x==1, _mm_filter.(MM))]
+    _mm_filter = x -> mm_filter(x, L; flag = :cSH)
+    MM_c = MM[findall(x -> x==1, _mm_filter.(MM))]
+    if flag == :cSH 
+        return MM_c
+    else
+        MM_abs = unique([ abs.(mm) for mm in MM_c ])
+        MM_r = union([ signed_mmset(mm) for mm in MM_abs ]...)
+        # @show typeof(MM_r)
+        return MM_r
+    end
 end
 
 function gram(X::Matrix{SVector{N,T}}) where {N,T}
