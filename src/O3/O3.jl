@@ -366,10 +366,17 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     else
         MM_r = mm_generate(L, ll, nn; flag=flag) # all admissible mm's
         Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, flag = :cSH)
-        C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r)
-        # for the rSH basis, we need to generate the coupling coefficients 
-        # for all admissible m's, and then filter them out
-        Ure_r = Ure_c * C_r2c
+        C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r) 
+        # TODO: coupling_coeffs and mm_generate return different 
+        #       format of MM's which may need to be fixed
+        
+        # Do the transformation to the complex coupling 
+        # because it has a smaller size compared to the real one
+        if L != 0
+            CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
+            Ure_c = map(u -> CL * u, Ure_c)
+        end
+        Ure_r = real(Ure_c * C_r2c)
         
         if !PI
             return Ure_r, [ mm[inv_perm] for mm in MM_r ]
@@ -382,7 +389,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             
             D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
         
-            FMatrix=complex.(zeros(T, r, length(MM_reduced))) # Matrix containing f(m,i)
+            FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
 
             for (j,mm) in enumerate(MM_r)
                 col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
