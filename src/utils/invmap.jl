@@ -5,7 +5,7 @@ struct FFInvMap{T, HF}
    hashfcn::HF
 end 
 
-Base.getindex(m::FFInvMap{T}, v::T) where {T} = 
+Base.getindex(m::FFInvMap, v) = 
       m.p[searchsortedfirst(m.h, m.hashfcn(v))]
 
 """

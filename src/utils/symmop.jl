@@ -34,7 +34,8 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    # Vector{Vector{NT_NLM}}
    𝔸spec = _auto_nnllmm_spec(mb_spec)
    
-   # convert an element of 𝔸spec to nn, ll, mm 
+   # convert an element of 𝔸spec to nn, ll, mm, which is the format 
+   # used by the coupling_coeffs function 
    function _vecnt2nnllmm(bb)
       nn = [ b.n for b in bb ]
       ll = [ b.l for b in bb ]
@@ -43,6 +44,7 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    end
 
    # convert nn, ll, mm or bb to a unique search key for searching in 𝔸spec
+   _bb_key(nnllmm::Tuple) = _bb_key(nnllmm[1], nnllmm[2], nnllmm[3])
    _bb_key(nn, ll, mm) = sort([ (n, l, m) for (n, l, m) in zip(nn, ll, mm) ])
    _bb_key(bb::Vector{<: NamedTuple}) = sort([ (b.n, b.l, b.m) for b in bb ])
 
@@ -66,10 +68,10 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    num𝔹 = 0 
    for (nn, ll) in nnll
       # here the kwargs... should be PI and basis 
-      cc, MM = O3new.coupling_coeffs(L, ll, nn; kwargs...)
+      cc, MM = O3.coupling_coeffs(L, ll, nn; kwargs...)
       num_b = size(cc, 1)   
       # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
-      idx_𝔸 = [inv_𝔸spec[_bb_key(nn, ll, mm)] for mm in MM] 
+      idx_𝔸 = [inv_𝔸spec[ (nn, ll, mm) ] for mm in MM] 
       # add the new basis functions to the triplet format
       for q = 1:num_b 
          num𝔹 += 1
