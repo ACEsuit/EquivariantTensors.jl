@@ -16,6 +16,7 @@ end
     @testset "StaticProd" begin include("ace/test_static_prod.jl"); end 
     @testset "SparseProdPool" begin include("ace/test_sparseprodpool.jl"); end 
     @testset "SparseSymmetricProduct" begin include("ace/test_sparsesymmprod.jl"); end 
+    @testset "Pullback" begin include("ace/test_sparse_ace.jl"); end
 end
 
 @testset "O3-Coupling" begin 
