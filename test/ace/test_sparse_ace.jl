@@ -2,13 +2,14 @@
 
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
-using StaticArrays, LinearAlgebra, Random
+using StaticArrays, LinearAlgebra, Random, Test
 using Zygote, LuxCore, Lux
 import Optimisers as OPT
 import ForwardDiff as FDiff 
 
-##
+@info("Preliminary Pullback test for lux ace model")
 
+##
 struct DotL <: Lux.AbstractLuxLayer 
    nin::Int 
 end
@@ -67,11 +68,12 @@ ps, st = Lux.setup(rng, model)
 
 ## 
 
-# differntiate with ForwardDiff
+# differentiate with ForwardDiff
 pvec, _rest = OPT.destructure(ps)
 gf = _rest(FDiff.gradient(p -> Lux.apply(model, 𝐫, _rest(p), st)[1], pvec))
 
 # Differentiate with Zygote (this fails currently)
-gz = Zygote.gradient(p -> Lux.apply(model, 𝐫, p, st)[1], ps)
+gz, = Zygote.gradient(p -> Lux.apply(model, 𝐫, p, st)[1], ps)
 
+println(@test OPT.destructure(gf)[1] ≈ OPT.destructure(gz)[1])
 
