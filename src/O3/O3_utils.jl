@@ -76,8 +76,8 @@ end
 
 function rAA2cAA(MM_c, MM_r; convention = :SpheriCart)
    # find the abs.(mm) and group
-   @time group_c = group_by_abs(MM_c)
-   @time group_r = group_by_abs(MM_r)
+   group_c = group_by_abs(MM_c)
+   group_r = group_by_abs(MM_r)
 
    # Match groups and fill sparse matrix accordingly
    CC = spzeros(ComplexF64, length(MM_c), length(MM_r))
