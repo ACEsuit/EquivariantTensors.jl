@@ -57,24 +57,43 @@ Ctran(l::Int64; convention = :SpheriCart) = sparse(
 
 # Type unstable for now
 Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}; convention = :SpheriCart) where N = abs.(mm1) == abs.(mm2) ? 
-prod(Ctran(mm2[i], mm1[i]; convention=convention)' 
-        for i in 1:N) : 0.0 + 0im
+      prod(Ctran(mm2[i], mm1[i]; convention=convention)' for i in 1:N) : 0.0 + 0im
 
 Ctran(mm1::Vector{Int}, mm2::Vector{Int}; convention = :SpheriCart) = abs.(mm1) == abs.(mm2) ? 
-prod(Ctran(mm2[i], mm1[i]; convention=convention)' 
-        for i in 1:length(mm1)) : 0.0 + 0im
+      prod(Ctran(mm2[i], mm1[i]; convention=convention)' for i in 1:length(mm1)) : 0.0 + 0im
 
-# We also need to define the transformation matrix from product cSH to product rSH
+# We also need to define the transformation matrix from product rSH to product cSH
 
-function rAA2cAA(MM_c,MM_r;convention = :SpheriCart)
-   CC = sparse(zeros(ComplexF64, length(MM_c), length(MM_r)))
-   for i in 1:length(MM_c)
-      for j in 1:length(MM_r)
-         if abs.(MM_c[i]) == abs.(MM_r[j])
-            CC[i,j] = Ctran(MM_c[i], MM_r[j]; convention=convention)
-         end
-      end
+# grouping those MM's that has the same abs value
+function group_by_abs(MM::Vector{SVector{N,Int}}) where N
+   abs_map = Dict{NTuple{N, Int}, Vector{Int}}()
+   for (idx, v) in enumerate(MM)
+       key = Tuple(abs.(v))  # use tuple as a hashable key
+       push!(get!(abs_map, key, Int[]), idx)
    end
+   return abs_map
+end
+
+function rAA2cAA(MM_c, MM_r; convention = :SpheriCart)
+   # find the abs.(mm) and group
+   @time group_c = group_by_abs(MM_c)
+   @time group_r = group_by_abs(MM_r)
+
+   # Match groups and fill sparse matrix accordingly
+   CC = spzeros(ComplexF64, length(MM_c), length(MM_r))
+
+   # By the following, we don't need nested loops
+   @time for (key, c_inds) in group_c
+       if haskey(group_r, key)
+           r_inds = group_r[key]
+           for i in c_inds
+               for j in r_inds
+                   CC[i, j] = Ctran(MM_c[i], MM_r[j]; convention=convention)
+               end
+           end
+       end
+   end
+
    return CC
 end
 
