@@ -45,7 +45,6 @@ for L = 0:Lmax
    for ORD = 2:ORDmax
       for ll in with_replacement_combinations(1:lmax, ORD) 
          # 0 or 1 above ?
-         if !iseven(sum(ll)+L); continue; end  # This is to ensure the reflection symmetry
          if sum(ll) > 2 * lmax; continue; end 
          for Inn in CartesianIndices( ntuple(_->1:nmax, ORD) )
             nn = [ Inn.I[α] for α = 1:ORD ]
@@ -78,6 +77,13 @@ for L = 0:Lmax
       Ure_r, Mll_r = coupling_coeffs(L, ll, nn; PI = false, basis = real) # rSH based re_basis
       Urpe, Mll_rpe = coupling_coeffs(L, ll, nn) # cSH based rpe_basis
       Urpe_r, Mll_r_rpe = coupling_coeffs(L, ll, nn; basis = real) # rSH based rpe_basis
+
+      # do a quick check that inadmissible nnll just return empty bases
+      if isodd(L + sum(ll))
+         print_tf(@test length(Ure) == length(Ure_r) == 0)
+         print_tf(@test length(Urpe) == length(Urpe_r) == 0)
+         continue 
+      end
 
       rk = rank(gram(Ure), rtol = 1e-12)
       rk_r = rank(gram(Ure_r), rtol = 1e-12)
