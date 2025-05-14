@@ -54,7 +54,7 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    # extract all unique (nn, ll) blocks, since the (ll, mm) will only be used 
    # in generating the coupled / symmetrized basis functions
    nnll = unique( [(nn, ll) for (nn, ll, mm) in _vecnt2nnllmm.(𝔸spec)] )
-   nnll = filter(x -> iseven(sum(xx[2])+L), nnll)
+   nnll = filter(x -> iseven(sum(x[2])+L), nnll)
 
    # Now for each (nn, ll) block we can generate all possible invariant basis 
    # functions. We assemble the symmetrization operator in triplet format, 
