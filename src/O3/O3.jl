@@ -8,44 +8,10 @@ using SparseArrays
 
 export coupling_coeffs
 
+include("O3_utils.jl")
+include("yyvector.jl")
+include("O3_transformations.jl")
 
-# ------------------------------------------------------- 
-
-#  NOTE: Ctran(L) is the transformation matrix from rSH to cSH. More specifically, 
-#        if we write Polynomials4ML rSH as R_{lm} and cSH as Y_{lm} and their 
-#        corresponding vectors of order L as R_L and Y_L, respectively. 
-#        Then R_L = Ctran(L) * Y_L. This suggests that the "D-matrix" for the 
-#        Polynomials4ML rSH is Ctran(l) * D(l) * Ctran(L)', where D, the 
-#        D-matrix for cSH. This inspires the following new CG recursion.
-
-# transformation matrix from RSH to CSH for different conventions
-function Ctran(i::Int64,j::Int64;convention = :SpheriCart)
-	if convention == :cSH
-		return i == j
-	end
-	
-	order_dict = Dict(:SpheriCart => [1,2,3,4], 
-                      :CondonShortley => [4,3,2,1], 
-                      :FHIaims => [4,2,3,1] )
-	val_list = [(-1)^(i), im, (-1)^(i+1)*im, 1] ./ sqrt(2)
-	if abs(i) != abs(j)
-		return 0 
-	elseif i == j == 0
-		return 1
-	elseif i > 0 && j > 0
-		return val_list[order_dict[convention][1]]
-	elseif i < 0 && j < 0
-		return val_list[order_dict[convention][2]]
-	elseif i < 0 && j > 0
-		return val_list[order_dict[convention][3]]
-	elseif i > 0 && j < 0
-		return val_list[order_dict[convention][4]]
-	end
-end
-
-Ctran(l::Int64; convention = :SpheriCart) = sparse(
-    Matrix{ComplexF64}([ Ctran(m,μ;convention=convention) 
-                         for m = -l:l, μ = -l:l ])) |> dropzeros
 
 
 # -----------------------------------------------------
@@ -55,7 +21,7 @@ Ctran(l::Int64; convention = :SpheriCart) = sparse(
 function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
              M_N::Int64; flag=:cSH) where N
     # @assert -L[N] ≤ M_N ≤ L[N] 
-    if m_filter(m, M_N;flag=flag) == false || L[1] < abs(m[1])
+    if mm_filter_single(m, M_N;flag=flag) == false || L[1] < abs(m[1])
         return 0.
     end
 
@@ -107,11 +73,24 @@ function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64};
         if vectorize == false && L[N] != 0
             error("""For the rSH basis, the CG coefficient is always a vector 
                      except for the case of L=0.""")
-        else
-            return (L[N] == 0 ? GCG(l,m,L,L[N];flag=flag) 
-                              : SA[[ GCG(l,m,L,M_N;flag=flag) 
-                                     for M_N in -L[N]:L[N] ]...]  )
         end
+        # return (L[N] == 0 ? GCG(l,m,L,L[N];flag=flag) 
+        #                   : SA[[ GCG(l,m,L,M_N;flag=flag) 
+        #                          for M_N in -L[N]:L[N] ]...]  )
+        admissible_m = filter( x -> abs(sum(x)) <= L[N], signed_mmset(m) )
+        C = zeros(ComplexF64, 2L[N]+1)
+        for mm in admissible_m
+            mm = SA[mm...]
+            GCG_loc = GCG(l,mm,L,sum(mm);flag=:cSH)
+            for M_N in signed_m(sum(mm))
+                C[M_N+L[N]+1] += GCG_loc * 
+                                Ctran(M_N,sum(mm);convention=flag)' * 
+                                prod( Ctran(m[i],mm[i];convention=flag) 
+                                      for i in 1:N )
+            end
+        end
+
+        return L[N] == 0 ? real(C[1]) : real(C)
     end
 end
 
@@ -160,22 +139,6 @@ function Sn(nn,ll)
     return [perm_indices;N+1]
 end
 
-function submset(lmax, lth)
-    # lmax stands for the l value of the subsection while lth is the length of 
-    # this subsection
-    if lth == 1
-        return [[l] for l in -lmax:lmax]
-    else
-        tmp = submset(lmax, lth-1)
-        mset = Vector{Vector{Int64}}([])
-        for t in tmp
-            set = identity.([[t..., l] for l in t[end]:lmax])
-            push!(mset, set...)
-        end
-    end
-    return mset
-end
-
 # The set of integers that has the same absolute value as m
 signed_m(m) = unique([m,-m]) 
 
@@ -184,56 +147,51 @@ signed_m(m) = unique([m,-m])
 signed_mmset(m) = Iterators.product([signed_m(m[i]) for i in 1:length(m)]...
                                    ) |> collect 
 
-function m_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64; 
+function mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64; 
                  flag=:cSH) where N
     if flag == :cSH
         return sum(mm) == k
     else
         # for the rSH, the criterion is that whether there exists a combinition 
         # of [+/- m_i]_i, such that the sum of the combination equals to k
-        mmset = signed_mmset(mm)
-        for m in mmset
-            if sum(m) == k
-                return true
-            end
-        end
-        return false
+        return any([sum(mm1) == k for mm1 in signed_mmset(mm)])
     end
 end
 
-# Function that generates the set of ordered m's given `n` and `l` with sum of 
-# m's equaling to k.
-#
-# NB: functino assumes lexicographical ordering
-#
-function m_generate(n::T,l::T,L,k;flag=:cSH) where T
-    @assert abs(k) ≤ L
-    S = Sn(n,l)
-    Nperm = length(S)-1
-    ordered_mset = [submset(l[S[i]], S[i+1]-S[i]) for i = 1:Nperm]
-    MM = []
-    Total_length = 0
-    for m_ord in Iterators.product(ordered_mset...)
-        m_ord_reshape = vcat(m_ord...)
-        if m_filter(m_ord_reshape, k; flag = flag)
-            class_m = vcat( Iterators.product( 
-                            [ multiset_permutations(m_ord[i], S[i+1]-S[i]) 
-                              for i in 1:Nperm]...)... )
-            push!(MM, [vcat(mm...) for mm in class_m])
-            Total_length += length(class_m)
-        end
+function mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64; 
+                 flag=:cSH) where N
+    if flag == :cSH
+        return abs(sum(mm)) <= L
+    else
+        # for the rSH, the criterion is that whether there exists a combinition 
+        # of [+/- m_i]_i, such that the sum of the combination equals to k
+        return any([abs.(sum(mm1)) <= L for mm1 in signed_mmset(mm)])
     end
-    return [ T.(MM[i]) for i = 1:length(MM) ], Total_length
 end
 
-# Function that generates the set of ordered m's given `n` and `l` with the 
-# absolute sum of m's being smaller than L.
-# orginal version: sum(m_generate(n,l,L,k;flag)[2] for k in -L:L), 
-#                  but this cannot be true anymore b.c. the m_classes can 
-#                  intersect
-m_generate(n,l,L;flag=:cSH) = 
-        union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...), 
-        sum(length.(union([m_generate(n,l,L,k;flag)[1] for k in -L:L]...))) 
+# Function that generates the set of ordered m's given `n` and `l` with 
+# the absolute sum of  m's smaller than or equal to `L`.
+#
+# NB: This function assumes lexicographical ordering
+
+function mm_generate(L::Int, ll::T, nn::T; 
+                     # PI = !(isnothing(nn)), 
+                     flag = :cSH) where {T} 
+    N = length(ll)
+    @assert length(ll) == length(nn)
+    # S = Sn(nn,ll)
+    ci = CartesianIndices(ntuple(t -> -ll[t]:ll[t], N))
+    MM = Vector{T}(undef, length(ci))
+    for (i, I) in enumerate(ci)
+        MM[i] = I.I 
+    end 
+
+    # No matter PI or not, this fcn always generates all admissible mm's
+    # and if PI, they are just filtered in _coupling_coeffs
+    _mm_filter = x -> mm_filter(x, L; flag)
+    
+    return MM[findall(x -> x==1, _mm_filter.(MM))]
+end
 
 function gram(X::Matrix{SVector{N,T}}) where {N,T}
     G = zeros(T, size(X,1), size(X,1))
@@ -321,12 +279,23 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
     
     return _coupling_coeffs(_L, _ll, _nn; PI = PI, flag = flag)
 end
-    
+
+function _sort(x::T, permutable_blocks::Vector{Vector{Int}}) where T
+    # Sorts the vector x according to the indices in permutable_blocks
+    # This is used to sort the equivalent classes of m's
+    x = Vector{eltype(x)}(x)
+    for block in permutable_blocks
+        x[block] = sort(x[block])
+    end
+    return T(x)
+end
+
 
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
 function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
                           PI = true, flag = :cSH, ordered = PI) where N
+
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
@@ -337,40 +306,43 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     Lset = SetLl(ll,L)
     r = length(Lset)
     T = L == 0 ? Float64 : SVector{2L+1,Float64}
-    if r == 0 
-        return zeros(T, 0, 0), SVector{N, Int}[]
-    else 
-        MMmat, size_m = m_generate(nn,ll,L;flag=flag) # classes of m's
-        FMatrix=zeros(T, r, length(MMmat)) # Matrix containing f(m,i)
-        UMatrix=zeros(T, r, size_m) # Matrix containing the the coupling coefs D
-        MM = SVector{N, Int}[] # all possible m's
-        MM_reduced = SVector{N, Int}[] # reduced m's - in the PI case, only the ordered 
-                                      # m's are kept, i.e. the first element of
-                                      # each class of m's
-        for i in 1:r
-            c = 0
-            for (j,m_class) in enumerate(MMmat)
-                for mm in m_class
-                    c += 1
-                    cg_coef = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
-                    FMatrix[i,j]+= cg_coef
-                    UMatrix[i,c] = cg_coef
-                end
-            end
-            @assert c==size_m
-        end 
-        for m_class in MMmat
-            push!(MM_reduced, sort(m_class)[1])
-            for mm in m_class
-                push!(MM, mm)
-            end
-        end      
-    end
 
+    if r == 0; return zeros(T, 0, 0), SVector{N, Int}[]; end
+
+    # there can only be non-trivial coupling coeffs if ∑ᵢ lᵢ + L is even
+    if isodd(sum(ll)+L) 
+        return zeros(T, 0, 0), SVector{N, Int}[]
+    end
+     
     if !PI
-        # return RE coupling coeffs if the permutation invariance is not needed
-        return UMatrix, [SA[mm[inv_perm]...] for mm in MM] # MM
+        MM = mm_generate(L, ll, nn; flag=flag) # all m's
+        UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
+        for (j,mm) in enumerate(MM)
+            for i in 1:r
+                UMatrix[i,j] = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+            end
+        end 
+        return UMatrix, [mm[inv_perm] for mm in MM]
     else
+        # permutation blocks - within which the nn and ll are identical
+        S = Sn(nn,ll)
+        permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
+
+        MM = mm_generate(L, ll, nn; flag=flag) # all admissible mm's
+        MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM ] # sort the mm's within the permutable blocks
+        MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
+        D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
+        
+        FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
+
+        for (j,mm) in enumerate(MM)
+            col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
+            for i in 1:r
+                FMatrix[i,col] += GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+            end
+        end 
+        
+        # Linear dependence
         U, S, V = svd(gram(FMatrix))
         rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here
         # return the RE-PI coupling coeffs

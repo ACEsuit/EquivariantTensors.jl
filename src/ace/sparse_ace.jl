@@ -1,22 +1,65 @@
 
 using SparseArrays: SparseMatrixCSC
 using LinearAlgebra: mul!
-import ChainRulesCore: NoTangent, rrule
+import ChainRulesCore: NoTangent, rrule, ZeroTangent
+import LuxCore: AbstractLuxLayer, initialparameters, initialstates, apply 
 
-struct SparseACE{T, TA, TAA}
+
+struct SparseACE{NL, TA, TAA, TSYM} <: AbstractLuxLayer
    abasis::TA
    aabasis::TAA
-   A2Bmap::SparseMatrixCSC{T, Int}
+   A2Bmaps::TSYM
+   LL::NTuple{NL, Int} 
+   lens::NTuple{NL, Int} 
    # ---- 
    meta::Dict{String, Any}
 end
 
-Base.length(tensor::SparseACE) = size(tensor.A2Bmap, 1) 
+function SparseACE(abasis, aabasis, A2Bmaps, meta) 
+   LL = []
+   lens = [] 
+   for i = 1:length(A2Bmaps)
+      tLp1 = length(A2Bmaps[i][1])
+      push!(LL, (tLp1 - 1) ÷ 2)
+      push!(lens, size(A2Bmaps[i], 1))
+   end
+   SparseACE(abasis, aabasis, A2Bmaps, 
+             tuple(LL...), tuple(lens...), meta)
+end
+
+Base.length(tensor::SparseACE) = sum(tensor.lens)
+
+function Base.length(tensor::SparseACE, L::Integer)
+   for (il, l) in enumerate(tensor.LL)
+      if l == L
+         return tensor.lens[il]
+      end
+   end
+   error("Layer does not have an for L = $L output")
+end
+
+function Base.show(io::IO, l::SparseACE)
+   print(io, "SparseACE(L = $(l.LL))")
+end
 
 
+# ----------------------------------------
+# Lux integration 
+
+(l::SparseACE)(BB::Tuple, ps, st) = evaluate(l, BB..., ps, st), st 
+
+initialstates(rng::AbstractRNG, layer::SparseACE) = NamedTuple() 
+
+initialparameters(rng::AbstractRNG, layer::SparseACE) = NamedTuple()
+
+
+# ----------------------------------------
+# evaluation kernels 
+
+#=
 function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
-   TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -26,38 +69,68 @@ function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
 
    # evaluate the coupling coefficients
    # B = tensor.A2Bmap * AA
+
    mul!(B, tensor.A2Bmap, AA)   
 
    return B
 end
 
 function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
-   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
-   TB = promote_type(TA, eltype(tensor.A2Bmap))
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   TB = _promote_mul_type(TA, eltype(tensor.A2Bmap))
    return TB, length(tensor)
 end
 
-function evaluate(tensor::SparseACE, Rnl, Ylm)
+=#
+
+evaluate(tensor::SparseACE, Rnl, Ylm) = 
+      evaluate(tensor, Rnl, Ylm, NamedTuple(), NamedTuple()) 
+
+#=
+function evaluate(tensor::SparseACE, Rnl, Ylm, ps, st)
    allocinfo = whatalloc(evaluate!, tensor, Rnl, Ylm)
    B = zeros(allocinfo...)
    return evaluate!(B, tensor, Rnl, Ylm)
 end
+=#
 
+function evaluate(tensor::SparseACE, Rnl, Ylm, ps, st)
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   A = zeros(TA, length(tensor.abasis))    # use Bumper here
+   evaluate!(A, tensor.abasis, (Rnl, Ylm))
+
+   # evaluate the AA basis
+   AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
+   evaluate!(AA, tensor.aabasis, A)
+
+   # evaluate the coupling coefficients
+   BB = tensor.A2Bmaps .* Ref(AA)
+   return BB
+end 
 
 # ---------
 
 
 function pullback!(∂Rnl, ∂Ylm, 
-                   ∂B, tensor::SparseACE, Rnl, Ylm, A)
+                   ∂BB, tensor::SparseACE, Rnl, Ylm, A)
 
    @no_escape begin 
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                            
    # ∂Ei / ∂AA = ∂Ei / ∂B * ∂B / ∂AA = (WB[i_z0]) * A2Bmap
    # ∂AA = tensor.A2Bmap' * ∂B   
-   T_∂AA = promote_type(eltype(∂B), eltype(tensor.A2Bmap))
-   ∂AA = @alloc(T_∂AA, size(tensor.A2Bmap, 2))
-   mul!(∂AA, tensor.A2Bmap', ∂B)
+   # T_∂AA = promote_type(eltype(∂B), eltype(tensor.A2Bmap))
+   # ∂AA = @alloc(T_∂AA, size(tensor.A2Bmap, 2))
+   # mul!(∂AA, tensor.A2Bmap', ∂B)
+   # ∂AA = tensor.A2Bmap' * ∂B
+   # T_∂AA = eltype(∂AA)
+   # Dexuan's draft: 
+   #  for (i, ∂Bᵢ) in enumerate(∂BB)
+   #      ∂AA .+= tensor.A2Bmaps[i]' * ∂Bᵢ
+   #  end   
+   ∂AA = sum( tensor.A2Bmaps[i]' * ∂BB[i] 
+              for i = 1:length(∂BB) )
+   T_∂AA = eltype(∂AA)
 
    # ∂Ei / ∂A = ∂Ei / ∂AA * ∂AA / ∂A = pullback(aabasis, ∂AA)
    T_∂A = promote_type(T_∂AA, eltype(A))
@@ -74,26 +147,29 @@ function pullback!(∂Rnl, ∂Ylm,
 end
 
 function whatalloc(::typeof(pullback!),  
-                   ∂B, tensor::SparseACE{T}, Rnl, Ylm
-                   ) where {T} 
-   TA = promote_type(T, eltype(∂B), eltype(Rnl), eltype(eltype(Ylm)))
+                   ∂BB, tensor::SparseACE, Rnl, Ylm
+                   )
+   # TODO: may need to check the type of ∂BB too, but this is a bit 
+   #       tricky because of the SVectors that can be in there...
+   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
    return (TA, size(Rnl)...), (TA, size(Ylm)...)
 end
 
-function pullback(∂B, tensor::SparseACE{T}, Rnl, Ylm, A) where {T} 
-   alc_∂Rnl, alc_∂Ylm = whatalloc(pullback!, ∂B, tensor, Rnl, Ylm)
+function pullback(∂BB, tensor::SparseACE{T}, Rnl, Ylm, A) where {T}
+   alc_∂Rnl, alc_∂Ylm = whatalloc(pullback!, ∂BB, tensor, Rnl, Ylm)
    ∂Rnl = zeros(alc_∂Rnl...)
    ∂Ylm = zeros(alc_∂Ylm...)
-   return pullback!(∂Rnl, ∂Ylm, ∂B, tensor, Rnl, Ylm, A)
+   return pullback!(∂Rnl, ∂Ylm, ∂BB, tensor, Rnl, Ylm, A)
 end
 
 
 # ChainRules integration 
+using ChainRulesCore: unthunk 
 
-function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
+function rrule(::typeof(evaluate), tensor::SparseACE, Rnl, Ylm, ps, st)
 
    # evaluate the A basis
-   TA = promote_type(T, eltype(Rnl), eltype(eltype(Ylm)))
+   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -102,43 +178,17 @@ function rrule(::typeof(evaluate), tensor::SparseACE{T}, Rnl, Ylm) where {T}
    evaluate!(AA, tensor.aabasis, A)
 
    # evaluate the coupling coefficients
-   B = tensor.A2Bmap * AA
+   BB = tensor.A2Bmaps .* Ref(AA)
 
-   function pb(∂B)
-      ∂Rnl, ∂Ylm = pullback(∂B, tensor, Rnl, Ylm, A)
-      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm
+   function pb(∂BB)
+      ∂Rnl, ∂Ylm = pullback(unthunk.(∂BB), tensor, Rnl, Ylm, A)
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, ZeroTangent(), NoTangent() 
    end
-   return B, pb
+   return BB, pb
 end
 
 
 #=
-
-# ----------------------------------------
-#  utilities 
-
-"""
-Get the specification of the BBbasis as a list (`Vector`) of vectors of `@NamedTuple{n::Int, l::Int}`.
-
-### Parameters 
-
-* `tensor` : a SparseACE, possibly from ACEModel
-"""
-function get_nnll_spec(tensor::SparseACE{T}) where {T}
-   _nl(bb) = [(n = b.n, l = b.l) for b in bb]
-   # assume the new ACE model NEVER has the z channel
-   spec = tensor.aabasis.meta["AA_spec"]
-   nBB = size(tensor.A2Bmap, 1)
-   nnll_list = Vector{NT_NL_SPEC}[]
-   for i in 1:nBB
-      AAidx_nnz = tensor.A2Bmap[i, :].nzind
-      bbs = spec[AAidx_nnz]
-      @assert all([bb == _nl(bbs[1]) for bb in _nl.(bbs)])
-      push!(nnll_list, _nl(bbs[1]))
-   end
-   @assert length(nnll_list) == nBB
-   return nnll_list
-end
 
 
 
