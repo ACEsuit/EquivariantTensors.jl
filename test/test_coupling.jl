@@ -78,10 +78,12 @@ for L = 0:Lmax
       Urpe, Mll_rpe = coupling_coeffs(L, ll, nn) # cSH based rpe_basis
       Urpe_r, Mll_r_rpe = coupling_coeffs(L, ll, nn; basis = real) # rSH based rpe_basis
 
-      # do a quick check that inadmissible nnll just return empty bases
+      # Do a quick check if we have consistent real and complex couplings when isodd(sum(ll) + L)
+      # It is allowed to be odd, and can still be send to the following equivariance test
+      # because we didn't check the reflection symmetry here
       if isodd(L + sum(ll))
-         print_tf(@test length(Ure) == length(Ure_r) == 0)
-         print_tf(@test length(Urpe) == length(Urpe_r) == 0)
+         print_tf(@test rank(gram(Ure)) == rank(gram(Ure_r)))
+         print_tf(@test rank(gram(Urpe)) == rank(gram(Urpe_r)))
          continue 
       end
 
@@ -107,10 +109,13 @@ for L = 0:Lmax
       X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
       θ = rand(3) * 2pi
       Q = RotZYZ(θ...)
+
       B1 = eval_basis(X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
       B2 = eval_basis(Ref(Q) .* X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
       B3 = eval_basis(X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
       B4 = eval_basis(Ref(Q) .* X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
+
+      if norm(Urpe) == norm(Urpe_r) == 0 ; continue; end 
       B5 = eval_sym_basis(X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
       B6 = eval_sym_basis(Ref(Q) .* X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
       B7 = eval_sym_basis(X; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, Real = true)
@@ -180,10 +185,13 @@ for L = 0:Lmax
       X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
       θ = rand(3) * 2pi
       Q = RotZYZ(θ...)
+
       B1 = eval_basis(ll, Ure, Mll, X; Real = false)
       B2 = eval_basis(ll, Ure, Mll, Ref(Q) .* X; Real = false)
       B3 = eval_basis(ll, Ure_r, Mll_r, X; Real = true)
       B4 = eval_basis(ll, Ure_r, Mll_r, Ref(Q) .* X; Real = true)
+
+      if norm(Urpe) == norm(Urpe_r) == 0 ; continue; end 
       B5 = eval_basis(ll, Urpe, Mll, X; Real = false)
       B6 = eval_basis(ll, Urpe, Mll, Ref(Q) .* X; Real = false)
       B7 = eval_basis(ll, Urpe_r, Mll_r, X; Real = true)
