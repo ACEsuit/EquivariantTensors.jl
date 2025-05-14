@@ -92,7 +92,11 @@ function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64};
             end
         end
 
-        return L[N] == 0 ? real(C[1]) : real(C)
+        if norm(C - real(C)) < 1e-12
+            C = real(C)
+        end
+
+        return L[N] == 0 ? C[1] : C
     end
 end
 
@@ -302,15 +306,11 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
 
     Lset = SetLl(ll,L)
     r = length(Lset)
-    T = L == 0 ? Float64 : SVector{2L+1,Float64}
+    TP = (flag == :cSH || iseven(sum(ll)+L)) ? Float64 : ComplexF64
+    T = L == 0 ? TP : SVector{2L+1,TP}
 
     if r == 0; return zeros(T, 0, 0), SVector{N, Int}[]; end
 
-    # there can only be non-trivial coupling coeffs if ∑ᵢ lᵢ + L is even
-    if isodd(sum(ll)+L) 
-        return zeros(T, 0, 0), SVector{N, Int}[]
-    end
-     
     if !PI
         MM = mm_generate(L, ll, nn; flag=flag) # all m's
         UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
