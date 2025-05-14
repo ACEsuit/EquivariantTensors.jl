@@ -105,4 +105,4 @@ _evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}) = A * evaluate(m, 
 φ  = _evaluate(model, 𝐫)
 φQ = _evaluate(model, Q𝐫)
 
-@show Q * φ - φQ
+@show Q * φ ≈ φQ
