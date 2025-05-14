@@ -98,8 +98,7 @@ Q𝐫 = Ref(Q) .* 𝐫[perm]
 @show DQ * φ ≈ φQ
 
 const A = [0 0 1; 1 0 0; 0 1 0] 
-# A is the transformation from SpheriCart rSH to CondonShortley rSH
-# while CondonShortley rSH is actually a Cartesian basis
+# A is the transformation from SpheriCart rSH to CondonShortley rSH + a fixed transformation
 _evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}) = A * evaluate(m, 𝐫)
 
 φ  = _evaluate(model, 𝐫)
