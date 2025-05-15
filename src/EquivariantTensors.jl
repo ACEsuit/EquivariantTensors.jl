@@ -10,7 +10,7 @@ import ChainRulesCore: rrule, frule
 
 using ForwardDiff: Dual, extract_derivative 
 
-export O3 
+export SO3, O3
 
 include("generics.jl")
 
@@ -22,6 +22,7 @@ include("ace/sparse_ace.jl")
 include("ace/sparse_ace_utils.jl")
 
 # O3 symmetrization
+include("SO3/SO3.jl")
 include("O3/O3.jl")
 # O3/O3_transformations.jl
 # O3/yyvector.jl 

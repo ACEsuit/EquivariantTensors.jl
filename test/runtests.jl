@@ -23,7 +23,8 @@ end
     @testset "SYYVector" begin include("test_yyvector.jl"); end
     @testset "Clebsch Gordan Coeffs" begin include("test_clebschgordans.jl"); end
     @testset "Representation" begin include("test_representation.jl"); end
-    @testset "Coupling Coeffs" begin include("test_coupling.jl"); end
+    @testset "SO3 Coupling Coeffs" begin include("test_SO3_coupling.jl"); end
+    @testset "O3 Coupling Coeffs" begin include("test_O3_coupling.jl"); end
 end 
 
 end

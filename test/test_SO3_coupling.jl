@@ -1,5 +1,5 @@
 using Test, EquivariantTensors, StaticArrays, SpheriCart, Combinatorics
-using EquivariantTensors.O3: Ctran, coupling_coeffs, gram
+using EquivariantTensors.SO3: Ctran, coupling_coeffs, gram
 using PartialWaveFunctions: clebschgordan
 using LinearAlgebra, Random
 using WignerD, Rotations, BlockDiagonals
@@ -9,19 +9,19 @@ isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 # The full test set is quite large and takes a while, for a quick sanity test 
 # it is better to keep the test small so it runs quickly. 
 #
-___O3_TESTS___ = :small 
-# :___O3_TESTS___ = :large
+___SO3_TESTS___ = :small 
+# :___SO3_TESTS___ = :large
 
 
 ##
 
-if ___O3_TESTS___ == :small
+if ___SO3_TESTS___ == :small
    @info("Using SMALL couplings test set")
    Lmax = 2
    lmax = 4 
    nmax = 4 
    ORDmax = 3 
-elseif ___O3_TESTS___ == :large
+elseif ___SO3_TESTS___ == :large
    @info("Using LARGE couplings test set")
    Lmax = 4
    lmax = 4 
