@@ -138,7 +138,39 @@ function eval_basis(Rs; coeffs, MM, ll, nn, Real = false)
 
    return BB
 end
- 
+
+function eval_AA_basis(Rs; MM, ll, nn, Real = false, sym = true)
+   @assert minimum(nn) >= 1 # radial basis indexing starts at 1 not 0. 
+   # @assert length(Rs) == length(MM) # only for the non-sym basis!!
+
+   # correlation order 
+   ORD = length(ll) 
+   @assert length(nn) == ORD
+   @assert all( length(mm) == ORD for mm in MM )
+
+   # spherical harmonics 
+   Lmax = maximum(ll)
+   _Ylm = Real ? rYlm : cYlm
+   Y = [ _Ylm(Lmax, 𝐫) for 𝐫 in Rs ]
+
+   # radial basis 
+   T = [ eval_cheb(𝐫, maximum(nn)) for 𝐫 in Rs ]
+   A = sum( Y[j] * T[j]' for j = 1:length(Rs) )
+
+   TP = Real ? Float64 : ComplexF64
+   AA = zeros(TP, length(MM))
+   for (i_mm,mm) in enumerate(MM)
+      ii_lm = [ lm2idx(ll[α], mm[α]) for α in 1:ORD ]
+      if sym
+         AA[i_mm] = prod( A[ii_lm[α], nn[α]] for α = 1:ORD )
+      else
+         AA[i_mm] = prod( Y[α][ii_lm[α]] * T[α][nn[α]] for α = 1:ORD )
+      end
+   end 
+
+   return AA
+end
+
 # same as `eval_basis` except that we first pool the inputs, this means the 
 # output will be permutation-invariant as in ACE.
 #
