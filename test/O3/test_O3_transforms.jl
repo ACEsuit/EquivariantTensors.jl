@@ -31,3 +31,45 @@ for L1 = 0:2, L2 = 0:2, basis in (real, complex)
    # println() 
 end
 
+##
+
+@info("Test O3 Yvector -> Cart Vec transformation")
+let basis = real, L = 1
+   trans = O3.TYVec2CartVec(basis) 
+   ybasis = ( basis == real ? real_sphericalharmonics(L)
+                            : complex_sphericalharmonics(L) )
+   𝐫 = @SVector randn(3)
+   θ = π * rand(3)
+   Q = O3.Q_from_angles(θ)
+   y1 = O3.SYYVector(ybasis(𝐫))
+   y2 = SVector(y1[(1,-1)], y1[(1,0)], y1[(1,1)])
+   y3 = Array(y2)
+
+   y1Q = O3.SYYVector(ybasis(Q*𝐫))
+   y2Q = SVector(y1Q[(1,-1)], y1Q[(1,0)], y1Q[(1,1)])
+   y3Q = Array(y2Q)
+
+   print_tf(@test( trans(y1Q) ≈ Q * trans(y1)  ))
+   print_tf(@test( trans(y2Q) ≈ Q * trans(y2)  ))
+   print_tf(@test( trans(y3Q) ≈ Q * trans(y3)  ))
+end
+println() 
+
+
+##
+
+@info("Test O3 Yvector -> Cart Mat transformation")
+let basis = real, L = 2
+   trans = O3.TYVec2CartMat(basis) 
+   ybasis = ( basis == real ? real_sphericalharmonics(L)
+                            : complex_sphericalharmonics(L) )
+   for _ = 1:10                            
+      𝐫 = @SVector randn(3)
+      θ = π * rand(3)
+      Q = O3.Q_from_angles(θ)
+      y = O3.SYYVector(ybasis(𝐫))
+      yQ = O3.SYYVector(ybasis(Q*𝐫))
+      print_tf(@test( trans(yQ) ≈ Q * trans(y) * Q' )) 
+   end 
+end
+println() 
