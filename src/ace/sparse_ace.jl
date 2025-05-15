@@ -151,7 +151,8 @@ function whatalloc(::typeof(pullback!),
                    )
    # TODO: may need to check the type of ∂BB too, but this is a bit 
    #       tricky because of the SVectors that can be in there...
-   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
+   TB = eltype.(eltype.(∂BB))
+   TA = promote_type(eltype(Rnl), eltype(Ylm), TB...)
    return (TA, size(Rnl)...), (TA, size(Ylm)...)
 end
 
