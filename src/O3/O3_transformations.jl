@@ -56,3 +56,25 @@ function (t::TYVec2CartVec)(y::AbstractVector)
    @assert length(y) == 3 
    return SVector(y[3], y[1], y[2])
 end
+
+
+""" 
+   struct TYVec2CartMat 
+
+transformation from a real Y vector to a cartesian matrix; accepts as input 
+either an `SVector{3}`` (i.e. the Y_1^m) or a `SYYVector` (containing both 
+the Y_0^0 and Y_1^m); the output is a `SMatrix{3,3}`.
+"""
+struct TYVec2CartMat{TT}
+   ty::TYVec2YMat{1, 1, TT}
+end
+
+TYVec2CartMat(basis::typeof(real)) = TYVec2CartMat(TYVec2YMat(1, 1; basis = real))
+
+TYVec2CartMat(basis::typeof(complex)) = error("Complex basis not supported for TYVec2CartMat")
+
+function (t::TYVec2CartMat)(y::SYYVector)
+   Hy = SMatrix{3,3}(t.ty(y))
+   P = SMatrix{3,3}(0, 1, 0, 0, 0, 1, 1, 0, 0)
+   return P * Hy * P' 
+end

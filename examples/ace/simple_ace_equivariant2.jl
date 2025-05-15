@@ -138,12 +138,3 @@ Q𝐫 = Ref(Q) .* 𝐫[perm]
 φ  = evaluate(model, 𝐫; basis = real)
 φQ = evaluate(model, Q𝐫; basis = real)
 @show rD * φ * rD' ≈ φQ
-
-const A = [0 0 1; 1 0 0; 0 1 0] 
-# A is the transformation from SpheriCart rSH (y,z,x) to Cart. vec (x,y,z)
-_evaluate(m::SimpleACE4, 𝐫::AbstractVector{<: SVector{3}}) = A * evaluate(m, 𝐫) * A'
-
-φ  = _evaluate(model, 𝐫)
-φQ = _evaluate(model, Q𝐫)
-
-@show Q * φ * Q' ≈ φQ

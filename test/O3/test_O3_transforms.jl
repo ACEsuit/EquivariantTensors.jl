@@ -53,4 +53,23 @@ let basis = real, L = 1
    print_tf(@test( trans(y2Q) ≈ Q * trans(y2)  ))
    print_tf(@test( trans(y3Q) ≈ Q * trans(y3)  ))
 end
+println() 
 
+
+##
+
+@info("Test O3 Yvector -> Cart Mat transformation")
+let basis = real, L = 2
+   trans = O3.TYVec2CartMat(basis) 
+   ybasis = ( basis == real ? real_sphericalharmonics(L)
+                            : complex_sphericalharmonics(L) )
+   for _ = 1:10                            
+      𝐫 = @SVector randn(3)
+      θ = π * rand(3)
+      Q = O3.Q_from_angles(θ)
+      y = O3.SYYVector(ybasis(𝐫))
+      yQ = O3.SYYVector(ybasis(Q*𝐫))
+      print_tf(@test( trans(yQ) ≈ Q * trans(y) * Q' )) 
+   end 
+end
+println() 
