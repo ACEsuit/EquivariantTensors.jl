@@ -112,7 +112,7 @@ end
 
 
 function pullback!(∂Rnl, ∂Ylm, 
-                   ∂B, tensor::SparseACE, Rnl, Ylm, A)
+                   ∂BB, tensor::SparseACE, Rnl, Ylm, A)
 
    @no_escape begin 
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -124,7 +124,12 @@ function pullback!(∂Rnl, ∂Ylm,
    # mul!(∂AA, tensor.A2Bmap', ∂B)
    # ∂AA = tensor.A2Bmap' * ∂B
    # T_∂AA = eltype(∂AA)
-   ∂AA = tensor.A2Bmaps[1]' * ∂B 
+   # Dexuan's draft: 
+   #  for (i, ∂Bᵢ) in enumerate(∂BB)
+   #      ∂AA .+= tensor.A2Bmaps[i]' * ∂Bᵢ
+   #  end   
+   ∂AA = sum( tensor.A2Bmaps[i]' * ∂BB[i] 
+              for i = 1:length(∂BB) )
    T_∂AA = eltype(∂AA)
 
    # ∂Ei / ∂A = ∂Ei / ∂AA * ∂AA / ∂A = pullback(aabasis, ∂AA)
@@ -142,22 +147,20 @@ function pullback!(∂Rnl, ∂Ylm,
 end
 
 function whatalloc(::typeof(pullback!),  
-                   ∂B, tensor::SparseACE, Rnl, Ylm
+                   ∂BB, tensor::SparseACE, Rnl, Ylm
                    )
-   TA = promote_type(eltype(∂B), eltype(Rnl), eltype(eltype(Ylm)))
+   # TODO: may need to check the type of ∂BB too, but this is a bit 
+   #       tricky because of the SVectors that can be in there...
+   TB = eltype.(eltype.(∂BB))
+   TA = promote_type(eltype(Rnl), eltype(Ylm), TB...)
    return (TA, size(Rnl)...), (TA, size(Ylm)...)
 end
 
 function pullback(∂BB, tensor::SparseACE{T}, Rnl, Ylm, A) where {T}
-   # NOTE: this currently works only with invariant anyhow, i.e. scalar 
-   #       ouputs, so let's implicitly assume this and make it fail when 
-   #       it doesn't. 
-   @assert length(∂BB) == 1 
-   ∂B = ∂BB[1] 
-   alc_∂Rnl, alc_∂Ylm = whatalloc(pullback!, ∂B, tensor, Rnl, Ylm)
+   alc_∂Rnl, alc_∂Ylm = whatalloc(pullback!, ∂BB, tensor, Rnl, Ylm)
    ∂Rnl = zeros(alc_∂Rnl...)
    ∂Ylm = zeros(alc_∂Ylm...)
-   return pullback!(∂Rnl, ∂Ylm, ∂B, tensor, Rnl, Ylm, A)
+   return pullback!(∂Rnl, ∂Ylm, ∂BB, tensor, Rnl, Ylm, A)
 end
 
 

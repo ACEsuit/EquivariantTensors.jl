@@ -28,16 +28,14 @@ function symmetrisation_matrix(L::Integer, mb_spec;
 
    # generate a first naive 𝔸 specification that doesn't take into account 
    # any symmetries at all. 
-   #   TODO: this should be shifted into the symmetrisation operator constructor
-   #
-   # 
    # NOTE: this is not efficient and could be done on the fly while generating 
    #       the symmetrization operator. But for now it works and is easy to use.
    #
    # Vector{Vector{NT_NLM}}
    𝔸spec = _auto_nnllmm_spec(mb_spec)
    
-   # convert an element of 𝔸spec to nn, ll, mm 
+   # convert an element of 𝔸spec to nn, ll, mm, which is the format 
+   # used by the coupling_coeffs function 
    function _vecnt2nnllmm(bb)
       nn = [ b.n for b in bb ]
       ll = [ b.l for b in bb ]
@@ -45,19 +43,13 @@ function symmetrisation_matrix(L::Integer, mb_spec;
       return nn, ll, mm
    end
 
-   # convert nn, ll, mm to a search key, by lexicographical sorting 
-   # _bb_key(nn, ll, mm) = sort([ (n, l, m) for (n, l, m) in zip(nn, ll, mm) ])
-   # _bb_key(bb) = _bb_key( _vecnt2nnllmm(bb)... )
-   _bb_key(nn, ll, mm) = hash(sort([ (n, l, m) for (n, l, m) in zip(nn, ll, mm) ]))
-   _bb_key(bb::Vector{<: NamedTuple}) = hash(sort([ (b.n, b.l, b.m) for b in bb ]))
+   # convert nn, ll, mm or bb to a unique search key for searching in 𝔸spec
+   _bb_key(nnllmm::Tuple) = _bb_key(nnllmm[1], nnllmm[2], nnllmm[3])
+   _bb_key(nn, ll, mm) = sort([ (n, l, m) for (n, l, m) in zip(nn, ll, mm) ])
+   _bb_key(bb::Vector{<: NamedTuple}) = sort([ (b.n, b.l, b.m) for b in bb ])
 
    # create a lookup into 𝔸spec 
-   # (we aren't using `invmap` to avoid an intermediate allocation needed to 
-   #  transform from 𝔸spec to unique keys)
-   inv_𝔸spec = Dict{UInt, Int}() 
-   for (i, bb) in enumerate(𝔸spec)
-      inv_𝔸spec[_bb_key(bb)] = i 
-   end
+   inv_𝔸spec = invmap(𝔸spec, _bb_key)
 
    # extract all unique (nn, ll) blocks, since the (ll, mm) will only be used 
    # in generating the coupled / symmetrized basis functions
@@ -67,18 +59,19 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    # functions. We assemble the symmetrization operator in triplet format, 
    # which can conveniently account for double-counting of entries.
 
-   # NB : HACK TO DISTINGUISH L = 0 and L > 0 
+   # NB : HACK TO DISTINGUISH L = 0 and L > 0
+   #      this should potentially be revisited in the future 
    TVAL = L == 0 ? Float64 : SVector{2*L+1, Float64}
    irow = Int[]; jcol = Int[]; val = TVAL[]
 
-   # counter for total number of invariant (or equivariant) basis functions
+   # counter for total number of equivariant basis functions
    num𝔹 = 0 
    for (nn, ll) in nnll
       # here the kwargs... should be PI and basis 
-      cc, MM = O3new.coupling_coeffs(L, ll, nn; kwargs...)
+      cc, MM = O3.coupling_coeffs(L, ll, nn; kwargs...)
       num_b = size(cc, 1)   
       # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
-      idx_𝔸 = [inv_𝔸spec[_bb_key(nn, ll, mm)] for mm in MM] 
+      idx_𝔸 = [inv_𝔸spec[ (nn, ll, mm) ] for mm in MM] 
       # add the new basis functions to the triplet format
       for q = 1:num_b 
          num𝔹 += 1

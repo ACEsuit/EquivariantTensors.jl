@@ -315,6 +315,7 @@ end
 function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
                           PI = true, flag = :cSH) where N
 
+
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
     nn, ll, inv_perm = lexi_ord(nn, ll)
@@ -322,7 +323,13 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     Lset = SetLl(ll,L)
     r = length(Lset)
     T = L == 0 ? Float64 : SVector{2L+1,Float64}
+
     if r == 0; return zeros(T, 0, 0), SVector{N, Int}[]; end
+
+    # there can only be non-trivial coupling coeffs if ∑ᵢ lᵢ + L is even
+    if isodd(sum(ll)+L) 
+        return zeros(T, 0, 0), SVector{N, Int}[]
+    end
      
     if flag == :cSH
         if !PI

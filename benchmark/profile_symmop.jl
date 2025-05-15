@@ -16,7 +16,7 @@ ybasis = P4ML.complex_sphericalharmonics(maxl)
 Ylm_spec = P4ML.natural_indices(ybasis)
 
 # generate the nnll basis pre-specification
-nnll_long = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
+nnll_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
                   minn = 0, maxn = Dtot, maxl = maxl, 
                   level = bb -> sum((b.n + b.l) for b in bb; init=0), 
                   maxlevel = Dtot)
@@ -27,7 +27,7 @@ nnll_long = ET.sparse_nnll_set(; L = 0, ORD = ORD,
 # else will be handled by the symmetrization operator within the model 
 # construction; along the way we will also prune the nnll list.
 @time 𝔹basis = ET.sparse_equivariant_tensor(; 
-            L = 0, mb_spec = nnll_long, 
+            L = 0, mb_spec = nnll_spec, 
             Rnl_spec = Rn_spec, 
             Ylm_spec = Ylm_spec, 
             basis = complex, )

@@ -26,7 +26,7 @@ function evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}})
    Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
    Ylm = P4ML.evaluate(m.ybasis, 𝐫)
    # [2] feed the Rn, Ylm embeddings through the sparse ACE model 
-   𝔹 = ET.evaluate(m.symbasis, Rn, Ylm)
+   𝔹, = ET.evaluate(m.symbasis, Rn, Ylm)
    # [3] the model output value is the dot product with the parameters 
    return sum(m.params .* 𝔹)
 end
@@ -96,3 +96,23 @@ Q𝐫 = Ref(Q) .* 𝐫[perm]
 φQ = evaluate(model, Q𝐫)
 
 @show DQ * φ ≈ φQ
+
+##
+
+@info("Different ways to transform the Ylm output to a cartesian vector")
+
+const A = [0 0 1; 1 0 0; 0 1 0] 
+# A is the transformation from SpheriCart rSH (y,z,x) to Cart. vec (x,y,z)
+_evaluate(m::SimpleACE3, 𝐫::AbstractVector{<: SVector{3}}) = A * evaluate(m, 𝐫)
+φ  = _evaluate(model, 𝐫)
+φQ = _evaluate(model, Q𝐫)
+@show Q * φ ≈ φQ
+
+# For model building it can be more convenient to use the internal 
+# datatypes that perform this operation.
+
+tcart = ET.O3.TYVec2CartVec() 
+@show Q * tcart(evaluate(model, 𝐫)) ≈ tcart(evaluate(model, Q𝐫))
+@show ( Q * tcart(ET.O3.yvector(0.0, evaluate(model, 𝐫))) 
+        ≈ tcart(ET.O3.yvector(nothing, evaluate(model, Q𝐫))))
+

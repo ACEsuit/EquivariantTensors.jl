@@ -45,7 +45,6 @@ for L = 0:Lmax
    for ORD = 2:ORDmax
       for ll in with_replacement_combinations(1:lmax, ORD) 
          # 0 or 1 above ?
-         if !iseven(sum(ll)+L); continue; end  # This is to ensure the reflection symmetry
          if sum(ll) > 2 * lmax; continue; end 
          for Inn in CartesianIndices( ntuple(_->1:nmax, ORD) )
             nn = [ Inn.I[α] for α = 1:ORD ]
@@ -67,6 +66,7 @@ for L = 0:Lmax
    nnll_list = ultra_short_nnll_list
 
    for (itest, (nn, ll)) in enumerate(nnll_list)
+      local N 
       nn = shuffle(nn)
       ll = shuffle(ll)
       # @show nn, ll
@@ -77,6 +77,13 @@ for L = 0:Lmax
       Ure_r, Mll_r = coupling_coeffs(L, ll, nn; PI = false, basis = real) # rSH based re_basis
       Urpe, Mll_rpe = coupling_coeffs(L, ll, nn) # cSH based rpe_basis
       Urpe_r, Mll_r_rpe = coupling_coeffs(L, ll, nn; basis = real) # rSH based rpe_basis
+
+      # do a quick check that inadmissible nnll just return empty bases
+      if isodd(L + sum(ll))
+         print_tf(@test length(Ure) == length(Ure_r) == 0)
+         print_tf(@test length(Urpe) == length(Urpe_r) == 0)
+         continue 
+      end
 
       rk = rank(gram(Ure), rtol = 1e-12)
       rk_r = rank(gram(Ure_r), rtol = 1e-12)
@@ -145,6 +152,7 @@ for L = 0:Lmax
    @info("Using short ll list for testing the case L = $L with the absence of nn")
    ll_list = [ nnll_list[i][2] for i in 1:length(nnll_list) ] |> unique
    for (itest, ll) in enumerate(ll_list)
+      local N 
       N = length(ll)
 
       Ure, Mll = coupling_coeffs(L, ll; PI = false) # cSH based re_basis
