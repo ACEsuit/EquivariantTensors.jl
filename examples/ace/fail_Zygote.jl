@@ -66,7 +66,7 @@ ps, st = Lux.setup(rng, model)
 φ, _ = Lux.apply(model, 𝐫, ps, st)
 
 # ==========================
-# Pullback Test (fails currently)
+# Pullback Test (should succeed)
 # ==========================
 val, pb = Zygote.pullback(𝐫 -> Lux.apply(model, 𝐫, ps, st)[1], 𝐫)
 pb(val)
@@ -116,4 +116,4 @@ val2, pb2 = Zygote.pullback(φ1 -> Lux.apply(model2, φ1, ps2, st2)[1], φ1)
 # ==========================
 val1, pb1 = Zygote.pullback(𝐫 -> Lux.apply(model1, 𝐫, ps1, st1)[1], 𝐫)
 pb1(val1)         # should succeed
-pb1(∂BB)          # fails
+pb1(∂BB)          # should succeed
