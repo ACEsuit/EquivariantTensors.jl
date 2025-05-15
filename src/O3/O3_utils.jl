@@ -10,30 +10,31 @@ import PartialWaveFunctions, WignerD
 
 # transformation matrix from RSH to CSH for different conventions
 
-# function Ctran(i::Int64,j::Int64;convention = :SpheriCart)
-# 	if convention == :cSH
-# 		return i == j
-# 	end
-	
-# 	order_dict = Dict(:SpheriCart => [1,2,3,4], 
-#                       :CondonShortley => [4,3,2,1], 
-#                       :FHIaims => [4,2,3,1] )
+const order_dict = Dict(:SpheriCart => [1,2,3,4], 
+                      :CondonShortley => [4,3,2,1], 
+                      :FHIaims => [4,2,3,1] )
 
-# 	val_list = [(-1)^(i), im, (-1)^(i+1)*im, 1] ./ sqrt(2)
-# 	if abs(i) != abs(j)
-# 		return 0 
-# 	elseif i == j == 0
-# 		return 1
-# 	elseif i > 0 && j > 0
-# 		return val_list[order_dict[convention][1]]
-# 	elseif i < 0 && j < 0
-# 		return val_list[order_dict[convention][2]]
-# 	elseif i < 0 && j > 0
-# 		return val_list[order_dict[convention][3]]
-# 	elseif i > 0 && j < 0
-# 		return val_list[order_dict[convention][4]]
-# 	end
-# end
+function Ctran(i::Int64,j::Int64;convention = :SpheriCart)
+	if convention == :cSH
+		return i == j
+	end
+
+    order = order_dict[convention]
+	val_list = ComplexF64[(-1)^(i), im, (-1)^(i+1)*im, 1] ./ sqrt(2)
+	if abs(i) != abs(j)
+		return zero(ComplexF64)
+	elseif i == j == 0
+		return one(ComplexF64)
+	elseif i > 0 && j > 0
+		return val_list[order[1]]
+	elseif i < 0 && j < 0
+		return val_list[order[2]]
+	elseif i < 0 && j > 0
+		return val_list[order[3]]
+    end
+    @assert i > 0 && j < 0
+	return val_list[order[4]]
+end
 
 function Ctran(i::Int64,j::Int64;convention=:SpheriCart)
    if abs(i) != abs(j)
