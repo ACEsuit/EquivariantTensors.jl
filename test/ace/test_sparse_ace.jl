@@ -57,7 +57,7 @@ model = Chain(;
 
 ##
 
-# rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )
+rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )
 rand_x() = (0.1 + 0.9 * rand()) * rand_sphere()
 nX = 7
 𝐫 = [ rand_x() for _ = 1:nX ]

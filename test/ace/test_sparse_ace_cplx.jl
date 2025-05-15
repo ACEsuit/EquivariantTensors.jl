@@ -1,3 +1,5 @@
+
+
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
 using StaticArrays, LinearAlgebra, Random, Test
@@ -5,7 +7,7 @@ using Zygote, LuxCore, Lux
 import Optimisers as OPT
 import ForwardDiff as FDiff 
 
-@info("Preliminary Pullback test for lux ace model")
+@info("Preliminary Pullback test for lux ace model with complex numbers")
 
 ##
 struct DotL <: Lux.AbstractLuxLayer 
@@ -65,55 +67,14 @@ rng = Random.MersenneTwister(1234)
 ps, st = Lux.setup(rng, model)
 φ, _ = Lux.apply(model, 𝐫, ps, st)
 
-# ==========================
-# Pullback Test (should succeed)
-# ==========================
-val, pb = Zygote.pullback(𝐫 -> Lux.apply(model, 𝐫, ps, st)[1], 𝐫)
-pb(val)
+## 
 
-# ==========================
-# Model Decomposition (Split into parts)
-# ==========================
-model1 = Chain(;
-    embed = Parallel(nothing;
-        Rnl = Chain(
-            WrappedFunction(𝐫 -> norm.(𝐫)),
-            P4ML.lux(rbasis)
-        ),
-        Ylm = P4ML.lux(ybasis)
-    ),
-    𝔹 = 𝔹basis
-)
+# differentiate with ForwardDiff
+pvec, _rest = OPT.destructure(ps)
+gf = _rest(FDiff.gradient(p -> Lux.apply(model, 𝐫, _rest(p), st)[1], pvec))
 
-ps1, st1 = Lux.setup(rng, model1)
-φ1, _ = Lux.apply(model1, 𝐫, ps1, st1)
+# Differentiate with Zygote (this fails currently)
+gz, = Zygote.gradient(p -> Lux.apply(model, 𝐫, p, st)[1], ps)
 
-model2 = Chain(;
-    y01 = Parallel(nothing;
-        y0 = DotL(length(𝔹basis, 0)),
-        y1 = DotL(length(𝔹basis, 1))
-    ),
-    iml = WrappedFunction(x -> (
-        exp(im * x[1]) * x[1],
-        exp.(im * x[2]) .* x[2]
-    )),
-    out = WrappedFunction(x -> real(x[1] + sum(abs2, x[2])))
-)
+println(@test OPT.destructure(gf)[1] ≈ OPT.destructure(gz)[1])
 
-ps2, st2 = Lux.setup(rng, model2)
-φ2, _ = Lux.apply(model2, φ1, ps2, st2)
-
-
-# ==========================
-# Backward Pass (model2)
-# ==========================
-val2, pb2 = Zygote.pullback(φ1 -> Lux.apply(model2, φ1, ps2, st2)[1], φ1)
-∂BB = pb2(val2)[1]
-@show typeof(∂BB)
-
-# ==========================
-# Backward Pass (model1)
-# ==========================
-val1, pb1 = Zygote.pullback(𝐫 -> Lux.apply(model1, 𝐫, ps1, st1)[1], 𝐫)
-pb1(val1)         # should succeed
-pb1(∂BB)          # should succeed
