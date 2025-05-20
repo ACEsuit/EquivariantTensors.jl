@@ -142,12 +142,25 @@ function Sn(nn,ll)
 end
 
 # The set of integers that has the same absolute value as m
-signed_m(m) = unique([m,-m]) 
+signed_m(m::T) where T = unique([m,-m])::Vector{T}
 
 # The set of vectors whose i-th element has the same absolute value as m[i] 
 # for all i
-signed_mmset(m) = Iterators.product([signed_m(m[i]) for i in 1:length(m)]...
-                                   ) |> collect 
+# signed_mmset(m) = Iterators.product([signed_m(m[i]) for i in 1:length(m)]...
+#                                    ) |> collect 
+
+function signed_mmset(mm::T) where {T}
+    N = length(mm); len = 2^N
+    MM = Vector{T}(undef, len)
+    σ = zeros(Bool, N)
+    for i in 1:(2^N)
+       digits!(σ, i-1, base=2)
+       newmm = [ ((2*σ[j]-1) * (mm[j] != 0) + (mm[j] == 0)) * mm[j]
+                 for j = 1:N ] 
+       MM[i] = newmm
+    end
+    return unique(MM)
+ end
 
 function mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64; 
                  flag=:cSH) where N
@@ -167,7 +180,7 @@ function mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64;
     else
         # for the rSH, the criterion is that whether there exists a combinition 
         # of [+/- m_i]_i, such that the sum of the combination equals to k
-        return any([abs.(sum(mm1)) <= L for mm1 in signed_mmset(mm)])
+        return any([abs(sum(mm1)) <= L for mm1 in signed_mmset(mm)])
     end
 end
 
@@ -190,9 +203,16 @@ function mm_generate(L::Int, ll::T, nn::T;
 
     # No matter PI or not, this fcn always generates all admissible mm's
     # and if PI, they are just filtered in _coupling_coeffs
-    _mm_filter = x -> mm_filter(x, L; flag)
-    
-    return MM[findall(x -> x==1, _mm_filter.(MM))]
+    _mm_filter = x -> mm_filter(x, L; flag = :cSH)
+    MM_c = MM[findall(x -> x==1, _mm_filter.(MM))]
+    if flag == :cSH 
+        return MM_c
+    else
+        MM_abs = unique([ abs.(mm) for mm in MM_c ])
+        MM_r = union([ signed_mmset(mm) for mm in MM_abs ]...)
+        # @show typeof(MM_r)
+        return MM_r
+    end
 end
 
 function gram(X::Matrix{SVector{N,T}}) where {N,T}
@@ -311,43 +331,90 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         return zeros(T, 0, 0), SVector{N, Int}[]
     end
      
-    if !PI
-        MM = mm_generate(L, ll, nn; flag=flag) # all m's
-        UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
-        for (j,mm) in enumerate(MM)
-            for i in 1:r
-                UMatrix[i,j] = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
-            end
-        end 
-        return UMatrix, [mm[inv_perm] for mm in MM]
+    if flag == :cSH
+        if !PI
+            MM = mm_generate(L, ll, nn; flag=flag) # all m's
+            UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
+            for (j,mm) in enumerate(MM)
+                for i in 1:r
+                    UMatrix[i,j] = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+                end
+            end 
+            return UMatrix, [mm[inv_perm] for mm in MM]
+        else
+            # permutation blocks - within which the nn and ll are identical
+            S = Sn(nn,ll)
+            permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
+
+            MM = mm_generate(L, ll, nn; flag=flag) # all admissible mm's
+            MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM ] # sort the mm's within the permutable blocks
+            MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
+            D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
+        
+            FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
+
+            for (j,mm) in enumerate(MM)
+                col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
+                for i in 1:r
+                    FMatrix[i,col] += GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+                end
+            end 
+        
+            # Linear dependence
+            U, S, V = svd(gram(FMatrix))
+            # Somehow rank is not working properly here, might be a relative  
+            # tolerance issue.
+            # original code: rank(Diagonal(S); rtol =  1e-12) 
+            rk = findall(x -> x > 1e-12, S) |> length 
+            # return the RE-PI coupling coeffs
+            return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
+                [ mm[inv_perm] for mm in MM_reduced ]
+        end
     else
-        # permutation blocks - within which the nn and ll are identical
-        S = Sn(nn,ll)
-        permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
-
-        MM = mm_generate(L, ll, nn; flag=flag) # all admissible mm's
-        MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM ] # sort the mm's within the permutable blocks
-        MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
-        D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
+        MM_r = mm_generate(L, ll, nn; flag=flag) # all admissible mm's
+        Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, flag = :cSH)
+        C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r) 
+        # TODO: coupling_coeffs and mm_generate return different 
+        #       format of MM's which may need to be fixed
         
-        FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
-
-        for (j,mm) in enumerate(MM)
-            col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
-            for i in 1:r
-                FMatrix[i,col] += GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
-            end
-        end 
+        # Do the transformation to the complex coupling 
+        # because it has a smaller size compared to the real one
+        if L != 0
+            CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
+            Ure_c = map(u -> CL * u, Ure_c)
+        end
+        Ure_r = real(Ure_c * C_r2c)
         
-        # Linear dependence
-        U, S, V = svd(gram(FMatrix))
-        # Somehow rank is not working properly here, might be a relative  
-        # tolerance issue.
-        # original code: rank(Diagonal(S); rtol =  1e-12) 
-        rk = findall(x -> x > 1e-12, S) |> length 
-        # return the RE-PI coupling coeffs
-        return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
-               [ mm[inv_perm] for mm in MM_reduced ]
+        if !PI
+            return Ure_r, [ mm[inv_perm] for mm in MM_r ]
+        else
+            S = Sn(nn,ll)
+            permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
+            MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM_r ] # sort the mm's within the permutable blocks
+            MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
+
+            
+            D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
+        
+            FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
+
+            for (j,mm) in enumerate(MM_r)
+                col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
+                for i in 1:r
+                    FMatrix[i,col] += Ure_r[i,j]
+                end
+            end 
+        
+            # Linear dependence
+            U, S, V = svd(gram(FMatrix))
+            # Somehow rank is not working properly here, might be a relative  
+            # tolerance issue.
+            # original code: rank(Diagonal(S); rtol =  1e-12) 
+            rk = findall(x -> x > 1e-12, S) |> length 
+            # return the RE-PI coupling coeffs
+            return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
+                [ mm[inv_perm] for mm in MM_reduced ]
+        end
     end
 end
 

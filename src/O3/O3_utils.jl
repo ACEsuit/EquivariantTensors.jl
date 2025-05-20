@@ -10,34 +10,77 @@ import PartialWaveFunctions, WignerD
 
 # transformation matrix from RSH to CSH for different conventions
 
+const order_dict = Dict(:SpheriCart => SA[1,2,3,4], 
+                      :CondonShortley => SA[4,3,2,1], 
+                      :FHIaims => SA[4,2,3,1] )
+
 function Ctran(i::Int64,j::Int64;convention = :SpheriCart)
 	if convention == :cSH
 		return i == j
 	end
-	
-	order_dict = Dict(:SpheriCart => [1,2,3,4], 
-                      :CondonShortley => [4,3,2,1], 
-                      :FHIaims => [4,2,3,1] )
 
-	val_list = [(-1)^(i), im, (-1)^(i+1)*im, 1] ./ sqrt(2)
+    order = order_dict[convention]
+	val_list = SA[(-1)^(i), im, (-1)^(i+1)*im, 1][order] ./ sqrt(2)
 	if abs(i) != abs(j)
-		return 0 
+		return zero(ComplexF64)
 	elseif i == j == 0
-		return 1
+		return one(ComplexF64)
 	elseif i > 0 && j > 0
-		return val_list[order_dict[convention][1]]
+		return val_list[1]
 	elseif i < 0 && j < 0
-		return val_list[order_dict[convention][2]]
+		return val_list[2]
 	elseif i < 0 && j > 0
-		return val_list[order_dict[convention][3]]
-	elseif i > 0 && j < 0
-		return val_list[order_dict[convention][4]]
-	end
+		return val_list[3]
+    end
+    @assert i > 0 && j < 0
+	return val_list[4]
 end
 
 Ctran(l::Int64; convention = :SpheriCart) = sparse(
     Matrix{ComplexF64}([ Ctran(m,μ;convention=convention) 
                          for m = -l:l, μ = -l:l ]))
+
+# Type unstable for now
+Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}; convention = :SpheriCart) where N = abs.(mm1) == abs.(mm2) ? 
+      prod(Ctran(mm2[i], mm1[i]; convention=convention)' for i in 1:N) : 0.0 + 0im
+
+Ctran(mm1::Vector{Int}, mm2::Vector{Int}; convention = :SpheriCart) = abs.(mm1) == abs.(mm2) ? 
+      prod(Ctran(mm2[i], mm1[i]; convention=convention)' for i in 1:length(mm1)) : 0.0 + 0im
+
+# We also need to define the transformation matrix from product rSH to product cSH
+
+# grouping those MM's that has the same abs value
+function group_by_abs(MM::Vector{SVector{N,Int}}) where N
+   abs_map = Dict{NTuple{N, Int}, Vector{Int}}()
+   for (idx, v) in enumerate(MM)
+       key = Tuple(abs.(v))  # use tuple as a hashable key
+       push!(get!(abs_map, key, Int[]), idx)
+   end
+   return abs_map
+end
+
+function rAA2cAA(MM_c, MM_r; convention = :SpheriCart)
+   # find the abs.(mm) and group
+   group_c = group_by_abs(MM_c)
+   group_r = group_by_abs(MM_r)
+
+   # Match groups and fill sparse matrix accordingly
+   CC = spzeros(ComplexF64, length(MM_c), length(MM_r))
+
+   # By the following, we don't need nested loops
+   for (key, c_inds) in group_c
+       if haskey(group_r, key)
+           r_inds = group_r[key]
+           for i in c_inds
+               for j in r_inds
+                   CC[i, j] = Ctran(MM_c[i], MM_r[j]; convention=convention)
+               end
+           end
+       end
+   end
+
+   return CC
+end
 
 
 # -----------------------------------------------------------------
