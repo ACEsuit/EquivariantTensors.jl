@@ -24,10 +24,11 @@ _Ctran(i::Integer, j::Integer, basis::typeof(complex)) = (i == j)
 
 function _Ctran(i::Integer, j::Integer, basis::typeof(real))
 	val_list = SA[(-1)^(i), im, (-1)^(i+1)*im, 1] / sqrt(2)
+   T = eltype(val_list)
 	if abs(i) != abs(j)
-		return zero(ComplexF64)
+		return zero(T)
 	elseif i == j == 0
-		return one(ComplexF64)
+		return one(T)
 	elseif i > 0 && j > 0
 		return val_list[1]
 	elseif i < 0 && j < 0
@@ -46,8 +47,8 @@ Ctran(l::Int64; basis = real) =
 
 Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}, basis = real) where {N} = 
       ( abs.(mm1) == abs.(mm2) 
-         ? conj(prod(_Ctran.(mm2, mm1, basis)))
-         : zero(ComplexF64) )
+         ? conj(prod(_Ctran(mm2[t], mm1[t], basis) for t = 1:N))
+         : zero(ComplexF64) )::ComplexF64
 
 
 Ctran(mm1::Vector{Int}, mm2::Vector{Int}, basis = real) = 

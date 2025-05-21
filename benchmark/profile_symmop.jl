@@ -1,3 +1,4 @@
+using Pkg; Pkg.activate(joinpath(@__DIR__(), ".."))
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET
 using StaticArrays, SparseArrays, LinearAlgebra, Zygote, Random
