@@ -19,45 +19,50 @@ include("O3_transformations.jl")
 # The generalized Clebsch Gordan Coefficients; variables of this function are 
 # fully inherited from the first ACE paper. 
 function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
-             M_N::Int64; flag=:cSH) where N
+             M_N::Int64, basis::typeof(complex)) where {N}
     # @assert -L[N] ≤ M_N ≤ L[N] 
-    if mm_filter_single(m, M_N;flag=flag) == false || L[1] < abs(m[1])
-        return 0.
+    if mm_filter_single(m, M_N, basis) == false || L[1] < abs(m[1])
+        return 0.0
     end
 
-    if flag == :cSH
-        M = m[1]
-        C = 1.
-        for k in 2:N
-            if L[k] < abs(M+m[k])
-                return 0.
-            else
-                C *= PartialWaveFunctions.clebschgordan(
-                            L[k-1], M, l[k], m[k], L[k], M+m[k])
-                M += m[k]
-            end
+    M = m[1]
+    C = 1.
+    for k in 2:N
+        if L[k] < abs(M+m[k])
+            return 0.
+        else
+            C *= PartialWaveFunctions.clebschgordan(
+                        L[k-1], M, l[k], m[k], L[k], M+m[k])
+            M += m[k]
         end
-        return C
-    else
-        C = 0.
-        for M in signed_m(M_N)
-            ext_mset = filter( x -> sum(x) == M, signed_mmset(m) )
-        
-            for mm in ext_mset
-                mm = SA[mm...]
-                @assert sum(mm) == M
-                C_loc = GCG(l,mm,L,M;flag=:cSH)
-                coeff = Ctran(M_N,M;convention=flag)' * 
-                           prod( Ctran(m[i],mm[i];convention=flag) for i in 1:N )
-                C_loc *= coeff
-                C += C_loc
-            end
-        end
+    end
+    return C
+end 
 
-        # We actually expect real values 
-        return abs(C - real(C)) < 1e-12 ? real(C) : C 
+function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
+             M_N::Int64, basis::typeof(real)) where {N}
+    # @assert -L[N] ≤ M_N ≤ L[N] 
+    if mm_filter_single(m, M_N, basis) == false || L[1] < abs(m[1])
+        return 0.0
     end
 
+    C = 0.
+    for M in signed_m(M_N)
+        ext_mset = filter( x -> sum(x) == M, signed_mmset(m) )
+    
+        for mm in ext_mset
+            mm = SA[mm...]
+            @assert sum(mm) == M
+            C_loc = GCG(l, mm, L, M, basis)
+            coeff = _Ctran(M_N, M, basis)' * 
+                        prod( _Ctran(m[i], mm[i], basis) for i in 1:N )
+            C_loc *= coeff
+            C += C_loc
+        end
+    end
+
+    @assert abs(C - real(C)) < 1e-12
+    return real(C) 
 end
 
 # Only when M_N = sum(m) can the CG coefficient be non-zero, so when missing M_N, 
@@ -66,34 +71,31 @@ end
 # (2) or the only one element that can possibly be non-zero on the above vector.
 # I suspect that the first option will not be used anyhow, but I keep it for now.
 function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64};
-             vectorize::Bool=true, flag=:cSH) where N 
-    if flag == :cSH
-        return (vectorize ? (GCG(l,m,L,sum(m);flag=flag) * 
+             vectorize::Bool=true, basis = complex) where N 
+    if basis === complex
+        return (vectorize ? (GCG(l, m, L, sum(m), basis) * 
                                 Float64.(I(2L[N]+1)[sum(m)+L[N]+1,:])) 
-                          : GCG(l,m,L,sum(m);flag=flag) )
-    else
+                          : GCG(l, m, L, sum(m), basis) )
+    elseif basis === real 
         if vectorize == false && L[N] != 0
             error("""For the rSH basis, the CG coefficient is always a vector 
                      except for the case of L=0.""")
         end
-        # return (L[N] == 0 ? GCG(l,m,L,L[N];flag=flag) 
-        #                   : SA[[ GCG(l,m,L,M_N;flag=flag) 
-        #                          for M_N in -L[N]:L[N] ]...]  )
         admissible_m = filter( x -> abs(sum(x)) <= L[N], signed_mmset(m) )
         C = zeros(ComplexF64, 2L[N]+1)
         for mm in admissible_m
             mm = SA[mm...]
-            GCG_loc = GCG(l,mm,L,sum(mm);flag=:cSH)
+            GCG_loc = GCG(l, mm, L, sum(mm), basis)
             for M_N in signed_m(sum(mm))
                 C[M_N+L[N]+1] += GCG_loc * 
-                                Ctran(M_N,sum(mm);convention=flag)' * 
-                                prod( Ctran(m[i],mm[i];convention=flag) 
-                                      for i in 1:N )
+                                 _Ctran(M_N, sum(mm), basis)' * 
+                                 prod( _Ctran(m[i], mm[i], basis) for i in 1:N )
             end
         end
 
         return L[N] == 0 ? real(C[1]) : real(C)
-    end
+    end 
+    error("Unknown basis type: $basis")
 end
 
 # Function that returns a L set given an `l`. The elements of the set start with 
@@ -162,27 +164,24 @@ function signed_mmset(mm::T) where {T}
     return unique(MM)
  end
 
-function mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64; 
-                 flag=:cSH) where N
-    if flag == :cSH
-        return sum(mm) == k
-    else
-        # for the rSH, the criterion is that whether there exists a combinition 
-        # of [+/- m_i]_i, such that the sum of the combination equals to k
-        return any([sum(mm1) == k for mm1 in signed_mmset(mm)])
-    end
-end
+mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64, 
+                basis::typeof(complex)) where {N} = (sum(mm) == k)
 
-function mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64; 
-                 flag=:cSH) where N
-    if flag == :cSH
-        return abs(sum(mm)) <= L
-    else
-        # for the rSH, the criterion is that whether there exists a combinition 
-        # of [+/- m_i]_i, such that the sum of the combination equals to k
-        return any([abs(sum(mm1)) <= L for mm1 in signed_mmset(mm)])
-    end
-end
+# for the rSH, the criterion is that whether there exists a combinition 
+# of [+/- m_i]_i, such that the sum of the combination equals to k
+mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64, 
+                basis::typeof(real)) where {N} = 
+        any(sum(mm1) == k for mm1 in signed_mmset(mm))
+
+
+mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64,
+         basis::typeof(complex)) where {N} = (abs(sum(mm)) <= L)
+
+# for the rSH, the criterion is that whether there exists a combinition 
+# of [+/- m_i]_i, such that the sum of the combination equals to k
+mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64,
+            basis::typeof(real)) where {N} = 
+        any((abs(sum(mm1)) <= L) for mm1 in signed_mmset(mm))
 
 # Function that generates the set of ordered m's given `n` and `l` with 
 # the absolute sum of  m's smaller than or equal to `L`.
@@ -190,8 +189,7 @@ end
 # NB: This function assumes lexicographical ordering
 
 function mm_generate(L::Int, ll::T, nn::T; 
-                     # PI = !(isnothing(nn)), 
-                     flag = :cSH) where {T} 
+                     basis = complex) where {T}
     N = length(ll)
     @assert length(ll) == length(nn)
     # S = Sn(nn,ll)
@@ -203,16 +201,16 @@ function mm_generate(L::Int, ll::T, nn::T;
 
     # No matter PI or not, this fcn always generates all admissible mm's
     # and if PI, they are just filtered in _coupling_coeffs
-    _mm_filter = x -> mm_filter(x, L; flag = :cSH)
+    _mm_filter = x -> mm_filter(x, L, basis)
     MM_c = MM[findall(x -> x==1, _mm_filter.(MM))]
-    if flag == :cSH 
+    if basis === complex
         return MM_c
-    else
+    elseif basis === real 
         MM_abs = unique([ abs.(mm) for mm in MM_c ])
         MM_r = union([ signed_mmset(mm) for mm in MM_abs ]...)
-        # @show typeof(MM_r)
         return MM_r
     end
+    error("Unknown basis type: $basis")
 end
 
 function gram(X::Matrix{SVector{N,T}}) where {N,T}
@@ -285,18 +283,8 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
                    a vector or tuple of integers""")
         end
     end 
-
-    if basis == complex 
-        flag = :cSH 
-    elseif basis == real 
-        flag = :SpheriCart
-    elseif basis isa Symbol
-        flag = basis 
-    else 
-        error("unknown basis type: $basis")
-    end
     
-    return _coupling_coeffs(_L, _ll, _nn; PI = PI, flag = flag)
+    return _coupling_coeffs(_L, _ll, _nn; PI = PI, basis = basis, )
 end
 
 function _sort(x::T, permutable_blocks::Vector{Vector{Int}}) where T
@@ -313,7 +301,7 @@ end
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
 function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
-                          PI = true, flag = :cSH) where N
+                          PI = true, basis = complex) where N
 
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
@@ -331,13 +319,13 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         return zeros(T, 0, 0), SVector{N, Int}[]
     end
      
-    if flag == :cSH
+    if basis === complex 
         if !PI
-            MM = mm_generate(L, ll, nn; flag=flag) # all m's
+            MM = mm_generate(L, ll, nn; basis=basis) # all m's
             UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
             for (j,mm) in enumerate(MM)
                 for i in 1:r
-                    UMatrix[i,j] = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+                    UMatrix[i,j] = GCG(ll,mm,Lset[i];vectorize=(L!=0),basis=basis)
                 end
             end 
             return UMatrix, [mm[inv_perm] for mm in MM]
@@ -346,7 +334,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             S = Sn(nn,ll)
             permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
 
-            MM = mm_generate(L, ll, nn; flag=flag) # all admissible mm's
+            MM = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
             MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM ] # sort the mm's within the permutable blocks
             MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
             D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
@@ -356,7 +344,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             for (j,mm) in enumerate(MM)
                 col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
                 for i in 1:r
-                    FMatrix[i,col] += GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+                    FMatrix[i,col] += GCG(ll,mm,Lset[i];vectorize=(L!=0),basis=basis)
                 end
             end 
         
@@ -370,9 +358,9 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
                 [ mm[inv_perm] for mm in MM_reduced ]
         end
-    else
-        MM_r = mm_generate(L, ll, nn; flag=flag) # all admissible mm's
-        Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, flag = :cSH)
+    elseif basis === real 
+        MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
+        Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, basis=complex)
         C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r) 
         # TODO: coupling_coeffs and mm_generate return different 
         #       format of MM's which may need to be fixed
@@ -416,6 +404,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
                 [ mm[inv_perm] for mm in MM_reduced ]
         end
     end
+    error("Unknown basis type: $basis")
 end
 
 end

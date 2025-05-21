@@ -156,9 +156,9 @@ for L = 0:Lmax
       N = length(ll)
 
       Ure, Mll = coupling_coeffs(L, ll; PI = false) # cSH based re_basis
-      Ure_r, Mll_r = coupling_coeffs(L, ll; PI = false, basis = :SpheriCart) # rSH based re_basis
+      Ure_r, Mll_r = coupling_coeffs(L, ll; PI = false, basis = real) # rSH based re_basis
       Urpe, Mll = coupling_coeffs(L, ll) # cSH based rpe_basis
-      Urpe_r, Mll_r = coupling_coeffs(L, ll; basis = :SpheriCart) # rSH based rpe_basis
+      Urpe_r, Mll_r = coupling_coeffs(L, ll; basis = real) # rSH based rpe_basis
 
       rk = rank(gram(Urpe), rtol = 1e-12)
       rk_r = rank(gram(Urpe_r), rtol = 1e-12)

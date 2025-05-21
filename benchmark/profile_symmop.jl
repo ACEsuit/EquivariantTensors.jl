@@ -30,11 +30,13 @@ nnll_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD,
             L = 0, mb_spec = nnll_spec, 
             Rnl_spec = Rn_spec, 
             Ylm_spec = Ylm_spec, 
-            basis = complex, )
+            basis = real, )
+
+@show length(𝔹basis)            
 
 ##
 
-@profview let mb_spec = nnll_long, Rnl_spec = Rn_spec, Ylm_spec = Ylm_spec, basis = complex 
+@profview let mb_spec = nnll_spec, Rnl_spec = Rn_spec, Ylm_spec = Ylm_spec, basis = real
    𝔹basis = ET.sparse_equivariant_tensor(; 
             L = 0, mb_spec = mb_spec, 
             Rnl_spec = Rnl_spec, Ylm_spec = Ylm_spec, basis = basis )

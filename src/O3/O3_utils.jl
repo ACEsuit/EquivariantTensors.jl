@@ -17,6 +17,7 @@ import PartialWaveFunctions, WignerD
 #                       :CondonShortley => SA[4,3,2,1], 
 #                       :FHIaims => SA[4,2,3,1] )
 
+_Ctran(i::Integer, j::Integer) = _Ctran(i, j, real)
 
 _Ctran(i::Integer, j::Integer, basis::typeof(complex)) = (i == j)
 
@@ -45,11 +46,11 @@ Ctran(l::Int64; basis = real) =
 
 Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}, basis = real) where {N} = 
       ( abs.(mm1) == abs.(mm2) 
-         ? prod(_Ctran(mm2[i], mm1[i], basis)' for i in 1:N) 
+         ? conj(prod(_Ctran.(mm2, mm1, basis)))
          : zero(ComplexF64) )
 
 
-Ctran(mm1::Vector{Int}, mm2::Vector{Int}; basis = real) = 
+Ctran(mm1::Vector{Int}, mm2::Vector{Int}, basis = real) = 
       ( abs.(mm1) == abs.(mm2) 
         ? prod(_Ctran(mm2[i], mm1[i], basis)' for i in 1:length(mm1))
         : zero(ComplexF64) )
@@ -82,7 +83,7 @@ function rAA2cAA(MM_c, MM_r; basis = real)
            r_inds = group_r[key]
            for i in c_inds
                for j in r_inds
-                   CC[i, j] = _Ctran(MM_c[i], MM_r[j]; basis=basis)
+                   CC[i, j] = Ctran(MM_c[i], MM_r[j], basis)
                end
            end
        end
