@@ -18,44 +18,44 @@ include("O3_transformations.jl")
 
 # The generalized Clebsch Gordan Coefficients; variables of this function are 
 # fully inherited from the first ACE paper. 
-function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
+function GCG(ll::SVector{N,Int64}, mm::SVector{N,Int64}, LL::SVector{N,Int64},
              M_N::Int64, basis::typeof(complex)) where {N}
     # @assert -L[N] ≤ M_N ≤ L[N] 
-    if mm_filter_single(m, M_N, basis) == false || L[1] < abs(m[1])
+    if mm_filter_single(mm, M_N, basis) == false || LL[1] < abs(mm[1])
         return 0.0
     end
 
-    M = m[1]
+    M = mm[1]
     C = 1.
     for k in 2:N
-        if L[k] < abs(M+m[k])
+        if LL[k] < abs(M+mm[k])
             return 0.
         else
             C *= PartialWaveFunctions.clebschgordan(
-                        L[k-1], M, l[k], m[k], L[k], M+m[k])
-            M += m[k]
+                        LL[k-1], M, ll[k], mm[k], LL[k], M+mm[k])
+            M += mm[k]
         end
     end
     return C
 end 
 
-function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64},
+function GCG(ll::SVector{N,Int64}, mm::SVector{N,Int64}, LL::SVector{N,Int64},
              M_N::Int64, basis::typeof(real)) where {N}
     # @assert -L[N] ≤ M_N ≤ L[N] 
-    if mm_filter_single(m, M_N, basis) == false || L[1] < abs(m[1])
+    if mm_filter_single(mm, M_N, basis) == false || LL[1] < abs(mm[1])
         return 0.0
     end
 
-    C = 0.
+    C = 0.0
     for M in signed_m(M_N)
-        ext_mset = filter( x -> sum(x) == M, signed_mmset(m) )
+        ext_mset = filter( x -> sum(x) == M, signed_mmset(mm) )
     
-        for mm in ext_mset
-            mm = SA[mm...]
-            @assert sum(mm) == M
-            C_loc = GCG(l, mm, L, M, basis)
+        for __mm in ext_mset
+            _mm = SA[__mm...]
+            @assert sum(_mm) == M
+            C_loc = GCG(ll, _mm, LL, M, basis)
             coeff = _Ctran(M_N, M, basis)' * 
-                        prod( _Ctran(m[i], mm[i], basis) for i in 1:N )
+                        prod( _Ctran(mm[i], _mm[i], basis) for i in 1:N )
             C_loc *= coeff
             C += C_loc
         end
@@ -70,55 +70,55 @@ end
 # (1) the full CG coefficient given l, m and L, as a rank 1 vector; 
 # (2) or the only one element that can possibly be non-zero on the above vector.
 # I suspect that the first option will not be used anyhow, but I keep it for now.
-function GCG(l::SVector{N,Int64}, m::SVector{N,Int64}, L::SVector{N,Int64};
+function GCG(ll::SVector{N,Int64}, mm::SVector{N,Int64}, LL::SVector{N,Int64};
              vectorize::Bool=true, basis = complex) where N 
     if basis === complex
-        return (vectorize ? (GCG(l, m, L, sum(m), basis) * 
-                                Float64.(I(2L[N]+1)[sum(m)+L[N]+1,:])) 
-                          : GCG(l, m, L, sum(m), basis) )
+        return (vectorize ? (GCG(ll, mm, LL, sum(mm), basis) * 
+                                Float64.(I(2*LL[N]+1)[sum(mm)+LL[N]+1,:])) 
+                          : GCG(ll, mm, LL, sum(mm), basis) )
     elseif basis === real 
-        if vectorize == false && L[N] != 0
+        if vectorize == false && LL[N] != 0
             error("""For the rSH basis, the CG coefficient is always a vector 
                      except for the case of L=0.""")
         end
-        admissible_m = filter( x -> abs(sum(x)) <= L[N], signed_mmset(m) )
-        C = zeros(ComplexF64, 2L[N]+1)
-        for mm in admissible_m
-            mm = SA[mm...]
-            GCG_loc = GCG(l, mm, L, sum(mm), basis)
-            for M_N in signed_m(sum(mm))
-                C[M_N+L[N]+1] += GCG_loc * 
-                                 _Ctran(M_N, sum(mm), basis)' * 
-                                 prod( _Ctran(m[i], mm[i], basis) for i in 1:N )
+        admissible_m = filter( x -> abs(sum(x)) <= LL[N], signed_mmset(mm) )
+        C = zeros(ComplexF64, 2*LL[N]+1)
+        for __mm in admissible_m
+            _mm = SA[__mm...]
+            GCG_loc = GCG(ll, _mm, LL, sum(_mm), basis)
+            for M_N in signed_m(sum(_mm))
+                C[M_N+LL[N]+1] += GCG_loc * 
+                                 _Ctran(M_N, sum(_mm), basis)' * 
+                                 prod( _Ctran(mm[i], _mm[i], basis) for i in 1:N )
             end
         end
 
-        return L[N] == 0 ? real(C[1]) : real(C)
+        return LL[N] == 0 ? real(C[1]) : real(C)
     end 
     error("Unknown basis type: $basis")
 end
 
 # Function that returns a L set given an `l`. The elements of the set start with 
 # l[1] and end with L. 
-function SetLl(l::SVector{N,Int64}, L::Int64) where N
-    T = typeof(l)
+function SetLl(ll::SVector{N,Int64}, L::Int64) where N
+    T = typeof(ll)
     if N==1
-        return l[1] == L ? [T(l[1])] : Vector{T}[]
+        return ll[1] == L ? [T(ll[1])] : Vector{T}[]
     elseif N==2        
-        return abs(l[1]-l[2]) ≤ L ≤ l[1] + l[2] ? [T(l[1],L)] : Vector{T}[]
+        return abs(ll[1]-ll[2]) ≤ L ≤ ll[1] + ll[2] ? [T(ll[1],L)] : Vector{T}[]
     end
     
-    set = [ [l[1];] ]
+    set = [ [ll[1];] ]
     for k in 2:N
         set_tmp = set
         set = Vector{Any}[]
         for a in set_tmp
             if k < N
-                for b in abs(a[k-1]-l[k]):a[k-1]+l[k]
+                for b in abs(a[k-1]-ll[k]):a[k-1]+ll[k]
                     push!(set, [a; b])
                 end
             elseif k == N
-                if (abs.(a[N-1]-l[N]) <= L)&&(L <= (a[N-1]+l[N]))
+                if (abs.(a[N-1]-ll[N]) <= L)&&(L <= (a[N-1]+ll[N]))
                     push!(set, [a; L])
                 end
             end
@@ -128,7 +128,7 @@ function SetLl(l::SVector{N,Int64}, L::Int64) where N
     return T.(set)
 end
 
-SetLl(l::SVector{N,Int64}) where N = union([SetLl(l, L) for L in 0:sum(l)]...)
+SetLl(ll::SVector{N,Int64}) where N = union([SetLl(ll, L) for L in 0:sum(ll)]...)
 
 function Sn(nn,ll)
     # should assert that lexicographical order
