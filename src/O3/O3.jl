@@ -151,7 +151,33 @@ signed_m(m::T) where T = unique([m,-m])::Vector{T}
 # signed_mmset(m) = Iterators.product([signed_m(m[i]) for i in 1:length(m)]...
 #                                    ) |> collect 
 
-function signed_mmset(mm::T) where {T}
+struct LazySignedMMset{N, T} 
+    mm::SVector{N, T}
+    σ::MVector{N, Bool}
+end
+
+lazy_signed_mmset(mm::SVector{N, T}) where {N, T} = 
+        LazySignedMMset(mm, zero(MVector{N, Bool}))
+
+function Base.iterate(it::LazySignedMMset{N, T}) where {N, T}
+    return iterate(it, 0)
+end
+
+function Base.iterate(it::LazySignedMMset{N, T}, i::Int) where {N, T}
+    i += 1
+    if i > 2^N
+        return nothing
+    end
+    σ = it.σ
+    digits!(σ, i-1, base=2)
+    newmm = SVector(ntuple( 
+               j -> ((2*σ[j]-1) * (it.mm[j] != 0) + (it.mm[j] == 0)) * it.mm[j], 
+               N )) 
+    return newmm, i
+end 
+
+
+function signed_mmset(mm::T, prune=true) where {T}
     N = length(mm); len = 2^N
     MM = Vector{T}(undef, len)
     σ = zeros(Bool, N)
@@ -161,7 +187,11 @@ function signed_mmset(mm::T) where {T}
                  for j = 1:N ] 
        MM[i] = newmm
     end
-    return unique(MM)
+    if prune
+        return unique(MM)
+    else
+        return MM 
+    end
  end
 
 mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64, 
@@ -171,7 +201,7 @@ mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64,
 # of [+/- m_i]_i, such that the sum of the combination equals to k
 mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64, 
                 basis::typeof(real)) where {N} = 
-        any(sum(mm1) == k for mm1 in signed_mmset(mm))
+        any(sum(mm1) == k for mm1 in lazy_signed_mmset(mm))
 
 
 mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64,
@@ -181,7 +211,7 @@ mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64,
 # of [+/- m_i]_i, such that the sum of the combination equals to k
 mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64,
             basis::typeof(real)) where {N} = 
-        any((abs(sum(mm1)) <= L) for mm1 in signed_mmset(mm))
+        any((abs(sum(mm1)) <= L) for mm1 in lazy_signed_mmset(mm))
 
 # Function that generates the set of ordered m's given `n` and `l` with 
 # the absolute sum of  m's smaller than or equal to `L`.
@@ -192,23 +222,30 @@ function mm_generate(L::Int, ll::T, nn::T;
                      basis = complex) where {T}
     N = length(ll)
     @assert length(ll) == length(nn)
-    # S = Sn(nn,ll)
-    ci = CartesianIndices(ntuple(t -> -ll[t]:ll[t], N))
-    MM = Vector{T}(undef, length(ci))
-    for (i, I) in enumerate(ci)
-        MM[i] = I.I 
-    end 
 
     # No matter PI or not, this fcn always generates all admissible mm's
     # and if PI, they are just filtered in _coupling_coeffs
-    _mm_filter = x -> mm_filter(x, L, basis)
-    MM_c = MM[findall(x -> x==1, _mm_filter.(MM))]
+    # NOTE: this line is the bottleneck in the code, because it generates 
+    #       the signed mm set which requires a lot of small allocations.
+
+    # the generator version seems to be type unstable.
+    # MM_c = ([ T(I.I) for I in ci if mm_filter(T(I.I), L, basis) ])::Vector{T}
+    ci = CartesianIndices(ntuple(t -> -ll[t]:ll[t], N))
+    MM_c = T[] 
+    for I in ci
+        x = T(I.I)
+        if mm_filter(x, L, basis)
+            push!(MM_c, x)
+        end
+    end
+
     if basis === complex
         return MM_c
     elseif basis === real 
+        # NOTE: lots of allocations here that could be improved if needed
         MM_abs = unique([ abs.(mm) for mm in MM_c ])
-        MM_r = union([ signed_mmset(mm) for mm in MM_abs ]...)
-        return MM_r
+        MM_r = reduce(vcat, signed_mmset(mm, false) for mm in MM_abs)
+        return unique(MM_r)
     end
     error("Unknown basis type: $basis")
 end

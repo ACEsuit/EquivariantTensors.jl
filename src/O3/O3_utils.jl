@@ -45,10 +45,17 @@ Ctran(l::Int64; basis = real) =
          sparse([ _Ctran(m, μ, basis) for m = -l:l, μ = -l:l ])
 
 
-Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}, basis = real) where {N} = 
-      ( abs.(mm1) == abs.(mm2) 
-         ? conj(prod(_Ctran(mm2[t], mm1[t], basis) for t = 1:N))
-         : zero(ComplexF64) )::ComplexF64
+# Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}, basis = real) where {N} = 
+#       ( abs.(mm1) == abs.(mm2) 
+#          ? conj(prod(_Ctran(mm2[t], mm1[t], basis) for t = 1:N))
+#          : zero(ComplexF64) )
+function Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}, basis = real) where {N}  
+   if abs.(mm1) == abs.(mm2) 
+      return conj(prod(_Ctran(mm2[t], mm1[t], basis) for t = 1:N))
+   else 
+      return zero(ComplexF64)
+   end 
+end
 
 
 Ctran(mm1::Vector{Int}, mm2::Vector{Int}, basis = real) = 
@@ -75,8 +82,8 @@ function rAA2cAA(MM_c, MM_r; basis = real)
    group_r = group_by_abs(MM_r)
 
    # Match groups and fill sparse matrix accordingly
-   # TODO: replace with triplet format and then use sparse constructor
-   CC = spzeros(ComplexF64, length(MM_c), length(MM_r))
+   # start triplet-format assembly 
+   rows = Int[]; cols = Int[]; vals = ComplexF64[]
 
    # By the following, we don't need nested loops
    for (key, c_inds) in group_c
@@ -84,13 +91,16 @@ function rAA2cAA(MM_c, MM_r; basis = real)
            r_inds = group_r[key]
            for i in c_inds
                for j in r_inds
-                   CC[i, j] = Ctran(MM_c[i], MM_r[j], basis)
+                  push!(rows, i)
+                  push!(cols, j)
+                  push!(vals, Ctran(MM_c[i], MM_r[j], basis))
                end
            end
        end
    end
 
-   return CC
+   # return CC
+   return sparse(rows, cols, vals, length(MM_c), length(MM_r))
 end
 
 
