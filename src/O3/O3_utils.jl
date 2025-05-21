@@ -22,9 +22,9 @@ _Ctran(i::Integer, j::Integer) = _Ctran(i, j, real)
 _Ctran(i::Integer, j::Integer, basis::typeof(complex)) = (i == j)
 
 
-function _Ctran(i::Integer, j::Integer, basis::typeof(real))
-	val_list = SA[(-1)^(i), im, (-1)^(i+1)*im, 1] / sqrt(2)
-   T = eltype(val_list)
+function _Ctran(i::Integer, j::Integer, basis::typeof(real), 
+                T = ComplexF64)
+	val_list = SVector{4, T}((-1)^(i), im, (-1)^(i+1)*im, 1) / sqrt(2)
 	if abs(i) != abs(j)
 		return zero(T)
 	elseif i == j == 0
@@ -44,17 +44,22 @@ end
 Ctran(l::Int64; basis = real) = 
          sparse([ _Ctran(m, μ, basis) for m = -l:l, μ = -l:l ])
 
-
+# TODO: unclear which this short version is type unstable ... 
 # Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}, basis = real) where {N} = 
 #       ( abs.(mm1) == abs.(mm2) 
 #          ? conj(prod(_Ctran(mm2[t], mm1[t], basis) for t = 1:N))
 #          : zero(ComplexF64) )
+
 function Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}, basis = real) where {N}  
-   if abs.(mm1) == abs.(mm2) 
-      return conj(prod(_Ctran(mm2[t], mm1[t], basis) for t = 1:N))
-   else 
-      return zero(ComplexF64)
+   T = ComplexF64 
+   if abs.(mm1) != abs.(mm2) 
+      return zero(T) 
    end 
+   out = one(T) 
+   for t = 1:N 
+      out *= _Ctran(mm2[t], mm1[t], basis)
+   end 
+   return conj(out) 
 end
 
 
@@ -81,22 +86,26 @@ function rAA2cAA(MM_c, MM_r; basis = real)
    group_c = group_by_abs(MM_c)
    group_r = group_by_abs(MM_r)
 
+   # Could uncomment this again in case we run into any problems. But 
+   # on all tests it seemed that group_c and group_r have exactly the 
+   # same keys. 
+   # @assert sort(collect(keys(group_c))) == sort(collect(keys(group_r)))
+
    # Match groups and fill sparse matrix accordingly
    # start triplet-format assembly 
    rows = Int[]; cols = Int[]; vals = ComplexF64[]
 
    # By the following, we don't need nested loops
    for (key, c_inds) in group_c
-       if haskey(group_r, key)
-           r_inds = group_r[key]
-           for i in c_inds
-               for j in r_inds
-                  push!(rows, i)
-                  push!(cols, j)
-                  push!(vals, Ctran(MM_c[i], MM_r[j], basis))
-               end
-           end
-       end
+      r_inds = group_r[key]
+      for i in c_inds, j in r_inds
+         val = Ctran(MM_c[i], MM_r[j], basis)
+         if abs(val) > 1e-12 
+            push!(rows, i)
+            push!(cols, j)
+            push!(vals, val)
+         end
+      end
    end
 
    # return CC
