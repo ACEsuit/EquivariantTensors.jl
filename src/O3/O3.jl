@@ -418,8 +418,9 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM_r ] # sort the mm's within the permutable blocks
             MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
 
-            
-            D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
+            # NOTE: this block has a type instability; unclear why.
+            D_MM_reduced = Dict{eltype(MM_reduced), Int}(
+                    MM_reduced[i] => i for i in 1:length(MM_reduced))
         
             FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
 
