@@ -32,7 +32,7 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    #       the symmetrization operator. But for now it works and is easy to use.
    #
    # Vector{Vector{NT_NLM}}
-   𝔸spec = _auto_nnllmm_spec(mb_spec)
+   𝔸spec = _auto_nnllmm_spec(mb_spec, L)
    
    # convert an element of 𝔸spec to nn, ll, mm, which is the format 
    # used by the coupling_coeffs function 
@@ -45,8 +45,9 @@ function symmetrisation_matrix(L::Integer, mb_spec;
 
    # convert nn, ll, mm or bb to a unique search key for searching in 𝔸spec
    _bb_key(nnllmm::Tuple) = _bb_key(nnllmm[1], nnllmm[2], nnllmm[3])
-   _bb_key(nn, ll, mm) = sort([ (n, l, m) for (n, l, m) in zip(nn, ll, mm) ])
-   _bb_key(bb::Vector{<: NamedTuple}) = sort([ (b.n, b.l, b.m) for b in bb ])
+   _bb_key(nn, ll, mm) = sort([ (nn[i], ll[i], mm[i]) for i = 1:length(nn) ])
+   _bb_key(bb::Vector{@NamedTuple{n::Int, l::Int, m::Int}}) = 
+            sort([ (b.n, b.l, b.m) for b in bb ])
 
    # create a lookup into 𝔸spec 
    inv_𝔸spec = invmap(𝔸spec, _bb_key)
@@ -71,7 +72,12 @@ function symmetrisation_matrix(L::Integer, mb_spec;
       cc, MM = O3.coupling_coeffs(L, ll, nn; kwargs...)
       num_b = size(cc, 1)   
       # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
-      idx_𝔸 = [inv_𝔸spec[ (nn, ll, mm) ] for mm in MM] 
+      # idx_𝔸 = Int[ inv_𝔸spec[ (nn, ll, mm) ] for mm in MM ] 
+      idx_𝔸 = Int[] 
+      for mm in MM 
+         _i = (inv_𝔸spec[ (nn, ll, mm) ])::Int 
+         push!(idx_𝔸, _i)
+      end
       # add the new basis functions to the triplet format
       for q = 1:num_b 
          num𝔹 += 1
