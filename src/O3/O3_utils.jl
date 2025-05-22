@@ -137,8 +137,8 @@ function _real_clebschgordan(l1, m1, l2, m2, λ, νp)
            # Selection rules: |ν| must be ≤ λ and match |νp|
            if abs(ν) ≤ λ && abs(ν) == abs(νp)
                cg = PartialWaveFunctions.clebschgordan(l1, n1, l2, n2, λ, ν)
-               result += ( Ctran(m1, n1) * conj(Ctran(-m2, -n2))
-                           * conj(Ctran(νp, ν, basis)) * cg )
+               result += ( _Ctran(m1, n1, real) * conj(_Ctran(-m2, -n2, real))
+                           * conj(_Ctran(νp, ν, real)) * cg )
            end
        end
    end

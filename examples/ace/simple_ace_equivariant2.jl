@@ -20,7 +20,7 @@ struct SimpleACE4{T, RB, YB, BB, TT}
    trans::TT
 end
 
-function evaluate(m::SimpleACE4, 𝐫::AbstractVector{<: SVector{3}}; basis = complex)
+function evaluate(m::SimpleACE4, 𝐫::AbstractVector{<: SVector{3}})
    # [1] Embeddings: evaluate the Rn and Ylm embeddings
    #   Rn[j] = Rn(norm(𝐫[j])), Ylm[j] = Ylm(Rs[j])
    Rn = P4ML.evaluate(m.rbasis, norm.(𝐫))
@@ -92,8 +92,8 @@ Q, cD = ET.O3.QD_from_angles(1, θ, complex)
 perm = randperm(nX)
 Q𝐫 = Ref(Q) .* 𝐫[perm]
 
-φ  = evaluate(model, 𝐫; basis = complex)
-φQ = evaluate(model, Q𝐫; basis = complex)
+φ  = evaluate(model, 𝐫)
+φQ = evaluate(model, Q𝐫)
 @show cD * φ * cD' ≈ φQ
 
 
@@ -135,6 +135,6 @@ Q, rD = ET.O3.QD_from_angles(1, θ, real)
 perm = randperm(nX)
 Q𝐫 = Ref(Q) .* 𝐫[perm]
 
-φ  = evaluate(model, 𝐫; basis = real)
-φQ = evaluate(model, Q𝐫; basis = real)
+φ  = evaluate(model, 𝐫)
+φQ = evaluate(model, Q𝐫)
 @show rD * φ * rD' ≈ φQ

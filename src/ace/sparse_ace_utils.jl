@@ -159,8 +159,8 @@ function _auto_nnllmm_spec(nnll_spec)
    for bb in nnll_spec
       MM = setproduct( [ -b.l:b.l for b in bb ] )
       for mm in eachrow(MM)
-         bb = sort!([ (n = b.n, l = b.l, m = m) for (b, m) in zip(bb, mm) ])
-         push!(nnllmm, bb)
+         bb1 = sort!([ (n = b.n, l = b.l, m = m) for (b, m) in zip(bb, mm) ])
+         push!(nnllmm, bb1)
       end
    end
    sort!(nnllmm, by = _sortby)

@@ -159,6 +159,11 @@ end
 lazy_signed_mmset(mm::SVector{N, T}) where {N, T} = 
         LazySignedMMset(mm, zero(MVector{N, Bool}))
 
+function lazy_signed_mmset(mm::Vector{T}) where {T}
+    N = length(mm) 
+    return lazy_signed_mmset(SVector{N, T}(mm))
+end
+
 function Base.iterate(it::LazySignedMMset{N, T}) where {N, T}
     return iterate(it, 0)
 end
