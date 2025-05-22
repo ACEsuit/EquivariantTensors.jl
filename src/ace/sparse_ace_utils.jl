@@ -146,20 +146,19 @@ end
 """
 takes an nnll spec and generates a complete list of all possible nnllmm
 """
-function _auto_nnllmm_spec(nnll_spec, Lmax = Inf)
+function _auto_nnllmm_spec(nnll_spec)
    # NOTE: this function is a huge bottleneck of the basis generation code 
    #       but it appears that it cannot be easily improved. Using sorted 
    #       inserts is MUCH MUCH slower. Using a Set is also a little bit 
    #       slower. 
-   #       Consider how to multi-thread it? 
+   #       - Consider how to multi-thread it? 
+   #       - or add the mm filter? 
    _sortby(bb) = (length(bb), bb) 
    NT_NLM = typeof( (n = 0, l = 0, m = 0) ) 
    nnllmm = Vector{NT_NLM}[] 
    for bb in nnll_spec
       MM = setproduct( [ -b.l:b.l for b in bb ] )
       for mm in eachrow(MM)
-         # Liwei: is this really correct? 
-         if abs(sum(mm)) > Lmax; continue; end 
          bb = sort!([ (n = b.n, l = b.l, m = m) for (b, m) in zip(bb, mm) ])
          push!(nnllmm, bb)
       end

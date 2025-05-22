@@ -32,7 +32,7 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    #       the symmetrization operator. But for now it works and is easy to use.
    #
    # Vector{Vector{NT_NLM}}
-   𝔸spec = _auto_nnllmm_spec(mb_spec, L)
+   𝔸spec = _auto_nnllmm_spec(mb_spec)
    
    # convert an element of 𝔸spec to nn, ll, mm, which is the format 
    # used by the coupling_coeffs function 
