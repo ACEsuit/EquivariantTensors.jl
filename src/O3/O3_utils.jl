@@ -24,20 +24,20 @@ _Ctran(i::Integer, j::Integer, basis::typeof(complex)) = (i == j)
 
 function _Ctran(i::Integer, j::Integer, basis::typeof(real), 
                 T = ComplexF64)
-	val_list = SVector{4, T}((-1)^(i), im, (-1)^(i+1)*im, 1) / sqrt(2)
+	# val_list = SVector{4, T}((-1)^(i), im, (-1)^(i+1)*im, 1) / sqrt(2)
 	if abs(i) != abs(j)
 		return zero(T)
 	elseif i == j == 0
 		return one(T)
 	elseif i > 0 && j > 0
-		return val_list[1]
+		return T((-1)^i / sqrt(2))
 	elseif i < 0 && j < 0
-		return val_list[2]
+		return im / sqrt(2)
 	elseif i < 0 && j > 0
-		return val_list[3]
+		return (-1)^(i+1)*im / sqrt(2)
    end
    @assert i > 0 && j < 0
-	return val_list[4]
+	return T(1 / sqrt(2))
 end
 
 
@@ -81,7 +81,7 @@ function group_by_abs(MM::Vector{SVector{N,Int}}) where N
    return abs_map
 end
 
-function rAA2cAA(MM_c, MM_r; basis = real)
+function rAA2cAA(MM_c, MM_r)
    # find the abs.(mm) and group
    group_c = group_by_abs(MM_c)
    group_r = group_by_abs(MM_r)
@@ -99,7 +99,7 @@ function rAA2cAA(MM_c, MM_r; basis = real)
    for (key, c_inds) in group_c
       r_inds = group_r[key]
       for i in c_inds, j in r_inds
-         val = Ctran(MM_c[i], MM_r[j], basis)
+         val = Ctran(MM_c[i], MM_r[j], real)
          if abs(val) > 1e-12 
             push!(rows, i)
             push!(cols, j)
