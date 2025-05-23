@@ -44,6 +44,7 @@ function symmetrisation_matrix(L::Integer, mb_spec;
 
    # NB : HACK TO DISTINGUISH L = 0 and L > 0
    #      this should potentially be revisited in the future 
+   #      in fact this might be a type-stability issue
    TVAL = L == 0 ? Float64 : SVector{2*L+1, Float64}
    irow = Int[]; jcol = Int[]; val = TVAL[]
 
