@@ -59,7 +59,7 @@ for L = 0:Lmax
         # Generate random points on the sphere
         X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
         MM_c = mm_generate(L, ll, nn)
-        MM_r = mm_generate(L, ll, nn; flag = :SpheriCart)
+        MM_r = mm_generate(L, ll, nn; basis = real)
         AA_c = eval_AA_basis(X; MM = MM_c, ll, nn, sym = false)
         AA_r = eval_AA_basis(X; MM = MM_r, ll, nn, Real = true, sym = false)
 

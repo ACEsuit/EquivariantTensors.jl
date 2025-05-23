@@ -10,42 +10,64 @@ import PartialWaveFunctions, WignerD
 
 # transformation matrix from RSH to CSH for different conventions
 
-const order_dict = Dict(:SpheriCart => SA[1,2,3,4], 
-                      :CondonShortley => SA[4,3,2,1], 
-                      :FHIaims => SA[4,2,3,1] )
+# NOTE: removing this dictionary for now since we decided to allow only the 
+#       real and complex sphericart basis 
+#
+# const order_dict = Dict(:SpheriCart => SA[1,2,3,4], 
+#                       :CondonShortley => SA[4,3,2,1], 
+#                       :FHIaims => SA[4,2,3,1] )
 
-function Ctran(i::Int64,j::Int64;convention = :SpheriCart)
-	if convention == :cSH
-		return i == j
-	end
+_Ctran(i::Integer, j::Integer) = _Ctran(i, j, real)
 
-    order = order_dict[convention]
-	val_list = SA[(-1)^(i), im, (-1)^(i+1)*im, 1][order] ./ sqrt(2)
+_Ctran(i::Integer, j::Integer, basis::typeof(complex)) = (i == j)
+
+
+function _Ctran(i::Integer, j::Integer, basis::typeof(real), 
+                T = ComplexF64)
+	# val_list = SVector{4, T}((-1)^(i), im, (-1)^(i+1)*im, 1) / sqrt(2)
 	if abs(i) != abs(j)
-		return zero(ComplexF64)
+		return zero(T)
 	elseif i == j == 0
-		return one(ComplexF64)
+		return one(T)
 	elseif i > 0 && j > 0
-		return val_list[1]
+		return T((-1)^i / sqrt(2))
 	elseif i < 0 && j < 0
-		return val_list[2]
+		return im / sqrt(2)
 	elseif i < 0 && j > 0
-		return val_list[3]
-    end
-    @assert i > 0 && j < 0
-	return val_list[4]
+		return (-1)^(i+1)*im / sqrt(2)
+   end
+   @assert i > 0 && j < 0
+	return T(1 / sqrt(2))
 end
 
-Ctran(l::Int64; convention = :SpheriCart) = sparse(
-    Matrix{ComplexF64}([ Ctran(m,μ;convention=convention) 
-                         for m = -l:l, μ = -l:l ]))
 
-# Type unstable for now
-Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}; convention = :SpheriCart) where N = abs.(mm1) == abs.(mm2) ? 
-      prod(Ctran(mm2[i], mm1[i]; convention=convention)' for i in 1:N) : 0.0 + 0im
+Ctran(l::Int64; basis = real) = 
+         sparse([ _Ctran(m, μ, basis) for m = -l:l, μ = -l:l ])
 
-Ctran(mm1::Vector{Int}, mm2::Vector{Int}; convention = :SpheriCart) = abs.(mm1) == abs.(mm2) ? 
-      prod(Ctran(mm2[i], mm1[i]; convention=convention)' for i in 1:length(mm1)) : 0.0 + 0im
+# TODO: unclear which this short version is type unstable ... 
+# Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}, basis = real) where {N} = 
+#       ( abs.(mm1) == abs.(mm2) 
+#          ? conj(prod(_Ctran(mm2[t], mm1[t], basis) for t = 1:N))
+#          : zero(ComplexF64) )
+
+function Ctran(mm1::SVector{N,Int}, mm2::SVector{N,Int}, basis = real) where {N}  
+   T = ComplexF64 
+   if abs.(mm1) != abs.(mm2) 
+      return zero(T) 
+   end 
+   out = one(T) 
+   for t = 1:N 
+      out *= _Ctran(mm2[t], mm1[t], basis)
+   end 
+   return conj(out) 
+end
+
+
+Ctran(mm1::Vector{Int}, mm2::Vector{Int}, basis = real) = 
+      ( abs.(mm1) == abs.(mm2) 
+        ? prod(_Ctran(mm2[i], mm1[i], basis)' for i in 1:length(mm1))
+        : zero(ComplexF64) )
+
 
 # We also need to define the transformation matrix from product rSH to product cSH
 
@@ -59,27 +81,35 @@ function group_by_abs(MM::Vector{SVector{N,Int}}) where N
    return abs_map
 end
 
-function rAA2cAA(MM_c, MM_r; convention = :SpheriCart)
+function rAA2cAA(MM_c, MM_r)
    # find the abs.(mm) and group
    group_c = group_by_abs(MM_c)
    group_r = group_by_abs(MM_r)
 
+   # Could uncomment this again in case we run into any problems. But 
+   # on all tests it seemed that group_c and group_r have exactly the 
+   # same keys. 
+   # @assert sort(collect(keys(group_c))) == sort(collect(keys(group_r)))
+
    # Match groups and fill sparse matrix accordingly
-   CC = spzeros(ComplexF64, length(MM_c), length(MM_r))
+   # start triplet-format assembly 
+   rows = Int[]; cols = Int[]; vals = ComplexF64[]
 
    # By the following, we don't need nested loops
    for (key, c_inds) in group_c
-       if haskey(group_r, key)
-           r_inds = group_r[key]
-           for i in c_inds
-               for j in r_inds
-                   CC[i, j] = Ctran(MM_c[i], MM_r[j]; convention=convention)
-               end
-           end
-       end
+      r_inds = group_r[key]
+      for i in c_inds, j in r_inds
+         val = Ctran(MM_c[i], MM_r[j], real)
+         if abs(val) > 1e-12 
+            push!(rows, i)
+            push!(cols, j)
+            push!(vals, val)
+         end
+      end
    end
 
-   return CC
+   # return CC
+   return sparse(rows, cols, vals, length(MM_c), length(MM_r))
 end
 
 
@@ -107,7 +137,8 @@ function _real_clebschgordan(l1, m1, l2, m2, λ, νp)
            # Selection rules: |ν| must be ≤ λ and match |νp|
            if abs(ν) ≤ λ && abs(ν) == abs(νp)
                cg = PartialWaveFunctions.clebschgordan(l1, n1, l2, n2, λ, ν)
-               result += Ctran(m1, n1) * conj(Ctran(-m2, -n2)) * conj(Ctran(νp, ν)) * cg
+               result += ( _Ctran(m1, n1, real) * conj(_Ctran(-m2, -n2, real))
+                           * conj(_Ctran(νp, ν, real)) * cg )
            end
        end
    end

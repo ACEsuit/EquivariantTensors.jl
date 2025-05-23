@@ -26,34 +26,17 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    #   Vector{Vector{NT_NLM}}   
    #   where NT_NLM = typeof( (n = 0, l = 0) )
 
-   # generate a first naive 𝔸 specification that doesn't take into account 
-   # any symmetries at all. 
-   # NOTE: this is not efficient and could be done on the fly while generating 
-   #       the symmetrization operator. But for now it works and is easy to use.
-   #
-   # Vector{Vector{NT_NLM}}
-   𝔸spec = _auto_nnllmm_spec(mb_spec)
-   
    # convert an element of 𝔸spec to nn, ll, mm, which is the format 
    # used by the coupling_coeffs function 
-   function _vecnt2nnllmm(bb)
+   function _vecnt2nnll(bb)
       nn = [ b.n for b in bb ]
       ll = [ b.l for b in bb ]
-      mm = [ b.m for b in bb ]
-      return nn, ll, mm
+      return nn, ll
    end
-
-   # convert nn, ll, mm or bb to a unique search key for searching in 𝔸spec
-   _bb_key(nnllmm::Tuple) = _bb_key(nnllmm[1], nnllmm[2], nnllmm[3])
-   _bb_key(nn, ll, mm) = sort([ (n, l, m) for (n, l, m) in zip(nn, ll, mm) ])
-   _bb_key(bb::Vector{<: NamedTuple}) = sort([ (b.n, b.l, b.m) for b in bb ])
-
-   # create a lookup into 𝔸spec 
-   inv_𝔸spec = invmap(𝔸spec, _bb_key)
 
    # extract all unique (nn, ll) blocks, since the (ll, mm) will only be used 
    # in generating the coupled / symmetrized basis functions
-   nnll = unique( [(nn, ll) for (nn, ll, mm) in _vecnt2nnllmm.(𝔸spec)] )
+   nnll = unique(_vecnt2nnll.(mb_spec))
 
    # Now for each (nn, ll) block we can generate all possible invariant basis 
    # functions. We assemble the symmetrization operator in triplet format, 
@@ -61,17 +44,28 @@ function symmetrisation_matrix(L::Integer, mb_spec;
 
    # NB : HACK TO DISTINGUISH L = 0 and L > 0
    #      this should potentially be revisited in the future 
+   #      in fact this might be a type-stability issue
    TVAL = L == 0 ? Float64 : SVector{2*L+1, Float64}
    irow = Int[]; jcol = Int[]; val = TVAL[]
 
    # counter for total number of equivariant basis functions
+   𝔸spec = Vector{@NamedTuple{n::Int64, l::Int64, m::Int64}}[]
    num𝔹 = 0 
+   num𝔸 = 0
    for (nn, ll) in nnll
       # here the kwargs... should be PI and basis 
       cc, MM = O3.coupling_coeffs(L, ll, nn; kwargs...)
       num_b = size(cc, 1)   
+      if num_b == 0; continue; end
       # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
-      idx_𝔸 = [inv_𝔸spec[ (nn, ll, mm) ] for mm in MM] 
+      # idx_𝔸 = Int[ inv_𝔸spec[ (nn, ll, mm) ] for mm in MM ] 
+      idx_𝔸 = Int[] 
+      for (_i,mm) in enumerate(MM) 
+         # _i = (inv_𝔸spec[ (nn, ll, mm) ])::Int 
+         push!(idx_𝔸, _i+num𝔸)
+         push!(𝔸spec, [(n = nn[i], l = ll[i], m = mm[i]) for i = 1:length(mm)])
+      end
+      num𝔸 += length(MM)
       # add the new basis functions to the triplet format
       for q = 1:num_b 
          num𝔹 += 1
@@ -81,8 +75,9 @@ function symmetrisation_matrix(L::Integer, mb_spec;
       end
    end
 
+   @assert num𝔸 == length(𝔸spec)
    # assemble the symmetrization operator in compressed column format 
-   symm = sparse(irow, jcol, val, num𝔹, length(𝔸spec)) 
+   symm = sparse(irow, jcol, val, num𝔹, num𝔸) 
 
    # prune rows with all-zero entries (if there are any then print a warning 
    # because this indicates a bug in `coupling_coeffs`)

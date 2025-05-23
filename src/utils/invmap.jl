@@ -5,8 +5,11 @@ struct FFInvMap{T, HF}
    hashfcn::HF
 end 
 
-Base.getindex(m::FFInvMap, v) = 
-      m.p[searchsortedfirst(m.h, m.hashfcn(v))]
+function Base.getindex(m::FFInvMap{T}, v) where {T}
+   h = m.hashfcn(v)::T
+   i = searchsortedfirst(m.h, h)
+   return m.p[i]
+end
 
 """
       invmap(a::AbstractVector)
@@ -19,9 +22,10 @@ inva[a[i]] == i  # true for all i
 ```
 """
 function invmap(a::AbstractVector, hashfcn = identity)
-   p = sortperm(a) 
-   h = [ hashfcn(a[p[i]]) for i in 1:length(a) ]
-   if !allunique(h)
+   h = hashfcn.(a)
+   p = sortperm(h) 
+   permute!(h, p)
+   if any(h[i] == h[i+1] for i = 1:length(h)-1)
       throw(ArgumentError("invmap: Elements of a must be unique"))
    end
    return FFInvMap(h, p, hashfcn)
