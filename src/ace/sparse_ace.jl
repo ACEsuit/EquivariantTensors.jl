@@ -188,7 +188,22 @@ function rrule(::typeof(evaluate), tensor::SparseACE, Rnl, Ylm, ps, st)
    return BB, pb
 end
 
+const NT_NL_SPEC = NamedTuple{(:n, :l), Tuple{Int, Int}}
 
+_nl(bb) = [(n = b.n, l = b.l) for b in bb]
+
+function get_nnll_spec(tensor::SparseACE{NL, TA, TAA, TSYM}, idx) where {NL, TA, TAA, TSYM}
+   spec = tensor.meta["𝔸spec"]::Vector{Vector{@NamedTuple{n::Int, l::Int, m::Int}}}
+   A2Bmap = tensor.A2Bmaps[idx]
+   nBB = size(A2Bmap, 1)
+   nnll_list = Vector{Vector{NT_NL_SPEC}}(undef, nBB)
+   for i in 1:nBB
+      AAidx_nnz = A2Bmap[i, :].nzind
+      bbs = spec[AAidx_nnz]
+      nnll_list[i] = _nl(bbs[1])
+   end
+   return nnll_list
+end
 #=
 
 
