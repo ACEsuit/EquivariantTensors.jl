@@ -2,13 +2,13 @@ using EquivariantTensors, StaticArrays, LinearAlgebra
 using EquivariantTensors.O3: coupling_coeffs, gram
 
 """
-D(N,l,Ltot)
+_D(N,l,Ltot)
 Compute the dimension of the RPE basis for a given set of parameters
 N: Correlation order
 l: Angular momentum
 Ltot: Order of equivariance
 """
-function D(N,l,Ltot,N1 = Int(round(N/2)))
+function _D(N::Int,l::Int,Ltot::Int,N1 = Int(round(N/2)))
     ll = SA[ones(Int64,N)...] .* l
     nn = SA[ones(Int64,N)...]
     
@@ -26,6 +26,28 @@ function D(N,l,Ltot,N1 = Int(round(N/2)))
     
     # For large N, our code can still return zero basis even though the non-recursive version returns already a normalized basis
     return findall(x -> x>1e-7, norm.([ C_rpe_recursive[i,:] for i in 1:size(C_rpe_recursive,1) ]) ./ size(C_rpe_recursive,2)) |> length
+end
+
+
+const D_cache = Dict{Tuple{Int, Int, Int}, Int}()
+
+# Cached wrapper for _D
+"""
+D(N,l,Ltot)
+Compute the dimension of the RPE basis for a given set of parameters
+N: Correlation order
+l: Angular momentum
+Ltot: Order of equivariance
+"""
+function D(N::Int,l::Int,Ltot::Int)
+    key = (N,l,Ltot)
+    if haskey(D_cache, key)
+        return D_cache[key]
+    else
+        result = _D(N,l,Ltot)
+        D_cache[key] = result
+        return result
+    end
 end
 
 # Functions that find (N,l) and (N',l') such that D(N,l,L) == D(N',l',L) for all L (and Nl == N'l')
@@ -67,4 +89,22 @@ function matching_pairs(AA::Vector{Tuple{Int, Int}}, B::Function)
     return result
 end
 
-matching_pairs(factor_pairs(4), DD)
+# Example code for finding matching pairs for N*l=4
+# matching_pairs(factor_pairs(4), DD)
+
+# Example code for saving cached dimensions to a JLD2 file
+# using JLD2
+
+# for N in 1:6, l in 1:6
+#     for Ltot in 0:N*l
+#         D(N,l,Ltot)
+#     end
+# end
+
+# filename = "cache_dim.jld2"
+# @save filename D_cache
+# println("Saved cache to $filename")
+
+# # Load cache from a .jld2 file
+# @load filename D_cache
+# println("Loaded cache from $filename")
