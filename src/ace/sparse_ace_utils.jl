@@ -1,6 +1,65 @@
+using SparseArrays: findnz
+
+function sparse_equivariant_tensors(;
+                  LL, 
+                  mb_spec, 
+                  Rnl_spec, 
+                  Ylm_spec, 
+                  basis, )
+   A2Bmaps = [] 
+   𝔸specs = [] 
+   for L in LL 
+      symm_L, 𝔸spec_L = symmetrisation_matrix(L, mb_spec; 
+                                 prune = true, PI = true, basis = basis)
+      push!(A2Bmaps, symm_L)
+      push!(𝔸specs, 𝔸spec_L)                                 
+   end
+
+   # the combined 𝔸spec is just the union of all individual 𝔸specs 
+   # NB: this sorting operation looks very hacky and brittle and should be 
+   #     looked at very carefully; maybe one could introduce a default 
+   #     ordering of the basis that is always automatically enforces and checked.
+   𝔸spec = sort( union(𝔸specs...), by = bb -> (length(bb), bb) )
+   inv_𝔸 = invmap(𝔸spec)
+
+   # now we need to re-index the symmetrization operators. 
+   for i = 1:length(𝔸specs)
+      # map 𝔸spec_i -> 𝔸spec
+      rows, cols, vals = findnz(A2Bmaps[i])
+      for j = 1:length(cols) 
+         bb = 𝔸specs[i][cols[j]]
+         cols[j] = inv_𝔸[bb]
+      end
+      A2Bmaps[i] = sparse(rows, cols, vals, 
+                          size(A2Bmaps[i], 1), length(𝔸spec))
+   end 
+
+   # turn the A2Bmaps into a tuple... 
+   symm = tuple(A2Bmaps...)
+
+   # now we work backwards to generate the Aspec, then the layers, 
+   # see `sparse_equivariant_tensor` for for documentation of what is 
+   # happening here. 
+   Aspec = sort( unique( reduce(vcat, 𝔸spec) ) )
+   Aspec_raw = _make_idx_A_spec(Aspec, Rnl_spec, Ylm_spec)
+   𝔸spec_raw = _make_idx_AA_spec(𝔸spec, Aspec)
+   Abasis = PooledSparseProduct(Aspec_raw)
+   𝔸basis = SparseSymmProd(𝔸spec_raw)
+
+   meta = Dict("Rnl_spec" => Rnl_spec, 
+                "Ylm_spec" => Ylm_spec, 
+                "Aspec" => Aspec, 
+                "𝔸spec" => 𝔸spec, 
+                "mb_spec" => mb_spec,
+                "LL" => LL,)
+
+   return SparseACE(Abasis, 𝔸basis, symm, meta)
+end
+
+
 
 """
-   function build_sparse_ace()
+   sparse_equivariant_tensor(L, mb_spec, Rnl_spec, Ylm_spec, basis)
 """
 function sparse_equivariant_tensor(;
                   L::Integer, 
@@ -14,18 +73,10 @@ function sparse_equivariant_tensor(;
    #    error("mb_spec contains 1p basis functions that are not contained in Rnl_spec")
    # end
 
-   # generate a first naive 𝔸 specification that doesn't take into account 
-   # any symmetries at all. 
-   #   TODO: this should be shifted into the symmetrisation operator constructor
-   #
-   # NT_NLM = typeof( (n = 0, l = 0, m = 0) )
-   # Vector{Vector{NT_NLM}}
-   𝔸spec_long = _auto_nnllmm_spec(mb_spec)
-
    # from this we can generate the coupling matrix and will also get a 
    # pruned 𝔸spec containing only those basis functions that are relevant 
    # for the symmetric basis 
-   symm, 𝔸spec = symmetrisation_matrix(L, 𝔸spec_long; 
+   symm, 𝔸spec = symmetrisation_matrix(L, mb_spec; 
                                        prune = true, PI = true, basis = basis)
 
    # now we work backwards to generate the Aspec 
@@ -48,7 +99,7 @@ function sparse_equivariant_tensor(;
                 "mb_spec" => mb_spec,
                 "L" => L,)
 
-   return SparseACE(Abasis, 𝔸basis, symm, meta)                
+   return SparseACE(Abasis, 𝔸basis, (symm,), meta)                
 end
 
 
@@ -96,17 +147,24 @@ end
 takes an nnll spec and generates a complete list of all possible nnllmm
 """
 function _auto_nnllmm_spec(nnll_spec)
+   # NOTE: this function is a huge bottleneck of the basis generation code 
+   #       but it appears that it cannot be easily improved. Using sorted 
+   #       inserts is MUCH MUCH slower. Using a Set is also a little bit 
+   #       slower. 
+   #       - Consider how to multi-thread it? 
+   #       - or add the mm filter? 
+   _sortby(bb) = (length(bb), bb) 
    NT_NLM = typeof( (n = 0, l = 0, m = 0) ) 
-   @show eltype(nnll_spec)
    nnllmm = Vector{NT_NLM}[] 
    for bb in nnll_spec
       MM = setproduct( [ -b.l:b.l for b in bb ] )
       for mm in eachrow(MM)
-         push!(nnllmm, [ (n = b.n, l = b.l, m = m) 
-                         for (b, m) in zip(bb, mm) ] )
+         bb1 = sort!([ (n = b.n, l = b.l, m = m) for (b, m) in zip(bb, mm) ])
+         push!(nnllmm, bb1)
       end
    end
-   return nnllmm
+   sort!(nnllmm, by = _sortby)
+   return unique!(nnllmm)
 end
 
 

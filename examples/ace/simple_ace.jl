@@ -94,7 +94,7 @@ myfilter = ii -> begin
       nn, ll, mm = ii2bb(ii);
       return ( (sum(nn + ll; init=0) <= Dtot) &&  # total degree trunction
                iseven(sum(ll; init=0)) &&         # reflection-invariance
-               (length(mm) == 0 || ET.O3.m_filter(mm, 0, flag=:SpheriCart)) &&         # rotation-invariance
+               (length(mm) == 0 || ET.O3.mm_filter(mm, 0, real)) &&         # rotation-invariance
                sum(ii) > 0 )           # drop 0-corr sure to bug 
    end 
 
