@@ -269,7 +269,7 @@ println()
 include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 
 for itest = 1:10 
-   local ORD, M, spec, A, AA1, AA2, AA3, AA4 
+   local ORD, nX, bA, bAA1, bAA2, M, spec, A, AA1, AA2, AA3, AA4 
 
    ORD = mod1(itest, 3) + 1
    M = rand(20:30)
