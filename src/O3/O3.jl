@@ -281,7 +281,7 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
         error("unknown basis type: $basis")
     end
     
-    return _coupling_coeffs(_L, _ll, _nn; PI = PI, flag = flag)
+    return _coupling_coeffs(_L, _ll, _nn; PI = PI, flag = flag, ordered = ordered)
 end
 
 function _sort(x::T, permutable_blocks::Vector{Vector{Int}}) where T
@@ -333,11 +333,17 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
         D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
         
+        if !ordered 
+            global UMatrix = zeros(T, r, length(MM))
+        end
         FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
 
         for (j,mm) in enumerate(MM)
             col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
             for i in 1:r
+                if !ordered
+                    UMatrix[i,j] = GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
+                end
                 FMatrix[i,col] += GCG(ll,mm,Lset[i];vectorize=(L!=0),flag=flag)
             end
         end 
@@ -394,7 +400,7 @@ choice is `real`, which is compatible with the `SpheriCart.jl` convention.
     default is `:kernel`, alternative choice is `:explicit`.
 """
 function coupling_coeffs(L::Integer, ll, nn, N1::Union{Integer,Vector{<:Integer}}; 
-                      basis = complex)
+                      basis = complex, ordered = true)
 
     # convert L into the format required internally 
     _L = Int(L) 
@@ -431,12 +437,13 @@ function coupling_coeffs(L::Integer, ll, nn, N1::Union{Integer,Vector{<:Integer}
         error("unknown basis type: $basis")
     end
     
-    return _coupling_coeffs(_L, _ll, _nn, N1; flag = flag)
+    return _coupling_coeffs(_L, _ll, _nn, N1; flag = flag, 
+                            ordered = ordered)
 end
 
 # Given nn and ll, generate the Ltot RE basis which are PI for the first N1 variables and also PI for the rest
 # A symmetrization is done in the end, which is just an SVD, so that the output is fully PI
-function _coupling_coeffs(Ltot::Int64,ll::SVector{N,Int64},nn::SVector{N,Int64},N1::Int64;flag=:cSH) where N
+function _coupling_coeffs(Ltot::Int64,ll::SVector{N,Int64},nn::SVector{N,Int64},N1::Int64;flag=:cSH,ordered=true) where N
     @assert 0 < N1 < N
 
     nn, ll, inv_perm = lexi_ord(nn, ll)
@@ -456,17 +463,6 @@ function _coupling_coeffs(Ltot::Int64,ll::SVector{N,Int64},nn::SVector{N,Int64},
     nn1 = SA[nn[1:N1]...]
     nn2 = SA[nn[N1+1:end]...]
  
-    # MMmat = m_generate(nn,ll,Ltot; flag = flag)[1]
-    # MM = SVector{N, Int}[] # all possible m's
-    # MM_reduced = SVector{N, Int}[] # reduced m's - in the PI case, only the ordered 
-    # for m_class in MMmat
-    #     push!(MM_reduced, sort(m_class)[1])
-    #     for mm in m_class
-    #         push!(MM, mm)
-    #     end
-    # end   
-    # MM = identity.(MM)
-    # MM_reduced = identity.(MM_reduced)
     MM = mm_generate(Ltot, ll, nn; flag=flag) # all admissible mm's
     S = nice_partition.+1
     permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
@@ -478,82 +474,134 @@ function _coupling_coeffs(Ltot::Int64,ll::SVector{N,Int64},nn::SVector{N,Int64},
     T = Ltot == 0 ? Float64 : SVector{2Ltot+1, Float64}
     C_re_semi_pi = []
     counter = 0
-    for L1 in 0:sum(ll1)
-       for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
-          C1,M1 = _coupling_coeffs(L1,ll1,nn1; PI = true, flag = flag)
-          C2,M2 = _coupling_coeffs(L2,ll2,nn2; PI = true, flag = flag)
-          for i1 in 1:size(C1,1)
-             for i2 in 1:size(C2,1)
-                cc = [ zero(T) for _ = 1:length(MM_reduced) ]
-                # Option I: :explicit
-                for (k1,m1) in enumerate(M1)
-                   for (k2,m2) in enumerate(M2)
-                      # if permutable_block !=nothing && m2[1] < m1[end]; continue; end
-                      if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{Ltot,0}_{L1,0,L2,0} = 0 for odd L1+L2+Ltot
-                      if abs(sum(m1)+sum(m2))<=Ltot
-                         mm_internal = [m1...,m2...]
-                         if permutable_block != nothing
-                            mm_internal = make_mm_internal(mm_internal, permutable_block)
-                         end
-                         k = MM_dict_reduced[SA[mm_internal...]] # findfirst(m -> m == SA[m1...,m2...], MM)
-                         cc[k] += Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
-                                             clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
-                      end
-                   end
+    if ordered
+        for L1 in 0:sum(ll1)
+            for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
+                C1,M1 = _coupling_coeffs(L1,ll1,nn1; PI = true, flag = flag)
+                C2,M2 = _coupling_coeffs(L2,ll2,nn2; PI = true, flag = flag)
+                for i1 in 1:size(C1,1)
+                    for i2 in 1:size(C2,1)
+                        cc = [ zero(T) for _ = 1:length(MM_reduced) ]
+                        # Option I: :explicit
+                        for (k1,m1) in enumerate(M1)
+                            for (k2,m2) in enumerate(M2)
+                                # if permutable_block !=nothing && m2[1] < m1[end]; continue; end
+                                if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{Ltot,0}_{L1,0,L2,0} = 0 for odd L1+L2+Ltot
+                                if abs(sum(m1)+sum(m2))<=Ltot
+                                    mm_internal = [m1...,m2...]
+                                    if permutable_block != nothing
+                                        mm_internal = make_mm_internal(mm_internal, permutable_block)
+                                    end
+                                    k = MM_dict_reduced[SA[mm_internal...]] # findfirst(m -> m == SA[m1...,m2...], MM)
+                                    cc[k] += Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                                                        clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
+                                end
+                            end
+                        end
+
+                        # Option II: slowest and equivalent to Option I above
+                        # for (k,MM) in enumerate(MM_reduced)
+                        #    for (k1,m1) in enumerate(M1)
+                        #       for (k2,m2) in enumerate(M2)
+                        #          mm_internal = [m1...,m2...]
+                        #          if permutable_block != nothing
+                        #             mm_internal = make_mm_internal(mm_internal, permutable_block)
+                        #          end
+                        #          if mm_internal == MM
+                        #             if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{Ltot,0}_{L1,0,L2,0} = 0 for odd L1+L2+Ltot
+                        #             if abs(sum(m1)+sum(m2))<=Ltot
+                        #                cc[k] += Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                        #                                    clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
+                        #             end
+                        #          end
+                        #       end
+                        #    end
+                        # end
+
+                        if norm(cc) > 1e-12
+                            push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
+                            counter += 1
+                        else
+                            @show L1, L2, norm(cc)
+                            @warn("zero dropped") # If we have some zero basis, the code will warn us
+                            # For ordered mm recursion, it is possible to have some zeros because of the sum
+                        end
+                    end
                 end
+            end
+        end
+        @assert length(C_re_semi_pi) == counter
+        C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM_reduced)])
 
-                # Option III: slowest and equivalent to Option I above
-                # for (k,MM) in enumerate(MM_reduced)
-                #    for (k1,m1) in enumerate(M1)
-                #       for (k2,m2) in enumerate(M2)
-                #          mm_internal = [m1...,m2...]
-                #          if permutable_block != nothing
-                #             mm_internal = make_mm_internal(mm_internal, permutable_block)
-                #          end
-                #          if mm_internal == MM
-                #             if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{Ltot,0}_{L1,0,L2,0} = 0 for odd L1+L2+Ltot
-                #             if abs(sum(m1)+sum(m2))<=Ltot
-                #                cc[k] += Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
-                #                                    clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
-                #             end
-                #          end
-                #       end
-                #    end
-                # end
-
-                if norm(cc) > 1e-12
-                    push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
-                    counter += 1
-                else
-                    @show L1, L2, norm(cc)
-                    @warn("zero dropped") # If we have some zero basis, the code will warn us
-                    # For ordered mm recursion, it is possible to have some zeros because of the sum
-                end
-             end
-          end
-       end
-    end
-    @assert length(C_re_semi_pi) == counter
-    C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM_reduced)])
-
-    try 
-        # If size(C_re_semi_pi,1) != 0, we do an SVD
-        U, S, V = svd(gram(C_re_semi_pi))
-        rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here
+        try 
+            # If size(C_re_semi_pi,1) != 0, we do an SVD
+            U, S, V = svd(gram(C_re_semi_pi))
+            rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here
         
-        return Diagonal(sqrt.(S[1:rk]).^(-1)) * U[:, 1:rk]' * C_re_semi_pi, [ SA[mm[inv_perm]...] for mm in MM_reduced ]
-    catch
-        return C_re_semi_pi, [SA[mm[inv_perm]...] for mm in MM_reduced] # MM
+            return Diagonal(sqrt.(S[1:rk]).^(-1)) * U[:, 1:rk]' * C_re_semi_pi, [ SA[mm[inv_perm]...] for mm in MM_reduced ]
+        catch
+            return C_re_semi_pi, [SA[mm[inv_perm]...] for mm in MM_reduced] # MM
+        end
+    else
+        for L1 in 0:sum(ll1)
+            for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
+                C1,M1 = _coupling_coeffs(L1,ll1,nn1;flag=flag,ordered = false)
+                C2,M2 = _coupling_coeffs(L2,ll2,nn2;flag=flag,ordered = false)
+                for i1 in 1:size(C1,1)
+                    for i2 in 1:size(C2,1)
+                        cc = [ zero(T) for _ = 1:length(MM) ]
+                        for (k1,m1) in enumerate(M1)
+                            for (k2,m2) in enumerate(M2)
+                                if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{L,0}_{L1,0,L2,0} = 0 for odd L1+L2+L
+                                if abs(sum(m1)+sum(m2))<=Ltot
+                                    k = MM_dict[SA[m1...,m2...]] # findfirst(m -> m == SA[m1...,m2...], MM)
+                                    cc[k] = Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                                                        clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
+                                end
+                            end
+                        end
+                        if norm(cc) > 1e-9
+                            push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
+                            counter += 1
+                        else
+                        @warn("zero dropped") # If we have some zero basis, the code will warn us
+                        end
+                    end
+                end
+            end
+        end
+        @assert length(C_re_semi_pi) == counter
+        C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM)])
+ 
+        if size(C_re_semi_pi,1) == 0
+            return C_re_semi_pi, [mm[inv_perm] for mm in MM]
+        end
+        MM_dict = Dict(MM[i] => i for i = 1:length(MM))
+        # Last symmetrization
+        global nice_partition = Sn(nn,ll).-1 # a list of partitions that gives non-intersecting sets
+        if length(nice_partition) > 2 && N1 in nice_partition[2:end-1]
+            return C_re_semi_pi, [mm[inv_perm] for mm in MM]
+        else
+            # since all the element in C_re_semi_pi are vectors having one nonzero && the position of nonzeros aligns with MM, we can extract the scalar part only
+            C_new = [ C_re_semi_pi[i,j][sum(MM[j])+Ltot+1] for i = 1:size(C_re_semi_pi,1), j = 1:size(C_re_semi_pi,2) ]
+            MM_new = [ swap(mm,N1,N1+1) for mm in MM ]
+            ord = [ MM_dict[MM_new[i]] for i = 1:length(MM_new) ]
+            C_new -= C_new[:,ord] # swap and subtract
+            # left_ker = nullspace(C_new_scalar', atol = 1e-8)' # not as efficient as an svd
+            U, S, V = svd(C_new)
+            left_ker = U[:,S .< 1e-9]'
+            return left_ker * C_re_semi_pi, [ mm[inv_perm] for mm in MM ] # MM
+        end
     end
- end
+end
 
-function _coupling_coeffs(Ltot::Int64, ll::SVector{N, Int64}, nn::SVector{N, Int64}, NN::Vector{<:Integer}; flag = :cSH) where N
+function _coupling_coeffs(Ltot::Int64, ll::SVector{N, Int64}, nn::SVector{N, Int64}, NN::Vector{<:Integer}; flag = :cSH, ordered = true) where N
     # @assert all([ 0 < NN[i] < N ] for i = 1:length(NN))
 
     nn,ll,inv_perm = lexi_ord(nn, ll) # this is now required because of the use of m_generate below
 
     if length(NN) == 1
-        return _coupling_coeffs(Ltot,ll,nn,NN[1]; flag = flag)
+        return _coupling_coeffs(Ltot,ll,nn,NN[1]; flag = flag, ordered = ordered)
     end
  
     N1 = NN[1]
@@ -572,17 +620,6 @@ function _coupling_coeffs(Ltot::Int64, ll::SVector{N, Int64}, nn::SVector{N, Int
         permutable_block = nice_partition[pos-1]+1:nice_partition[pos]
     end
  
-    # m_class = m_generate(nn,ll,Ltot)[1]
-    # MM = []
-    # MM_reduced = []
-    # for i = 1:length(m_class)
-    #      push!(MM_reduced, sort(m_class[i])[1])
-    #    for j = 1:length(m_class[i])
-    #       push!(MM, m_class[i][j])
-    #    end
-    # end
-    # MM = identity.(MM)
-    # MM_reduced = identity.(MM_reduced)
     MM = mm_generate(Ltot, ll, nn; flag=flag) # all admissible mm's
     S = nice_partition.+1
     permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
@@ -594,141 +631,106 @@ function _coupling_coeffs(Ltot::Int64, ll::SVector{N, Int64}, nn::SVector{N, Int
     T = Ltot == 0 ? Float64 : SVector{2Ltot+1, Float64}
     C_re_semi_pi = []
     counter = 0
-    for L1 in 0:sum(ll1)
-       for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
-          C1,M1 = _coupling_coeffs(L1,ll1,nn1;flag=flag)
-          C2,M2 = _coupling_coeffs(L2,ll2,nn2,NN[2:end].-N1;flag=flag)
-          for i1 in 1:size(C1,1)
-             for i2 in 1:size(C2,1)
-                cc = [ zero(T) for _ = 1:length(MM) ]
-                for (k1,m1) in enumerate(M1)
-                   for (k2,m2) in enumerate(M2)
-                      if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{L,0}_{L1,0,L2,0} = 0 for odd L1+L2+L
-                      if abs(sum(m1)+sum(m2))<=Ltot
-                        mm_internal = [m1...,m2...]
-                        if permutable_block != nothing
-                           mm_internal = make_mm_internal(mm_internal, permutable_block)
+    if ordered
+        for L1 in 0:sum(ll1)
+            for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
+                C1,M1 = _coupling_coeffs(L1,ll1,nn1;flag=flag)
+                C2,M2 = _coupling_coeffs(L2,ll2,nn2,NN[2:end].-N1;flag=flag)
+                for i1 in 1:size(C1,1)
+                    for i2 in 1:size(C2,1)
+                        cc = [ zero(T) for _ = 1:length(MM) ]
+                        for (k1,m1) in enumerate(M1)
+                            for (k2,m2) in enumerate(M2)
+                                if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{L,0}_{L1,0,L2,0} = 0 for odd L1+L2+L
+                                if abs(sum(m1)+sum(m2))<=Ltot
+                                    mm_internal = [m1...,m2...]
+                                    if permutable_block != nothing
+                                        mm_internal = make_mm_internal(mm_internal, permutable_block)
+                                    end
+                                    k = MM_dict_reduced[SA[mm_internal...]] # findfirst(m -> m == SA[m1...,m2...], MM)
+                                    cc[k] += Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                                                        clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
+                                end
+                            end
                         end
-                        k = MM_dict_reduced[SA[mm_internal...]] # findfirst(m -> m == SA[m1...,m2...], MM)
-                        cc[k] += Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
-                                            clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
-                      end
-                   end
+                        if norm(cc) > 1e-12
+                            push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
+                            counter += 1
+                        else
+                            @warn("zero dropped") # If we have some zero basis, the code will warn us
+                        end
+                    end
                 end
-                if norm(cc) > 1e-12
-                    push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
-                    counter += 1
-                else
-                    @warn("zero dropped") # If we have some zero basis, the code will warn us
-                end
-             end
-          end
-       end
-    end
-    @assert length(C_re_semi_pi) == counter
-    C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM_dict_reduced)])
+            end
+        end
+        @assert length(C_re_semi_pi) == counter
+        C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM_dict_reduced)])
  
-    if size(C_re_semi_pi,1) == 0
-        return C_re_semi_pi, [SA[mm[inv_perm]...] for mm in MM_reduced]
-    else
-        try
-            U, S, V = svd(gram(C_re_semi_pi))
-            rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here
+        if size(C_re_semi_pi,1) == 0
+            return C_re_semi_pi, [SA[mm[inv_perm]...] for mm in MM_reduced]
+        else
+            try
+                U, S, V = svd(gram(C_re_semi_pi))
+                rk = findall(x -> x > 1e-12, S) |> length # rank(Diagonal(S); rtol =  1e-12) # Somehow rank is not working properly here
      
-            # println("Code reaches here")
-            return Diagonal(sqrt.(S[1:rk]).^(-1)) * U[:, 1:rk]' * C_re_semi_pi, [ SA[mm[inv_perm]...] for mm in MM_reduced ]
-        catch
-            println("SVD failed - code should never reach here")
-            return C_re_semi_pi, [SA[mm[inv_perm]...] for mm in MM_reduced] # MM
+                # println("Code reaches here")
+                return Diagonal(sqrt.(S[1:rk]).^(-1)) * U[:, 1:rk]' * C_re_semi_pi, [ SA[mm[inv_perm]...] for mm in MM_reduced ]
+            catch
+                println("SVD failed - code should never reach here")
+                return C_re_semi_pi, [SA[mm[inv_perm]...] for mm in MM_reduced] # MM
+            end
+        end
+    else
+        for L1 in 0:sum(ll1)
+            for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
+                C1,M1 = _coupling_coeffs(L1,ll1,nn1;flag=flag,ordered = false)
+                C2,M2 = _coupling_coeffs(L2,ll2,nn2,NN[2:end].-N1;flag=flag,ordered = false)
+                for i1 in 1:size(C1,1)
+                    for i2 in 1:size(C2,1)
+                        cc = [ zero(T) for _ = 1:length(MM) ]
+                        for (k1,m1) in enumerate(M1)
+                            for (k2,m2) in enumerate(M2)
+                                if sum(m1) == sum(m2) == 0 && isodd(L1+L2+Ltot); continue; end # That is because C^{L,0}_{L1,0,L2,0} = 0 for odd L1+L2+L
+                                if abs(sum(m1)+sum(m2))<=Ltot
+                                    k = MM_dict[SA[m1...,m2...]] # findfirst(m -> m == SA[m1...,m2...], MM)
+                                    cc[k] = Ltot == 0 ? clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1] :
+                                                    clebschgordan(L1,sum(m1),L2,sum(m2),Ltot,sum(m1)+sum(m2))*C1[i1,k1][sum(m1)+L1+1]*C2[i2,k2][sum(m2)+L2+1]*I(2Ltot+1)[sum(m1)+sum(m2)+Ltot+1,:] 
+                                end
+                            end
+                        end
+                        if norm(cc) > 1e-9
+                            push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
+                            counter += 1
+                        else
+                        @warn("zero dropped") # If we have some zero basis, the code will warn us
+                        end
+                    end
+                end
+            end
+        end
+        @assert length(C_re_semi_pi) == counter
+        C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM)])
+ 
+        if size(C_re_semi_pi,1) == 0
+            return C_re_semi_pi, [mm[inv_perm] for mm in MM]
+        end
+        MM_dict = Dict(MM[i] => i for i = 1:length(MM))
+        # Last symmetrization
+        global nice_partition = Sn(nn,ll).-1 # a list of partitions that gives non-intersecting sets
+        if length(nice_partition) > 2 && N1 in nice_partition[2:end-1]
+            return C_re_semi_pi, [mm[inv_perm] for mm in MM]
+        else
+            # since all the element in C_re_semi_pi are vectors having one nonzero && the position of nonzeros aligns with MM, we can extract the scalar part only
+            C_new = [ C_re_semi_pi[i,j][sum(MM[j])+Ltot+1] for i = 1:size(C_re_semi_pi,1), j = 1:size(C_re_semi_pi,2) ]
+            MM_new = [ swap(mm,N1,N1+1) for mm in MM ]
+            ord = [ MM_dict[MM_new[i]] for i = 1:length(MM_new) ]
+            C_new -= C_new[:,ord] # swap and subtract
+            # left_ker = nullspace(C_new_scalar', atol = 1e-8)' # not as efficient as an svd
+            U, S, V = svd(C_new)
+            left_ker = U[:,S .< 1e-9]'
+            return left_ker * C_re_semi_pi, [ mm[inv_perm] for mm in MM ] # MM
         end
     end
 end
-
-
-
-
-
-# ###### 
-
-# function _coupling_coeffs(Ltot::Int64,ll::SVector{N,Int64},nn::SVector{N,Int64},N1::Int64;flag=:cSH) where N
-#     @assert 0 < N1 < N
-
-#     nn, ll, inv_perm = lexi_ord(nn, ll)
-
-#     global nice_partition = Sn(nn,ll).-1 # a list of partitions that gives non-intersecting sets
-    
-#     # Find a block to sort before merge
-#     if N1 in nice_partition[2:end-1]
-#         permutable_block = nothing
-#     else
-#         pos = findfirst(x -> x >= N1, nice_partition) # find the first partition that is larger than N1
-#         permutable_block = nice_partition[pos-1]+1:nice_partition[pos]
-#     end
-
-#     ll1 = SA[ll[1:N1]...]
-#     ll2 = SA[ll[N1+1:end]...]
-#     nn1 = SA[nn[1:N1]...]
-#     nn2 = SA[nn[N1+1:end]...]
- 
-#     MMmat = m_generate(nn,ll,Ltot; flag = flag)[1]
-#     MM = SVector{N, Int}[] # all possible m's
-#     MM_reduced = SVector{N, Int}[] # reduced m's - in the PI case, only the ordered 
-#     for m_class in MMmat
-#         push!(MM_reduced, sort(m_class)[1])
-#         for mm in m_class
-#             push!(MM, mm)
-#         end
-#     end   
-#     MM = identity.(MM)
-#     MM_reduced = identity.(MM_reduced)
-#     MM_dict = Dict(MM[i] => i for i = 1:length(MM))
-#     MM_dict_reduced = Dict(MM_reduced[i] => i for i = 1:length(MM_reduced))
-#     T = Ltot == 0 ? Float64 : SVector{2Ltot+1, Float64}
-#     C_re_semi_pi = []
-#     C_inv = []
-#     counter = 0
-#     for L1 in 0:sum(ll1)
-#        for L2 in abs(L1-Ltot):minimum([L1+Ltot,sum(ll2)])
-#           C1,M1 = _coupling_coeffs(L1,ll1,nn1; PI = true, flag = flag)
-#           C2,M2 = _coupling_coeffs(L2,ll2,nn2; PI = true, flag = flag)
-#           M1_dict = Dict(M1[k] => k for k = 1:length(M1))
-#           M2_dict = Dict(M2[k] => k for k = 1:length(M2))
-#           for i1 in 1:size(C1,1)
-#              for i2 in 1:size(C2,1)
-#                 global cc = [ zero(T) for _ = 1:length(MM_reduced) ]
-#                 # Option I: :kernel
-#                 for (k,MM) in enumerate(MM_reduced)
-#                     m1_internal = MM[1:N1]
-#                     m2_internal = MM[N1+1:end]
-#                     if haskey(M1_dict, m1_internal) && haskey(M2_dict, m2_internal)    
-#                         k1 = M1_dict[m1_internal]
-#                         k2 = M2_dict[m2_internal]
-#                         cc[k] = Ltot == 0 ? clebschgordan(L1,sum(m1_internal),L2,sum(m2_internal),Ltot,sum(m1_internal)+sum(m2_internal))*C1[i1,k1][sum(m1_internal)+L1+1]*C2[i2,k2][sum(m2_internal)+L2+1] :
-#                                 clebschgordan(L1,sum(m1_internal),L2,sum(m2_internal),Ltot,sum(m1_internal)+sum(m2_internal))*C1[i1,k1][sum(m1_internal)+L1+1]*C2[i2,k2][sum(m2_internal)+L2+1]*I(2Ltot+1)[sum(m1_internal)+sum(m2_internal)+Ltot+1,:]
-#                     end
-#                 end
-#             end
-#             if norm(cc) > 1e-12
-#                 push!(C_re_semi_pi, cc) # each element of C_re_semi_pi is a row of the final UMatrix
-#                 counter += 1
-#             end
-
-#           end
-#        end
-#     end
-#     @assert length(C_re_semi_pi) == counter
-#     # C_inv = identity.([C_inv[i][j] for i = 1:counter, j = 1:length(MM_reduced)])
-#     @show length(C_re_semi_pi), counter
-#     @show length(C_re_semi_pi[1]), length(MM_reduced)
-#     C_re_semi_pi = identity.([C_re_semi_pi[i][j] for i = 1:counter, j = 1:length(MM_reduced)])
-#    # if isnothing(permutable_block)
-#         return C_re_semi_pi, [SA[mm[inv_perm]...] for mm in MM_reduced]
-#     # end
-
-#     U, S, V = svd(C_inv)
-#     left_ker = U[:,S .< 1e-12]'
-
-#     return left_ker * C_re_semi_pi, MM_reduced
-# end
 
 end
