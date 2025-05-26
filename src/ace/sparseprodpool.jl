@@ -156,29 +156,6 @@ end
 evaluate!(A::AbstractGPUArray, basis::PooledSparseProduct{NB}, BB::TupMat, nX = size(BB[1], 1)) where {NB} = 
 		ka_evaluate!(A, basis, BB, nX)
 
-function ka_evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupMat, nX) where {NB}
-	_ka_evaluate_launcher!(A, basis, BB, nX)
-	return A
-end 
-
-function _ka_evaluate_launcher!(A, basis::PooledSparseProduct{NB}, BB::TupMat, nX) where {NB}
-   @assert all(B->size(B, 1) >= nX, BB)
-   fill!(A, 0)
-   backend = KernelAbstractions.get_backend(A)
-   kernel! = _ka_evaluate_atomic!(backend)
-   kernel!(A, basis, BB, nX; ndrange = (length(basis.spec), nX))
-   return nothing
-end
-   
-@kernel function _ka_evaluate_atomic!(A, basis::PooledSparseProduct{NB}, BB::TupMat, nX) where {NB}
-   iA, j = @index(Global, NTuple)
-   spec = basis.spec
-   ϕ = spec[iA]
-   b = ntuple(t -> BB[t][j, ϕ[t]], NB)
-   a = prod(b)
-
-   @atomic A[iA] += a
-end
 
 # special-casing NB = 1 for correctness 
 function evaluate!(A, basis::PooledSparseProduct{1}, 

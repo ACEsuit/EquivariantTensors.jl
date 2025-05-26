@@ -159,3 +159,34 @@ for ntest = 1:20
    print_tf(@test fdtest(F, dF, 0.0; verbose=false))
 end
 println() 
+
+## 
+
+include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
+
+
+@info("Testing KA implementation of PooledSparseProduct") 
+
+ntest = 10
+
+for itest = 1:ntest       
+   order = mod1(itest, 3)
+   basis = _generate_basis(; order=order, len = rand(50:200))
+   bBB = _generate_input(basis) 
+   bBB_32 = ntuple(i -> Float32.(bBB[i]), length(bBB))
+   bBB_gpu = gpu.(bBB_32)
+   nX = size(bBB[1], 1)
+   # Float64 tests, CPU only  
+   P1 = evaluate(basis, bBB)
+   P2 = similar(P1) 
+   ET.ka_evaluate!(P2, basis, bBB)
+   print_tf(@test P1 ≈ P2)
+   # Float32 tests, CPU and GPU 
+   P3 = Float32.(P2)
+   ET.ka_evaluate!(P3, basis, bBB_32)
+   P4 = gpu(similar(P3))
+   ET.ka_evaluate!(P4, basis, bBB_gpu, gpu(basis.spec), nX)
+   print_tf(@test Float32.(P1) ≈ P3) 
+   print_tf(@test Float32.(P1) ≈ Array(P4))   
+end
+println() 
