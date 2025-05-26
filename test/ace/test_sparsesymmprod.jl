@@ -294,5 +294,16 @@ for itest = 1:10
    ET.ka_evaluate!(AA4, basis, A_gpu, gpu.(basis.specs))
    print_tf(@test Float32.(AA1) ≈ AA3)
    print_tf(@test Float32.(AA1) ≈ Array(AA4))
+
+   # batched evaluation 
+   nX = rand(8:32) 
+   bA = randn(Float32, nX, 2*M+1)
+   bAA1 = basis(bA)
+   bAA2 = similar(bAA1)
+   ET.ka_evaluate!(bAA2, basis, bA)
+   bAA3 = gpu(similar(bAA1))
+   ET.ka_evaluate!(bAA3, basis, gpu(bA), gpu.(basis.specs))
+   print_tf(@test bAA1 ≈ bAA2 ≈ Array(bAA3))
 end 
 println() 
+
