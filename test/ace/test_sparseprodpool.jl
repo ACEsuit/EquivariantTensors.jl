@@ -159,3 +159,54 @@ for ntest = 1:20
    print_tf(@test fdtest(F, dF, 0.0; verbose=false))
 end
 println() 
+
+## 
+
+include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
+
+
+@info("Testing KA implementation of PooledSparseProduct") 
+
+ntest = 10
+
+for itest = 1:ntest       
+   local nX 
+   order = mod1(itest, 3)
+   basis = _generate_basis(; order=order, len = rand(50:200))
+   BB = _generate_input(basis) 
+   BB_32 = ntuple(i -> Float32.(BB[i]), length(BB))
+   BB_gpu = gpu.(BB_32)
+   nX = size(BB[1], 1)
+
+   # Float64 tests, CPU only  
+   P1 = evaluate(basis, BB)
+   P2 = similar(P1) 
+   ET.ka_evaluate!(P2, basis, BB)
+   print_tf(@test P1 ≈ P2)
+
+   # Float32 tests, CPU and GPU 
+   P3 = Float32.(P2)
+   ET.ka_evaluate!(P3, basis, BB_32)
+   P4 = gpu(similar(P3))
+   ET.ka_evaluate!(P4, basis, BB_gpu, gpu(basis.spec), nX)
+   print_tf(@test Float32.(P1) ≈ P3) 
+   print_tf(@test Float32.(P1) ≈ Array(P4))   
+
+   # test with batch of inputs 
+   nneig = rand(16:32) 
+   _bBB = _generate_input(basis; nX = nneig * nX)
+   bBB = ntuple(i -> Float32.(collect(reshape(_bBB[i], (nneig, nX, :)))), order)
+   bBB_gpu = gpu.(bBB)
+   bP1 = zeros(Float32, nX, length(P1))
+   for i = 1:nX 
+      BBi = ntuple(t -> bBB[t][:, i, :], order)
+      bP1[i, :] = basis(BBi)
+   end
+   bP2 = similar(bP1)
+   ET.ka_evaluate!(bP2, basis, bBB, basis.spec)
+   print_tf(@test bP1 ≈ bP2)
+   bP3 = gpu(similar(bP2))
+   ET.ka_evaluate!(bP3, basis, bBB_gpu, gpu(basis.spec))
+   print_tf(@test Float32.(bP1) ≈ Array(bP3))
+end
+println() 

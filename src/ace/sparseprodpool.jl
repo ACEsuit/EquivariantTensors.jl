@@ -115,6 +115,7 @@ end
 
 const TupVec = Tuple{Vararg{AbstractVector}}
 const TupMat = Tuple{Vararg{AbstractMatrix}}
+const TupTen3 = Tuple{Vararg{AbstractArray{T, 3}}} where {T}
 const TupVecMat = Union{TupVec, TupMat}
 
 function whatalloc(evaluate!, basis::PooledSparseProduct{NB}, BB::TupVecMat) where {NB}
@@ -122,7 +123,6 @@ function whatalloc(evaluate!, basis::PooledSparseProduct{NB}, BB::TupVecMat) whe
    nA = length(basis)
    return (TV, nA) 
 end
-
 
 function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupVec) where {NB}
    spec = basis.spec
@@ -135,6 +135,8 @@ function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupVec) where {NB}
    return A
 end
 
+using KernelAbstractions, GPUArraysCore
+using KernelAbstractions: @atomic
 
 function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupMat, 
                    nX = size(BB[1], 1)) where {NB}
@@ -151,6 +153,10 @@ function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupMat,
    end
    return A
 end
+
+evaluate!(A::AbstractGPUArray, basis::PooledSparseProduct{NB}, BB::TupMat, nX = size(BB[1], 1)) where {NB} = 
+		ka_evaluate!(A, basis, BB, nX)
+
 
 # special-casing NB = 1 for correctness 
 function evaluate!(A, basis::PooledSparseProduct{1}, 
@@ -193,8 +199,6 @@ function evaluate!(A, basis::PooledSparseProduct{2},
    end
    return A
 end
-
-
 
 # -------------------- reverse mode gradient
 
