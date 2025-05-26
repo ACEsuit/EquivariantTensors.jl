@@ -1,4 +1,3 @@
-using GPUArraysCore
 
 # interface to use the ka kernel if the output arrays is a GPU array 
 function evaluate!(A::AbstractGPUArray, 

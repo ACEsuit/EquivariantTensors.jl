@@ -170,6 +170,7 @@ include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 ntest = 10
 
 for itest = 1:ntest       
+   local nX 
    order = mod1(itest, 3)
    basis = _generate_basis(; order=order, len = rand(50:200))
    bBB = _generate_input(basis) 

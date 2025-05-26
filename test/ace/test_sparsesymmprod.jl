@@ -264,3 +264,35 @@ println()
 =# 
 
 ##
+
+@info("Testing KA integration for SparseSymmProd")
+include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
+
+for itest = 1:10 
+   local ORD, M, spec, A, AA1, AA2, AA3, AA4 
+
+   ORD = mod1(itest, 3) + 1
+   M = rand(20:30)
+
+   spec = Test_ACE.generate_SO2_spec(ORD, 2*M)
+   basis = SparseSymmProd(spec)
+
+   A = randn(2*M+1)
+   A32 = Float32.(A)
+   A_gpu = gpu(A32) 
+
+   # FLoat64 tests, CPU only 
+   AA1 = basis(A)
+   AA2 = similar(AA1) 
+   ET.ka_evaluate!(AA2, basis, A)
+   print_tf(@test AA1 ≈ AA2)
+
+   # Float32 tests, CPU and GPU 
+   AA3 = Float32.(similar(AA1))
+   AA4 = gpu(similar(AA3))
+   ET.ka_evaluate!(AA3, basis, A32)
+   ET.ka_evaluate!(AA4, basis, A_gpu, gpu.(basis.specs))
+   print_tf(@test Float32.(AA1) ≈ AA3)
+   print_tf(@test Float32.(AA1) ≈ Array(AA4))
+end 
+println() 

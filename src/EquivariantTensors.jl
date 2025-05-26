@@ -2,7 +2,7 @@ module EquivariantTensors
 
 abstract type AbstractETLayer end 
 
-using Bumper, WithAlloc, Random 
+using Bumper, WithAlloc, Random, GPUArraysCore
 
 import ACEbase: evaluate, evaluate!
 import WithAlloc: whatalloc
@@ -21,6 +21,7 @@ include("ace/static_prod.jl")
 include("ace/sparseprodpool.jl")
 include("ace/sparseprodpool_ka.jl")
 include("ace/sparsesymmprod.jl")
+include("ace/sparsesymmprod_ka.jl")
 include("ace/sparse_ace.jl")
 include("ace/sparse_ace_utils.jl")
 
