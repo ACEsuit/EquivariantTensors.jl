@@ -27,7 +27,8 @@ Bumper = "0.7.1"
 ChainRulesCore = "1.25.1"
 Combinatorics = "1"
 ForwardDiff = "0.10, 1"
-GPUArraysCore = "0.2.0" 
+GPUArraysCore = "0.2.0"
+KernelAbstractions = "0.9"
 LinearAlgebra = "1.10"
 Lux = "1"
 LuxCore = "1.2.4"
@@ -44,14 +45,13 @@ julia = "1.10, 1.11"
 [extras]
 BlockDiagonals = "0a1fb500-61f7-11e9-3c65-f5ef3456f9f0"
 Lux = "b2108857-7c20-44ae-9111-449ecde12c47"
+Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 SpheriCart = "5caf2b29-02d9-47a3-9434-5931c85ba645"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
-Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
 
 [targets]
-test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", 
-       "Printf", "Zygote", "Lux", "Optimisers"]
+test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", "Printf", "Zygote", "Lux", "Optimisers"]
