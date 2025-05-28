@@ -8,7 +8,7 @@ import EquivariantTensors as ET
 import Polynomials4ML as P4ML      
 import KernelAbstractions as KA
 
-dev = MtlArray
+dev = Metal.mtl 
 
 module ACEKA 
 
@@ -107,7 +107,7 @@ Ylm_dev = P4ML.evaluate(ybasis, R̂_dev)
 ntot = length(ii) 
 nnodes = maximum(ii)
 Rn_dev_3 = reshape_embedding(Rn_dev, ii_dev, jj_dev, nnodes, maxneigs)
-Ylm_dev_3 = reshape_embedding(Ylm, ii_dev, jj_dev, nnodes, maxneigs)
+Ylm_dev_3 = reshape_embedding(Ylm_dev, ii_dev, jj_dev, nnodes, maxneigs)
 
 # Rn_dev_3, Ylm_dev_3 are now in a format that is nice for the abasis 
 # hence the LinearACE basis layer. We quickly construct a toy model basis 
@@ -134,5 +134,14 @@ AA = ET.ka_evaluate(aabasis, A, aaspecs_dev)
 
 # evaluate the O(3)-invariant basis. Here we have a problem - there is no 
 # generic fallback of sparse matrix multiplication available? 
-𝒞 = Float32.(𝔹basis.A2Bmaps[1])
-𝒞_dev = Metal.mtl(𝒞)
+𝒞_dev = ET.DevSparseMatrixCSR(𝔹basis.A2Bmaps[1], dev) 
+𝔹 = ET.mul(𝒞_dev, transpose(AA))
+
+# Now create a parameter vector and contract this with 𝔹 to get the 
+# site energies (or whatever per-node properties we want to compute)
+θ = dev(randn(Float32, size(𝔹, 1)))
+φ = transpose(𝔹) * θ
+
+# This completes a full draft of pure on-GPU ACE evaluation. It remains to be 
+# wrapped into a function for preliminary performance and correctness testing  
+# and then fully integrated into ET. 
