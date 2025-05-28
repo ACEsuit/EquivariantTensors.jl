@@ -6,6 +6,7 @@ function evaluate!(A::AbstractGPUArray,
    return ka_evaluate!(A, basis, BB)
 end
 
+
 function ka_evaluate!(A::AbstractVector, basis::PooledSparseProduct{NB}, 
                       BB::TupMat, 
                       spec = basis.spec, 
@@ -39,6 +40,16 @@ end
 #
 #      A = #nodes x #output-features 
 #  BB[t] = #neighbours x #nodes x #input-features[t]
+
+function ka_evaluate(basis::PooledSparseProduct{NB}, 
+                     BB::TupTen3, 
+                     spec = basis.spec, 
+                     nX = size(BB[1], 2), nneig = size(BB[1], 1)
+                     ) where {NB}
+   A = similar(BB[1], (nX, length(spec)))                     
+   return ka_evaluate!(A, basis, BB, spec, nX, nneig)
+end
+
 
 function ka_evaluate!(A::AbstractMatrix, basis::PooledSparseProduct{NB}, 
                       BB::TupTen3, 

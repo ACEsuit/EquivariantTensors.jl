@@ -6,6 +6,14 @@ function evaluate!(AA::AbstractGPUArray,
    return ka_evaluate!(AA, basis, A)
 end
 
+function ka_evaluate(basis::SparseSymmProd{ORD}, A::AbstractArray, 
+                     specs = basis.specs) where {ORD}
+   AA = similar(A, (size(A, 1), sum(length, specs)))                     
+	_ka_evaluate_launcher!(AA, basis, A, specs)
+	return AA
+end 
+
+
 function ka_evaluate!(AA::AbstractArray, basis::SparseSymmProd{ORD},
                       A::AbstractArray, 
                       specs = basis.specs) where {ORD}
