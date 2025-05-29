@@ -1,6 +1,8 @@
 
 using SparseArrays: SparseMatrixCSC 
 import LinearAlgebra: mul! 
+using MLDataDevices: AbstractGPUDevice
+using GPUArraysCore: AbstractGPUArray 
 
 struct DevSparseMatrixCSR{VECI, VECV}
    m::Int              # Number of rows
@@ -10,10 +12,15 @@ struct DevSparseMatrixCSR{VECI, VECV}
    nzval::VECV         # Stored values, typically nonzeros
 end
 
+
 function DevSparseMatrixCSR(A::SparseMatrixCSC, dev = identity)
    At = SparseMatrixCSC(transpose(A)) 
    return DevSparseMatrixCSR(A.m, A.n, dev(At.colptr), dev(At.rowval), dev(At.nzval))
 end
+
+(dev::AbstractGPUDevice)(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, dev)
+(T::Type{AbstractGPUArray})(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
+Base.convert(T::Type{<: AbstractGPUArray}, A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
 
 Base.size(A::DevSparseMatrixCSR) = (A.m, A.n)
 
