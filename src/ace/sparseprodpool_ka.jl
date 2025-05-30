@@ -129,17 +129,3 @@ end
    end
    nothing 
 end 
-
-   # @inbounds for (iA, ϕ) in enumerate(basis.spec)
-   #    ∂A_iA = ∂A[iA]
-   #    @simd ivdep for j = 1:nX 
-   #       b = ntuple(Val(NB)) do i 
-   #          BB[i][j, ϕ[i]] 
-   #       end 
-   #       a, g = _static_prod_ed(b)
-   #       for i = 1:NB 
-   #          ϕi = ϕ[i]
-   #          ∂BB[i][j, ϕi] = muladd(∂A_iA, g[i], ∂BB[i][j, ϕi])
-   #       end
-   #    end 
-   # end
