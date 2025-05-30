@@ -24,6 +24,7 @@ include("ace/sparsesymmprod.jl")
 include("ace/sparsesymmprod_ka.jl")
 include("ace/sparse_ace.jl")
 include("ace/sparse_ace_utils.jl")
+include("ace/sparsemat_ka.jl")
 
 
 # ------------------------------------------------------
