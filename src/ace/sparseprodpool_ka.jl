@@ -84,3 +84,62 @@ end
    a = prod(b) 
    @atomic A[inode, iA] += a
 end
+
+# ---------------------------------
+#  pullback
+function ka_pullback(∂A, basis::PooledSparseProduct{NB}, 
+                      BB::TupTen3, 
+                      spec = basis.spec, nX = size(∂A, 1), nneig = size(BB[1], 1)
+                      ) where {NB}
+   ∂BB = similar.(BB)
+   ka_pullback!(∂BB, ∂A, basis, BB, spec, nX, nneig)
+   return ∂BB
+end
+
+function ka_pullback!(∂BB, ∂A, basis::PooledSparseProduct{NB}, BB::TupTen3, 
+                      spec = basis.spec, nX = size(∂A, 1), 
+                      nneig = size(BB[1], 1)) where {NB}
+
+   @assert all(B -> size(B, 2) >= nX, BB)
+   @assert all(B -> size(B, 1) >= nneig, BB)
+   @assert size(∂A, 1) >= nX 
+   @assert size(∂A, 2) >= length(spec)
+
+   for t = 1:NB 
+      fill!(∂BB[t], zero(eltype(∂BB[t])))
+   end
+
+   backend = KernelAbstractions.get_backend(∂A)
+   kernel! = _ka_pullback_PooledSparseProduct_v1!(backend)
+   kernel!(∂BB, ∂A, BB, spec, nX, nneig, Val{NB}();
+           ndrange = (length(spec), nX, nneig))
+   return nothing
+end
+
+
+@kernel function _ka_pullback_PooledSparseProduct_v1!(
+                  ∂BB, ∂A, BB, spec, nX, nneig, ::Val{NB}) where {NB}
+   iA, inode, ineig = @index(Global, NTuple) 
+   ϕ = spec[iA]
+   b = ntuple(t -> BB[t][ineig, inode, ϕ[t]], NB)
+   p, ∇prod = _static_prod_ed(b)
+   # A[inode, iA] += p
+   for t = 1:NB
+      @atomic ∂BB[t][ineig, inode, ϕ[t]] += ∂A[inode, iA] * ∇prod[t]
+   end
+   nothing 
+end 
+
+   # @inbounds for (iA, ϕ) in enumerate(basis.spec)
+   #    ∂A_iA = ∂A[iA]
+   #    @simd ivdep for j = 1:nX 
+   #       b = ntuple(Val(NB)) do i 
+   #          BB[i][j, ϕ[i]] 
+   #       end 
+   #       a, g = _static_prod_ed(b)
+   #       for i = 1:NB 
+   #          ϕi = ϕ[i]
+   #          ∂BB[i][j, ϕi] = muladd(∂A_iA, g[i], ∂BB[i][j, ϕi])
+   #       end
+   #    end 
+   # end
