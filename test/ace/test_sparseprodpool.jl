@@ -199,11 +199,6 @@ for itest = 1:ntest
    bBB = ntuple(i -> Float32.(collect(reshape(_bBB[i], (nneig, nX, :)))), order)
    bBB_gpu = gpu.(bBB)
    bP1 = evaluate(basis, bBB)
-   # bP1 = zeros(Float32, nX, length(P1))
-   # for i = 1:nX 
-   #    BBi = ntuple(t -> bBB[t][:, i, :], order)
-   #    bP1[i, :] = basis(BBi)
-   # end
    bP2 = similar(bP1)
    ET.ka_evaluate!(bP2, basis, bBB, basis.spec)
    print_tf(@test bP1 ≈ bP2)

@@ -94,19 +94,13 @@ module ACEKA
 
       # now we need to reshape these embeddings into a format suitable to 
       # apply the pooling operation 
-      nedges = length(X.ii) 
-      nnodes = X.nnodes
       Rn_3 = reshape_embedding(Rn, X.ii, X.jj, X.nnodes, X.maxneigs)
       Ylm_3 = reshape_embedding(Ylm, X.ii, X.jj, X.nnodes, X.maxneigs)
 
       # Rn_3, Ylm_3 are now in a format that is nice for the abasis 
       # hence the LinearACE basis layer. The following evaluation should be 
       # moved into the ET module, for now just a quick prototype: 
-      symbasis = model.symbasis
-      st_sym = st.symbasis 
-      A = ET.ka_evaluate(symbasis.abasis, (Rn_3, Ylm_3), st_sym.aspec)
-      AA = ET.ka_evaluate(symbasis.aabasis, A, st_sym.aaspecs)
-      𝔹 = ET.mul(st.symbasis.A2Bmaps[1], transpose(AA))
+      𝔹, _ = ET.ka_evaluate(model.symbasis, Rn_3, Ylm_3, ps.symbasis, st.symbasis)
 
       # apply the parameters 
       return transpose(𝔹) * ps.params, st 
