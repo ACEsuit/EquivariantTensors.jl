@@ -4,13 +4,16 @@ abstract type AbstractETLayer end
 
 using Bumper, WithAlloc, Random, GPUArraysCore
 
-import ACEbase: evaluate, evaluate!
+import ACEbase: evaluate, evaluate!, pullback, pullback! 
 import WithAlloc: whatalloc
 import ChainRulesCore: rrule, frule 
 
+import MLDataDevices: gpu_device, cpu_device 
+
 using ForwardDiff: Dual, extract_derivative 
 
-export O3 
+export O3, gpu_device, cpu_device  
+
 
 include("generics.jl")
 
