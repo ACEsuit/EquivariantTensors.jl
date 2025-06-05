@@ -1,5 +1,6 @@
 
 using MLDataDevices: AbstractDevice
+import LuxCore: AbstractLuxLayer, initialparameters, initialstates
 
 struct PtClGraph{VECI, VECR}
    ii::VECI     # center particle indices / source indices
@@ -15,25 +16,31 @@ end
                 X.nnodes, X.maxneigs)
 
 
-struct RnYlmEmbedding{TTR, TBR, TTY, TBY}
+struct RnlYlmEmbedding{TTR, TBR, TTY, TBY}
    transr::TTR 
    rbasis::TBR 
    transy::TTY
    ybasis::TBY
 end
 
-function evaluate(emb::RnYlmEmbedding, graph::PtClGraph, ps, st)
+initialparameters(rng::AbstractRNG, emb::RnlYlmEmbedding) = 
+      (rbasis = NamedTuple(), ybasis = NamedTuple())
+
+initialstates(rng::AbstractRNG, emb::RnlYlmEmbedding) = 
+      (rbasis = NamedTuple(), ybasis = NamedTuple())
+
+function evaluate(emb::RnlYlmEmbedding, X::PtClGraph, ps, st)
    # Evaluate the radial and angular embeddings for the graph
    r = map(𝐫 -> emb.transr(𝐫), X.R)
-   Rnl = evaluate(emb.rbasis, r, ps.rbasis, st.rbasis)
+   Rnl = evaluate(emb.rbasis, r)
    R̂ = map(𝐫 -> 𝐫 / norm(𝐫), X.R)
-   Ylm = evaluate(emb.ybasis, R̂, ps.ybasis, st.ybasis)
+   Ylm = evaluate(emb.ybasis, R̂)
 
    # Reshape the embeddings into a 3D array format
-   Rn_3 = reshape_embedding(Rn, X.ii, X.jj, X.nnodes, X.maxneigs)
+   Rnl_3 = reshape_embedding(Rnl, X.ii, X.jj, X.nnodes, X.maxneigs)
    Ylm_3 = reshape_embedding(Ylm, X.ii, X.jj, X.nnodes, X.maxneigs)
 
-   
+   return (Rnl_3, Ylm_3), st 
 end 
 
 

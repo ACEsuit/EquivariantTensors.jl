@@ -4,7 +4,7 @@ abstract type AbstractETLayer end
 
 using Bumper, WithAlloc, Random, GPUArraysCore
 
-import ACEbase: evaluate, evaluate!, pullback, pullback! 
+import ACEbase: evaluate, evaluate!
 import WithAlloc: whatalloc
 import ChainRulesCore: rrule, frule 
 
@@ -46,5 +46,14 @@ include("utils/invmap.jl")
 include("utils/sparseprod.jl")
 include("utils/symmop.jl")
 include("utils/promotion.jl")
+
+# ------------------------------------------------------
+# embedding layers 
+include("embed/graph.jl")
+
+# ------------------------------------------------------
+# Testing utilities 
+include("testing/testing.jl")
+
 
 end
