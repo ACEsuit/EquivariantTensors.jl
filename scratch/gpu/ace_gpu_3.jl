@@ -1,8 +1,6 @@
 # First prototype implementation of a pure GPU ACE implementation. 
-#
 
-using LinearAlgebra, StaticArrays, Metal, Lux, 
-      Combinatorics, Random, EquivariantTensors
+using LinearAlgebra, Metal, Lux, Random, EquivariantTensors
 
 import EquivariantTensors as ET 
 import Polynomials4ML as P4ML      
@@ -37,7 +35,7 @@ module ACEKA
    # ---------------------------------
    # evaluation code
 
-   function evaluate(model::SimpleACE, X::ET.PtClGraph, ps, st)
+   function evaluate(model::SimpleACE, X::ET.ETGraph, ps, st)
       (Rn_3, Ylm_3), _ = ET.evaluate(model.embed, X, ps.embed, st.embed)
       𝔹, _ = ET.ka_evaluate(model.symbasis, Rn_3, Ylm_3, ps.symbasis, st.symbasis)
       return transpose(𝔹) * ps.params, st 
