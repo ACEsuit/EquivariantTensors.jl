@@ -1,5 +1,6 @@
 
-using LinearAlgebra, Metal, Lux, Random, EquivariantTensors
+using LinearAlgebra, Metal, Lux, Random, EquivariantTensors, Test 
+using ACEbase.Testing: print_tf, println_slim
 
 import EquivariantTensors as ET 
 import Polynomials4ML as P4ML      
@@ -72,8 +73,17 @@ ps, st = LuxCore.setup(MersenneTwister(1234), model)
 # test evaluation 
 
 # 1. generate a random input graph 
-X = ET.Testing.rand_graph(100)
+nnodes = 100
+X = ET.Testing.rand_graph(nnodes; nneigrg = 10:20)
 
+@info("Basic ETGraph tests")
+print_tf(@test ET.nnodes(X) == nnodes)
+print_tf(@test ET.maxneigs(X) <= 20)
+print_tf(@test ET.nedges(X) == length(X.ii) == length(X.jj) == X.first[end] - 1)
+print_tf(@test all( all(X.ii[X.first[i]:X.first[i+1]-1] .== i)
+                    for i in 1:nnodes ) )
+
+##
 # 2. Move model and input to the GPU / Device 
 ps_dev = dev(ps)
 st_dev = dev(st)
@@ -93,14 +103,12 @@ function evaluate_env(model::ACEKA.SimpleACE, 𝐑i)
    𝐫̂ij = [ ytrans(𝐫) for 𝐫 in 𝐑i ]
    Ylm = P4ML.evaluate(ybasis, 𝐫̂ij)
    𝔹, = ET.evaluate(𝔹basis, Rnl, Ylm) 
-   @show 𝔹[1:6]
    return dot(𝔹, θ)
 end
 
-i = 1
-_, 𝐑i = ET.neighbourhood(X, i)
-φi = evaluate_env(model, 𝐑i)
-φ[i]
+@info("Test Old Sequential vs KA Evaluation")
+φ_seq = [ evaluate_env(model, ET.neighbourhood(X, i)[2]) for i in 1:nnodes ]
+println_slim(@test φ ≈ φ_seq) 
 
 ##
 # todo : add backpropagation tests 

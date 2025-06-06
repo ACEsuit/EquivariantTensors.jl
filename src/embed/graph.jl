@@ -67,21 +67,26 @@ Takes a Nedges x Nfeat matrix and writes it into a 3-dimensional array of
 size (maxneigs, nnodes, Nfeat) where each column corresponds to a node. 
 The "missing" neighbours are filled with zeros.
 """
-function reshape_embedding(P, ii, jj, nnodes, maxneigs)
-   @kernel function _reshape_embedding!(P3, P, ii, jj, nnodes, maxneigs)
-      a, ifeat = @index(Global, NTuple)
-      i = ii[a]
-      j = jj[a] 
-      P3[j, i, ifeat] = P[a, ifeat]
+function reshape_embedding(P, X::ETGraph)
+   @kernel function _reshape_embedding!(P3, @Const(P), @Const(first))
+      inode, ifeat = @index(Global, NTuple)
+      i1 = first[inode]  
+      i2 = first[inode + 1] - 1
+      for t = 1:(i2-i1+1)
+         iedge = i1 + t - 1  # edge index
+         @inbounds P3[t, inode, ifeat] = P[iedge, ifeat]
+      end
       nothing 
    end
    
-   nfeatures = size(P, 2)
-   P3 = similar(P, (maxneigs, nnodes, nfeatures))
+   # size(P) == #edges x # features 
+   nedges, nfeatures = size(P)
+   P3 = similar(P, (maxneigs(X), nnodes(X), nfeatures))
    fill!(P3, zero(eltype(P3)))
    backend = KernelAbstractions.get_backend(P3)
    kernel! = _reshape_embedding!(backend)
-   kernel!(P3, P, ii, jj, nnodes, maxneigs; ndrange = size(P))
+   kernel!(P3, P, X.first; ndrange = (nnodes(X), nfeatures))
+   KernelAbstractions.synchronize(backend)
    return P3
 end
 
@@ -110,12 +115,11 @@ function evaluate(emb::RnlYlmEmbedding, X::ETGraph, ps, st)
    Ylm = evaluate(emb.ybasis, R̂)
 
    # Reshape the embeddings into a 3D array format
-   Rnl_3 = reshape_embedding(Rnl, X.ii, X.jj, nnodes(X), X.maxneigs)
-   Ylm_3 = reshape_embedding(Ylm, X.ii, X.jj, nnodes(X), X.maxneigs)
+   Rnl_3 = reshape_embedding(Rnl, X)
+   Ylm_3 = reshape_embedding(Ylm, X)
 
    return (Rnl_3, Ylm_3), st 
 end 
-
 
 
 
