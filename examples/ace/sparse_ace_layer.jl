@@ -31,7 +31,7 @@ nnll_long = ET.sparse_nnll_set(; L = 2, ORD = ORD,
             basis = real)
 
 # Construct the ACE layer model with specified output feature sizes for each L
-l = ET.sparse_ace_layer(rbasis, ybasis, 𝔹basis, Dict(0 => 5, 2 => 2))
+l = ET.SparseACElayer(rbasis, ybasis, 𝔹basis, Dict(0 => 5, 2 => 2))
 ps, st = LuxCore.setup(MersenneTwister(1234), l)
 
 rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )

@@ -22,7 +22,7 @@ include("ace/sparseprodpool.jl")
 include("ace/sparseprodpool_ka.jl")
 include("ace/sparsesymmprod.jl")
 include("ace/sparsesymmprod_ka.jl")
-include("ace/sparse_ace.jl")
+include("ace/sparse_ace_basis.jl")
 include("ace/sparse_ace_utils.jl")
 include("ace/sparse_ace_layer.jl")
 
