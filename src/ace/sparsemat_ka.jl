@@ -23,6 +23,7 @@ end
 Base.convert(T::Type{<: AbstractGPUArray}, A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
 
 Base.size(A::DevSparseMatrixCSR) = (A.m, A.n)
+Base.size(A::DevSparseMatrixCSR, i::Integer) = size(A)[i]
 
 function mul(A::DevSparseMatrixCSR, b::AbstractVector)
    m, n = A.m, A.n 
@@ -33,10 +34,15 @@ function mul(A::DevSparseMatrixCSR, b::AbstractVector)
 end
 
 function mul(A::DevSparseMatrixCSR, B::AbstractMatrix)
-   m, n = A.m, A.n 
-   X = similar(B, (m, size(B, 2)))
+   X = similar(B, (size(A, 1), size(B, 2)))
    return mul!(X, A, B)
 end
+
+function mul(A::AbstractMatrix, B::DevSparseMatrixCSR)
+   X = similar(A, (size(A, 1), size(B, 2)))
+   return mul!(X, A, B)
+end
+
 
 
 function mul!(X::AbstractMatrix, A::DevSparseMatrixCSR, B::AbstractMatrix)
@@ -66,6 +72,38 @@ function mul!(X::AbstractMatrix, A::DevSparseMatrixCSR, B::AbstractMatrix)
    kernel!(X, B, rowptr, colval, nzval; ndrange = (m, size(B, 2)))
    return X
 end 
+
+
+function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR)
+   # B = [ row1 ; row2 ; ... ] 
+
+   @kernel function _mul_ka_dense_sparse!(X, A, rowptr, colval, nzval)
+      # X = A * B 
+      rowA, rowB = @index(Global, NTuple)
+      
+      for idx = rowptr[rowB]:(rowptr[rowB+1]-1)
+         colB = colval[idx]
+         X[rowA, colB] += A[rowA, rowB] * nzval[idx]
+      end
+
+      nothing 
+   end
+
+   m, n = size(A)
+   k = size(B, 2)
+   rowptr = B.rowptr
+   colval = B.colval
+   nzval = B.nzval
+
+   @assert size(B) == (n, k)
+   @assert size(X) == (m, k)
+   fill!(X, zero(eltype(X)))
+
+   kernel! = _mul_ka_dense_sparse!(KernelAbstractions.get_backend(X))
+   kernel!(X, A, rowptr, colval, nzval; ndrange = (m, size(B, 2)))
+   return X
+end 
+
 
 # NOTE: If AA comes in the format of nnodes x nfeatures then we actually need 
 #       a multiplication of the form AA * 𝒞' - this is likely more performant 
