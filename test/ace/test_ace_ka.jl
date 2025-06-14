@@ -47,22 +47,20 @@ module ACEKA
       (Rnl_3, Ylm_3), _ = ET.evaluate(model.embed, X, ps.embed, st.embed)
       𝔹, A, 𝔸 = ET._ka_evaluate(model.symbasis, Rnl_3, Ylm_3, 
                st.symbasis.aspec, st.symbasis.aaspecs, st.symbasis.A2Bmaps[1]) 
-      KA.synchronize(backend)                          
       φ = 𝔹 * ps.params
-      KA.synchronize(backend)                          
       # let's assume we eventually produce E = ∑φ then ∂E = 1, which 
       # backpropagates to ∂φ = (1,1,1...)
       # ∂E/∂𝔹 = ∂/∂𝔹 { 1ᵀ 𝔹 params } = ∂/∂𝔹 { 𝔹 : 1 ⊗ params}
       ∂𝔹 = KA.ones(backend, eltype(𝔹), (size(𝔹, 1),)) * ps.params' 
-      KA.synchronize(backend)                          
-      @show sum(abs, ∂𝔹)
 
       # packpropagate through the symmetric basis 
       (∂Rnl_3, ∂Ylm_3), _ = ET.ka_pullback(∂𝔹, model.symbasis, 
                                            Rnl_3, Ylm_3, A, 𝔸, 
                                            ps.symbasis, st.symbasis) 
+      ∂X, _ = ET.ka_pullback( ∂Rnl_3, ∂Ylm_3, model.embed, 
+                              X, ps.embed, st.embed)
 
-      return φ, ∂Rnl_3, ∂Ylm_3
+      return φ, ∂X
    end
 end
 
@@ -137,5 +135,5 @@ println_slim(@test φ ≈ φ_seq)
 
 ##
 
-φ, ∂Rnl_3, ∂Ylm_3 = ACEKA.evaluate_with_grad(model, X_dev, ps_dev, st_dev)
+φ, ∂X = ACEKA.evaluate_with_grad(model, X_dev, ps_dev, st_dev)
 

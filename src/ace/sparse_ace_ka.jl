@@ -32,11 +32,8 @@ end
 
 function ka_pullback(∂𝔹, tensor::SparseACE, Rnl_3, Ylm_3, A, AA, ps, st) 
    # BB = 𝒞 * 𝔸' = (𝔸 * 𝒞')'  =>  ∇_𝔸 (∂BB : BB) = ∇_𝔸' Tr(𝔸 * 𝒞' * ∂BB)
-   @show sum(abs, ∂𝔹)
    ∂𝔸 = mul(∂𝔹, st.A2Bmaps[1])
-   @show sum(abs, ∂𝔸)
    ∂A = ka_pullback(∂𝔸, tensor.aabasis, A, st.aaspecs)
-   @show sum(abs, ∂A) 
    ∂Rnl, ∂Ylm = ka_pullback(∂A, tensor.abasis, (Rnl_3, Ylm_3), st.aspec)
    return (∂Rnl, ∂Ylm), st 
 end 

@@ -4,7 +4,7 @@ abstract type AbstractETLayer end
 
 using Bumper, WithAlloc, Random, GPUArraysCore
 
-import ACEbase: evaluate, evaluate!
+import ACEbase: evaluate, evaluate!, evaluate_ed 
 import WithAlloc: whatalloc
 import ChainRulesCore: rrule, frule 
 
