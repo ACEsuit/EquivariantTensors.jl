@@ -18,6 +18,7 @@ end
     @testset "SparseSymmetricProduct" begin include("ace/test_sparsesymmprod.jl"); end 
     @testset "Pullback" begin include("ace/test_sparse_ace.jl"); end
     @testset "Pullback complex" begin include("ace/test_sparse_ace_cplx.jl"); end
+    @testset "SparseMatrix-KA" begin include("ace/test_sparsemat_ka.jl"); end
 end
 
 @testset "O3-Coupling" begin 

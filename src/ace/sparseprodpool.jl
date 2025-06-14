@@ -571,3 +571,29 @@ initialstates(rng::AbstractRNG, layer::PooledSparseProductLayer) =
    out = evaluate(l.basis, BB)
    return out, st
 end
+
+
+# --------------------- prototype batched evaluation (for testing only) 
+
+function evaluate(basis::PooledSparseProduct{NB}, BB::TupTen3) where {NB}
+   nneigs = size(BB[1], 1) 
+   nnodes = size(BB[1], 2) 
+   A = zeros(eltype(BB[1]), nnodes, length(basis))
+   for i = 1:nnodes 
+      A[i, :] = evaluate(basis, ntuple(j -> BB[j][:, i, :], NB))
+   end 
+   return A 
+end
+
+function pullback(∂A, basis::PooledSparseProduct{NB}, BB::TupTen3) where {NB}
+   nneigs = size(BB[1], 1) 
+   nnodes = size(BB[1], 2) 
+   ∂BB = ntuple(i -> similar(BB[i]), NB)
+   for i = 1:nnodes 
+      ∂BB_i = pullback(∂A[i, :], basis, ntuple(j -> BB[j][:, i, :], NB))
+      for t = 1:NB 
+         ∂BB[t][:, i, :] = ∂BB_i[t]
+      end      
+   end 
+   return ∂BB
+end

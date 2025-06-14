@@ -6,6 +6,7 @@ function evaluate!(A::AbstractGPUArray,
    return ka_evaluate!(A, basis, BB)
 end
 
+
 function ka_evaluate!(A::AbstractVector, basis::PooledSparseProduct{NB}, 
                       BB::TupMat, 
                       spec = basis.spec, 
@@ -40,6 +41,16 @@ end
 #      A = #nodes x #output-features 
 #  BB[t] = #neighbours x #nodes x #input-features[t]
 
+function ka_evaluate(basis::PooledSparseProduct{NB}, 
+                     BB::TupTen3, 
+                     spec = basis.spec, 
+                     nX = size(BB[1], 2), nneig = size(BB[1], 1)
+                     ) where {NB}
+   A = similar(BB[1], (nX, length(spec)))                     
+   return ka_evaluate!(A, basis, BB, spec, nX, nneig)
+end
+
+
 function ka_evaluate!(A::AbstractMatrix, basis::PooledSparseProduct{NB}, 
                       BB::TupTen3, 
                       spec = basis.spec, 
@@ -73,3 +84,48 @@ end
    a = prod(b) 
    @atomic A[inode, iA] += a
 end
+
+# ---------------------------------
+#  pullback
+function ka_pullback(∂A, basis::PooledSparseProduct{NB}, 
+                      BB::TupTen3, 
+                      spec = basis.spec, nX = size(∂A, 1), nneig = size(BB[1], 1)
+                      ) where {NB}
+   ∂BB = similar.(BB)
+   ka_pullback!(∂BB, ∂A, basis, BB, spec, nX, nneig)
+   return ∂BB
+end
+
+function ka_pullback!(∂BB, ∂A, basis::PooledSparseProduct{NB}, BB::TupTen3, 
+                      spec = basis.spec, nX = size(∂A, 1), 
+                      nneig = size(BB[1], 1)) where {NB}
+
+   @assert all(B -> size(B, 2) >= nX, BB)
+   @assert all(B -> size(B, 1) >= nneig, BB)
+   @assert size(∂A, 1) >= nX 
+   @assert size(∂A, 2) >= length(spec)
+
+   for t = 1:NB 
+      fill!(∂BB[t], zero(eltype(∂BB[t])))
+   end
+
+   backend = KernelAbstractions.get_backend(∂A)
+   kernel! = _ka_pullback_PooledSparseProduct_v1!(backend)
+   kernel!(∂BB, ∂A, BB, spec, nX, nneig, Val{NB}();
+           ndrange = (length(spec), nX, nneig))
+   return nothing
+end
+
+
+@kernel function _ka_pullback_PooledSparseProduct_v1!(
+                  ∂BB, ∂A, BB, spec, nX, nneig, ::Val{NB}) where {NB}
+   iA, inode, ineig = @index(Global, NTuple) 
+   ϕ = spec[iA]
+   b = ntuple(t -> BB[t][ineig, inode, ϕ[t]], NB)
+   p, ∇prod = _static_prod_ed(b)
+   # A[inode, iA] += p
+   for t = 1:NB
+      @atomic ∂BB[t][ineig, inode, ϕ[t]] += ∂A[inode, iA] * ∇prod[t]
+   end
+   nothing 
+end 

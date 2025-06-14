@@ -48,9 +48,13 @@ end
 
 (l::SparseACE)(BB::Tuple, ps, st) = evaluate(l, BB..., ps, st), st 
 
-initialstates(rng::AbstractRNG, layer::SparseACE) = NamedTuple() 
+initialparameters(rng::AbstractRNG, bas::SparseACE) = 
+         NamedTuple() 
 
-initialparameters(rng::AbstractRNG, layer::SparseACE) = NamedTuple()
+initialstates(rng::AbstractRNG, bas::SparseACE) = 
+         ( aspec = bas.abasis.spec, 
+            aaspecs = bas.aabasis.specs, 
+            A2Bmaps = DevSparseMatrixCSR.(bas.A2Bmaps), )
 
 
 # ----------------------------------------
