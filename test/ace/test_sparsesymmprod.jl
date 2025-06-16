@@ -268,6 +268,8 @@ println()
 @info("Testing KA integration for SparseSymmProd")
 include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 
+itest = 2
+
 for itest = 1:10 
    local ORD, nX, bA, bAA1, bAA2, M, spec, A, AA1, AA2, AA3, AA4 
 
@@ -304,6 +306,14 @@ for itest = 1:10
    bAA3 = gpu(similar(bAA1))
    ET.ka_evaluate!(bAA3, basis, gpu(bA), gpu.(basis.specs))
    print_tf(@test bAA1 ≈ bAA2 ≈ Array(bAA3))
+
+   # batched pullback 
+   ∂AA = randn(Float32, nX, length(bAA1))
+   ∂A1 = ET.pullback(∂AA, basis, bA) 
+   ∂A2 = ET.ka_pullback(∂AA, basis, bA, basis.specs, nX)
+   ∂A3 = ET.ka_pullback(gpu(∂AA), basis, gpu(bA), gpu.(basis.specs), nX)
+
+   print_tf(@test ∂A1 ≈ ∂A2 ≈ Array(∂A3)) 
 end 
 println() 
 

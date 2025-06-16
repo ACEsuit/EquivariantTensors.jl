@@ -168,6 +168,7 @@ include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 @info("Testing KA implementation of PooledSparseProduct") 
 
 ntest = 10
+itest = 2
 
 for itest = 1:ntest       
    local nX 
@@ -197,16 +198,18 @@ for itest = 1:ntest
    _bBB = _generate_input(basis; nX = nneig * nX)
    bBB = ntuple(i -> Float32.(collect(reshape(_bBB[i], (nneig, nX, :)))), order)
    bBB_gpu = gpu.(bBB)
-   bP1 = zeros(Float32, nX, length(P1))
-   for i = 1:nX 
-      BBi = ntuple(t -> bBB[t][:, i, :], order)
-      bP1[i, :] = basis(BBi)
-   end
+   bP1 = evaluate(basis, bBB)
    bP2 = similar(bP1)
    ET.ka_evaluate!(bP2, basis, bBB, basis.spec)
    print_tf(@test bP1 ≈ bP2)
    bP3 = gpu(similar(bP2))
    ET.ka_evaluate!(bP3, basis, bBB_gpu, gpu(basis.spec))
    print_tf(@test Float32.(bP1) ≈ Array(bP3))
+
+   # test pullback
+   ∂P = randn(Float32, size(bP1))
+   ∂BB1 = ET.pullback(∂P, basis, bBB)
+   ∂BB2 = ET.ka_pullback(∂P, basis, bBB)
+   ∂BB3 = ET.ka_pullback(gpu(∂P), basis, bBB_gpu, gpu(basis.spec), nX)
+   all(∂BB1[t] ≈ ∂BB2[t] ≈ Array(∂BB3[t]) for t = 1:length(∂BB1)) 
 end
-println() 
