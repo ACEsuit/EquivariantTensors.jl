@@ -12,6 +12,10 @@ isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
     @testset "InvMap" begin include("utils/test_invmap.jl"); end
 end
 
+@testset "Embed" begin 
+    @testset "NamedTuples" begin include("embed/test_namedtuples.jl"); end
+end
+
 @testset "ACE" begin 
     @testset "StaticProd" begin include("ace/test_static_prod.jl"); end 
     @testset "SparseProdPool" begin include("ace/test_sparseprodpool.jl"); end 
