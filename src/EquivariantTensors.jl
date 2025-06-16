@@ -2,7 +2,7 @@ module EquivariantTensors
 
 abstract type AbstractETLayer end 
 
-using Bumper, WithAlloc, Random, GPUArraysCore
+using Bumper, WithAlloc, Random, GPUArraysCore, KernelAbstractions
 
 import ACEbase: evaluate, evaluate!, evaluate_ed 
 import WithAlloc: whatalloc
@@ -16,6 +16,11 @@ export O3, gpu_device, cpu_device
 
 
 include("generics.jl")
+
+# ------------------------------------------------------
+# embedding layers 
+include("embed/namedtuples.jl")
+include("embed/graph.jl")
 
 
 # ------------------------------------------------------
@@ -47,9 +52,6 @@ include("utils/sparseprod.jl")
 include("utils/symmop.jl")
 include("utils/promotion.jl")
 
-# ------------------------------------------------------
-# embedding layers 
-include("embed/graph.jl")
 
 # ------------------------------------------------------
 # Testing utilities 
