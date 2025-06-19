@@ -13,7 +13,8 @@ isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
 end
 
 @testset "Embed" begin 
-    @testset "NamedTuples" begin include("embed/test_namedtuples.jl"); end
+    @testset "NamedTuples" begin include("embed/test_diffnt.jl"); end
+    @testset "Transform" begin include("embed/test_transform.jl"); end
 end
 
 @testset "ACE" begin 

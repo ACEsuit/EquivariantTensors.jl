@@ -171,7 +171,7 @@ ntest = 10
 itest = 2
 
 for itest = 1:ntest       
-   local nX 
+   local nX, basis, P1, P2  
    order = mod1(itest, 3)
    basis = _generate_basis(; order=order, len = rand(50:200))
    BB = _generate_input(basis) 
@@ -213,3 +213,4 @@ for itest = 1:ntest
    ∂BB3 = ET.ka_pullback(gpu(∂P), basis, bBB_gpu, gpu(basis.spec), nX)
    all(∂BB1[t] ≈ ∂BB2[t] ≈ Array(∂BB3[t]) for t = 1:length(∂BB1)) 
 end
+println() 

@@ -3,6 +3,7 @@ using EquivariantTensors, StaticArrays, Test, ForwardDiff
 using ACEbase.Testing: println_slim, print_tf 
 
 import EquivariantTensors as ET
+import ACEbase: evaluate 
 
 ##
 

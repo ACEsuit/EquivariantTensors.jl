@@ -60,9 +60,6 @@ function evaluate(tbasis::TransformedBasis, X, ps, st)
    Y = map(x -> evaluate(tbasis.transin, x, ps.transin, st.transin), X) 
    P, _ = tbasis.basis(Y, ps.basis, st.basis)
    B = evaluate(tbasis.transout, P, X, ps.transout, st.transout)
-   @show size(Y) 
-   @show size(P)
-   @show size(B)
    return B, st 
 end
 

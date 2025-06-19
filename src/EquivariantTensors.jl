@@ -7,7 +7,7 @@ using Bumper, WithAlloc, Random, GPUArraysCore, KernelAbstractions
 import ACEbase: evaluate, evaluate!, evaluate_ed 
 import WithAlloc: whatalloc
 import ChainRulesCore: rrule, frule 
-
+import LuxCore: initialparameters, initialstates, AbstractLuxLayer
 import MLDataDevices: gpu_device, cpu_device 
 
 using ForwardDiff: Dual, extract_derivative 
@@ -19,7 +19,8 @@ include("generics.jl")
 
 # ------------------------------------------------------
 # embedding layers 
-include("embed/namedtuples.jl")
+include("embed/diffnt.jl")
+include("embed/transform.jl")
 include("embed/graph.jl")
 
 

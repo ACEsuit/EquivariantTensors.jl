@@ -10,7 +10,7 @@ include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 @info("Testing DevSparseMatrixCSR multiplication")
 
 for itest = 1:20 
-   local A, B 
+   local A, B, X  
    m = rand(50:200)
    n = rand(100:300)
    nB = rand(30:100)
