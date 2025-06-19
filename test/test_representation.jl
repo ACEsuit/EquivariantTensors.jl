@@ -15,6 +15,7 @@ for L = 0:Lmax
    @info("""Testing whether or not we found a correct transformation between 
             cSH to rSH for L = $L""")
    for ntest = 1:30
+      local x 
       x = @SVector rand(3)
       Ylm = cYlm(L,x)[L^2+1:(L+1)^2]
       Ylm_r = rYlm(L,x)[L^2+1:(L+1)^2]
@@ -28,7 +29,7 @@ end
 @info("Testing the D-matrix for cSH")
 Lmax = 4
 for ntest = 1:30
-   local θ, Q
+   local θ, Q, x
    x = @SVector rand(3)
    θ = rand(3) * 2pi
    Q = RotZYZ(θ...)
@@ -79,7 +80,7 @@ println()
 @info("Testing the D-matrix for rSH")
 Lmax = 4
 for ntest = 1:30
-   local θ, Q
+   local θ, Q, x
    x = @SVector rand(3)
    θ = rand(3) * 2pi
    Q = RotZYZ(θ...)
