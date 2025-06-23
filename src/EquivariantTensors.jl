@@ -4,7 +4,8 @@ abstract type AbstractETLayer end
 
 using Bumper, WithAlloc, Random, GPUArraysCore, KernelAbstractions
 
-import ACEbase: evaluate, evaluate!, evaluate_ed 
+import ACEbase: evaluate, evaluate!, evaluate_ed, evaluate_ed!, 
+                pullback, pullback!, pushforward, pushforward!
 import WithAlloc: whatalloc
 import ChainRulesCore: rrule, frule 
 import LuxCore: initialparameters, initialstates, AbstractLuxLayer
