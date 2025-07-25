@@ -19,10 +19,11 @@ export O3, gpu_device, cpu_device
 include("generics.jl")
 
 # ------------------------------------------------------
-# embedding layers 
+# embedding layers & auxiliary functionality 
 include("embed/diffnt.jl")
 include("embed/transform.jl")
 include("embed/graph.jl")
+include("embed/rnlylmbasis.jl")
 
 
 # ------------------------------------------------------
