@@ -15,6 +15,7 @@ end
 @testset "Embed" begin 
     @testset "NamedTuples" begin include("embed/test_diffnt.jl"); end
     @testset "Transform" begin include("embed/test_transform.jl"); end
+    @testset "ParallelEmbed" begin include("embed/test_parallelembed.jl"); end
 end
 
 @testset "ACE Layers" begin 

@@ -24,6 +24,7 @@ include("embed/diffnt.jl")
 include("embed/transform.jl")
 include("embed/graph.jl")
 include("embed/rnlylmbasis.jl")
+include("embed/embeddings.jl")
 
 
 # ------------------------------------------------------

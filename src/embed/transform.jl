@@ -68,6 +68,16 @@ end
 # --------------------------------------------------------- 
 #  Some auxiliary transformations 
 
+# WrappedFunction can be used as a wrapper for a "simple" transformation but 
+# we need to overload `evaluate` to make it work with our calling convention 
+
+import Lux: WrappedFunction 
+evaluate(wf::WrappedFunction, x, ps, st) = LuxCore.apply(wf, x, ps, st)[1] 
+
+
+# --------------------------------------------------------- 
+#  identity transformation
+
 struct IDtrans <: AbstractLuxLayer
 end 
 
