@@ -2,6 +2,8 @@
 #   - move the ACEKA into the main source code 
 #   - use named tuples
 #   - gradients 
+# actually, this is likely obsolete due to test_ace_ka.jl so check this and 
+# then remove this file. 
 
 import Polynomials4ML as P4ML 
 import EquivariantTensors as ET

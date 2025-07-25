@@ -33,9 +33,10 @@ end
 end
 
 @testset "ACE Models" begin 
-    @testset "Pullback" begin include("ace/test_sparse_ace.jl"); end
-    @testset "Pullback complex" begin include("ace/test_sparse_ace_cplx.jl"); end
-    @testset "Graph input & KA" begin include("ace/test_sparse_ace_graph.jl"); end
+    @testset "Pullback" begin include("acemodels/test_sparse_ace.jl"); end
+    @testset "Pullback complex" begin include("acemodels/test_sparse_ace_cplx.jl"); end
+    @testset "Graph input & KA" begin include("acemodels/test_sparse_ace_graph.jl"); end
+    @testset "ACE KA and grad" begin include("acemodels/test_ace_ka.jl"); end
 end 
 
 end
