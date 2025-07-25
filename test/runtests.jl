@@ -17,12 +17,10 @@ end
     @testset "Transform" begin include("embed/test_transform.jl"); end
 end
 
-@testset "ACE" begin 
+@testset "ACE Layers" begin 
     @testset "StaticProd" begin include("ace/test_static_prod.jl"); end 
     @testset "SparseProdPool" begin include("ace/test_sparseprodpool.jl"); end 
     @testset "SparseSymmetricProduct" begin include("ace/test_sparsesymmprod.jl"); end 
-    @testset "Pullback" begin include("ace/test_sparse_ace.jl"); end
-    @testset "Pullback complex" begin include("ace/test_sparse_ace_cplx.jl"); end
     @testset "SparseMatrix-KA" begin include("ace/test_sparsemat_ka.jl"); end
 end
 
@@ -32,6 +30,12 @@ end
     @testset "Representation" begin include("test_representation.jl"); end
     @testset "Real AA to Complex AA" begin include("test_rAA2cAA.jl"); end
     @testset "Coupling Coeffs" begin include("test_coupling.jl"); end
+end
+
+@testset "ACE Models" begin 
+    @testset "Pullback" begin include("ace/test_sparse_ace.jl"); end
+    @testset "Pullback complex" begin include("ace/test_sparse_ace_cplx.jl"); end
+    @testset "Graph input & KA" begin include("ace/test_sparse_ace_graph.jl"); end
 end 
 
 end
