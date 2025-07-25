@@ -46,8 +46,8 @@ nnll_long = ET.sparse_nnll_set(; ORD = ORD,
 model = Chain(; 
       embed = Parallel(nothing; 
                Rnl = Chain( WrappedFunction(𝐫 -> norm.(𝐫)),  
-                            P4ML.lux(rbasis) ), 
-               Ylm = P4ML.lux(ybasis)),
+                            rbasis ), 
+               Ylm = ybasis),
       𝔹 = 𝔹basis, 
       y01 = Parallel(nothing; 
             y0 = DotL(length(𝔹basis, 0)), 

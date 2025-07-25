@@ -14,7 +14,7 @@ import Polynomials4ML as P4ML
 
 ##
 
-basis = P4ML.lux(ChebBasis(5))
+basis = ChebBasis(5)
 
 ##
 
@@ -24,7 +24,7 @@ X = [ 2 * rand() - 1 for _ in 1:10 ]
 ps, st = LuxCore.setup(rng, tbasis)
 
 P1, _ = tbasis(X, ps, st)
-P2 = evaluate(tbasis.basis.basis, X)
+P2 = evaluate(tbasis.basis, X)
 println_slim(@test P1 ≈ P2) 
 
 ##
@@ -37,7 +37,7 @@ X = [ (;r = 10 * rand()) for _ in 1:10 ]
 ps, st = LuxCore.setup(rng, tbasis)
 
 P1, _ = tbasis(X, ps, st)
-P2 = evaluate(tbasis.basis.basis, transin.(X))
+P2 = evaluate(tbasis.basis, transin.(X))
 println_slim(@test P1 ≈ P2) 
 
 ##
@@ -73,6 +73,6 @@ ps, st = LuxCore.setup(rng, tbasis)
 P1, _ = tbasis(X, ps, st)
 
 Y = transin.(X)
-T2 = evaluate(tbasis.basis.basis, Y)
+T2 = evaluate(tbasis.basis, Y)
 B2 = reduce(vcat, T2[i, :]' * transout.W[:, :, X[i].z] for i = 1:length(X))
 println_slim(@test P1 ≈ B2)
