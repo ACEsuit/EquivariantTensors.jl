@@ -73,11 +73,11 @@ maxl = 10    # maximum degree of spherical harmonics
 ORD = 3     # correlation-order (body-order = ORD + 1)
 
 # generate the embedding layer 
-rtrans = 𝐫 -> 1 / (1+norm(𝐫))
-rbasis = P4ML.ChebBasis(Dtot+1)
-ytrans = 𝐫 -> 𝐫 / norm(𝐫)
-ybasis = P4ML.real_solidharmonics(maxl; T = Float32, static=true)
-embed = ET.RnlYlmEmbedding(rtrans, rbasis, ytrans, ybasis)
+rbasis = ET.TransformedBasis( WrappedFunction(𝐫 -> 1 / (1+norm(𝐫))), 
+                              P4ML.ChebBasis(Dtot+1) )
+ybasis = ET.TransformedBasis( WrappedFunction(𝐫 -> 𝐫 / norm(𝐫)), 
+                              P4ML.real_solidharmonics(maxl; T = Float32, static=true) )
+embed = ET.ParallelEmbed(; Rnl = rbasis, Ylm = ybasis)
 
 mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
                   minn = 0, maxn = Dtot, maxl = maxl, 
@@ -85,8 +85,8 @@ mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD,
                   maxlevel = Dtot)
 𝔹basis = ET.sparse_equivariant_tensor(; 
             L = 0, mb_spec = mb_spec, 
-            Rnl_spec = P4ML.natural_indices(rbasis), 
-            Ylm_spec = P4ML.natural_indices(ybasis), 
+            Rnl_spec = P4ML.natural_indices(rbasis.basis), 
+            Ylm_spec = P4ML.natural_indices(ybasis.basis), 
             basis = real )
 θ = randn(Float32, length(𝔹basis, 0))
 
@@ -113,26 +113,27 @@ ps_dev = dev(ps)
 st_dev = dev(st)
 X_dev = dev(X)
 
-# 3. run forwardpass through the model
 φ_dev, _ = ACEKA.evaluate(model, X_dev, ps_dev, st_dev) 
-φ = Array(φ_dev)
+φ_dev1 = Array(φ_dev)
+φ, _ = ACEKA.evaluate(model, X, ps, st) 
+
 
 ## 
 # now we try to make the same prediction with the original CPU ace 
 # implementation, also skipping the graph datastructure entirely. 
 
 function evaluate_env(model::ACEKA.SimpleACE, 𝐑i)
-   xij = [ rtrans(𝐫) for 𝐫 in 𝐑i ]
-   Rnl = P4ML.evaluate(rbasis, xij)
-   𝐫̂ij = [ ytrans(𝐫) for 𝐫 in 𝐑i ]
-   Ylm = P4ML.evaluate(ybasis, 𝐫̂ij)
+   xij = [ rbasis.transin(𝐫, NamedTuple(), NamedTuple())[1] for 𝐫 in 𝐑i ]
+   Rnl = P4ML.evaluate(rbasis.basis, xij, NamedTuple(), NamedTuple())
+   𝐫̂ij = [ ybasis.transin(𝐫, NamedTuple(), NamedTuple())[1] for 𝐫 in 𝐑i ]
+   Ylm = P4ML.evaluate(ybasis.basis, 𝐫̂ij, NamedTuple(), NamedTuple())
    𝔹, = ET.evaluate(𝔹basis, Rnl, Ylm) 
    return dot(𝔹, θ)
 end
 
 @info("Test Old Sequential vs KA Evaluation")
 φ_seq = [ evaluate_env(model, ET.neighbourhood(X, i)[2]) for i in 1:nnodes ]
-println_slim(@test φ ≈ φ_seq) 
+println_slim(@test φ ≈ φ_seq ≈ φ_dev1) 
 
 ##
 

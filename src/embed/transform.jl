@@ -35,6 +35,8 @@ function Base.show(io::IO, l::TransformedBasis)
    print(io, "TransformedBasis($(l.transin), $(l.basis), $(l.transout))")
 end
 
+TransformedBasis(transin, basis) = TransformedBasis(transin, basis, IDtrans())
+
 TransformedBasis(; basis, 
                    transin = IDtrans(), 
                    transout = IDtrans()) = 
@@ -58,7 +60,7 @@ initialstates(rng::AbstractRNG, l::TransformedBasis) =
 
 function evaluate(tbasis::TransformedBasis, X, ps, st)
    Y = map(x -> evaluate(tbasis.transin, x, ps.transin, st.transin), X) 
-   P, _ = tbasis.basis(Y, ps.basis, st.basis)
+   P = evaluate(tbasis.basis, Y, ps.basis, st.basis)
    B = evaluate(tbasis.transout, P, X, ps.transout, st.transout)
    return B, st 
 end
