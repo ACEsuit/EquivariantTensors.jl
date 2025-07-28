@@ -10,9 +10,9 @@ dev = gpu_device()
 
 ##
 # generate a model 
-Dtot = 16   # total degree; specifies the trunction of embeddings and correlations
+Dtot = 16    # total degree; specifies the trunction of embeddings and correlations
 maxl = 10    # maximum degree of spherical harmonics 
-ORD = 3     # correlation-order (body-order = ORD + 1)
+ORD = 3      # correlation-order (body-order = ORD + 1)
 
 # generate the embedding layer 
 rbasis = ET.TransformedBasis( WrappedFunction(𝐫 -> 1 / (1+norm(𝐫))), 
@@ -35,7 +35,7 @@ acel = ET.SparseACElayer(𝔹basis, (1,))
 
 model = Lux.Chain(; embed = embed, ace = acel )
 ps, st = LuxCore.setup(MersenneTwister(1234), model)
-θ_0 = ps.ace.WLL[1]
+θ_0 = ps.ace.WLL[1] # for testing only 
 
 ##
 # test evaluation 
@@ -45,10 +45,10 @@ nnodes = 100
 X = ET.Testing.rand_graph(nnodes; nneigrg = 10:20)
 
 @info("Basic ETGraph tests")
-print_tf(@test ET.nnodes(X) == nnodes)
-print_tf(@test ET.maxneigs(X) <= 20)
-print_tf(@test ET.nedges(X) == length(X.ii) == length(X.jj) == X.first[end] - 1)
-print_tf(@test all( all(X.ii[X.first[i]:X.first[i+1]-1] .== i)
+println_slim(@test ET.nnodes(X) == nnodes)
+println_slim(@test ET.maxneigs(X) <= 20)
+println_slim(@test ET.nedges(X) == length(X.ii) == length(X.jj) == X.first[end] - 1)
+println_slim(@test all( all(X.ii[X.first[i]:X.first[i+1]-1] .== i)
                     for i in 1:nnodes ) )
 
 ##
@@ -57,11 +57,11 @@ ps_dev = dev(ps)
 st_dev = dev(st)
 X_dev = dev(X)
 
+# evaluate on CPU and GPU 
 φ_dev, _ = model(X_dev, ps_dev, st_dev) 
 φ_dev1 = Array(φ_dev[1])
 φ, _ = model(X, ps, st) 
 φ1 = φ[1]
-
 
 ## 
 # now we try to make the same prediction with the original CPU ace 
@@ -80,8 +80,6 @@ end
 φ_seq = [ evaluate_env(model, ET.neighbourhood(X, i)[2]) for i in 1:nnodes ]
 println_slim(@test φ1 ≈ φ_seq ≈ φ_dev1) 
 
-##
+##  
 
-# This passes in interactive mode but fails in a CI/test run
-# φ, ∂X = ACEKA.evaluate_with_grad(model, X_dev, ps_dev, st_dev)
-
+# TODO: differentiation tests 
