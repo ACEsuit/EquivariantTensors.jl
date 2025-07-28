@@ -35,7 +35,7 @@ module ACEKA
 
    struct SimpleACE{T, TEM, BB}
       embed::TEM          # assume Rnl Ylm embedding 
-      symbasis::BB        # assume SparseACE(L = 0)
+      symbasis::BB        # assume SparseACEbasis(L = 0)
       params::Vector{T}   # model parameters
    end
 

@@ -53,7 +53,7 @@ function sparse_equivariant_tensors(;
                 "mb_spec" => mb_spec,
                 "LL" => LL,)
 
-   return SparseACE(Abasis, 𝔸basis, symm, meta)
+   return SparseACEbasis(Abasis, 𝔸basis, symm, meta)
 end
 
 
@@ -99,7 +99,7 @@ function sparse_equivariant_tensor(;
                 "mb_spec" => mb_spec,
                 "L" => L,)
 
-   return SparseACE(Abasis, 𝔸basis, (symm,), meta)                
+   return SparseACEbasis(Abasis, 𝔸basis, (symm,), meta)                
 end
 
 
