@@ -29,6 +29,8 @@ ParallelEmbed(; name="Embedding", kwargs...) =
 evaluate(emb::ParallelEmbed, X::ETGraph, ps, st) = 
       _applyparallelembed(emb.layers, X, ps, st)
 
+(emb::ParallelEmbed)(args...) = evaluate(emb, args...)      
+
 # This here is almost copy-pasted from Lux.jl; with very minor difference, 
 # The real assumptions are made once we differentiate. 
 #
