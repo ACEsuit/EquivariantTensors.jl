@@ -14,18 +14,18 @@ import ChainRulesCore: rrule
 
 function ka_evaluate(tensor::SparseACEbasis, Rnl_3, Ylm_3, ps, st)
    𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl_3, Ylm_3, 
-                          st.aspec, st.aaspecs, st.A2Bmaps[1])
+                          st.aspec, st.aaspecs, st.A2Bmaps)
    return 𝔹, st 
 end                           
 
 function _ka_evaluate(tensor::SparseACEbasis, Rnl_3, Ylm_3, 
-                      aspec, aaspecs, A2Bmap1)
+                      aspec, aaspecs, A2Bmaps)
    # A = #nodes x #features
    A = ka_evaluate(tensor.abasis, (Rnl_3, Ylm_3), aspec)
    # AA = #nodes x #features 
    AA = ka_evaluate(tensor.aabasis, A, aaspecs)
    # BB = #nodes x #features (TODO: undo the double-transpose!!!)
-   BB = transpose( mul(A2Bmap1, transpose(AA)) )
+   BB = permutedims.( mul.(A2Bmaps, Ref(transpose(AA))) )
    return BB, A, AA
 end 
 

@@ -1,8 +1,9 @@
 
 using SparseArrays: SparseMatrixCSC 
 import LinearAlgebra: mul! 
-using MLDataDevices: AbstractGPUDevice
+import MLDataDevices: AbstractGPUDevice
 using GPUArraysCore: AbstractGPUArray 
+import Adapt  
 
 struct DevSparseMatrixCSR{VECI, VECV}
    m::Int              # Number of rows
@@ -14,16 +15,41 @@ end
 
 
 function DevSparseMatrixCSR(A::SparseMatrixCSC, dev = identity)
-   At = SparseMatrixCSC(transpose(A)) 
+   At = SparseMatrixCSC(permutedims(A)) 
    return DevSparseMatrixCSR(A.m, A.n, dev(At.colptr), dev(At.rowval), dev(At.nzval))
 end
 
-(dev::AbstractGPUDevice)(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, dev)
-(T::Type{AbstractGPUArray})(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
-Base.convert(T::Type{<: AbstractGPUArray}, A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
+_floatT(T::Type{<: AbstractFloat}, A::DevSparseMatrixCSR) = 
+   DevSparseMatrixCSR(A.m, A.n, A.rowptr, A.colval, _floatT(T, A.nzval))
+
+# note the __arr2dev__ is used to workaround the fact that arrays of non-number 
+# bitstypes are not automagically converted to GPUArrays. This seems a bug 
+# or missing feature either in MLDataDevices or in the GPU Arrays packages. 
+
+# Adapt.adapt(::AbstractGPUDevice, A::DevSparseMatrixCSR) = 
+#       DevSparseMatrixCSR(A.m, A.n, dev(A.rowptr), dev(A.colval), 
+#                          __arr2dev__(dev, A.nzval))
+
+# __arr2dev__(dev::AbstractGPUDevice, A::Vector{<: Number}) = dev(A) 
+
+# function __arr2dev__(dev::AbstractGPUDevice, A::Vector{SVector{N, T}}) where {N, T}
+#    Amat = collect(reinterpret(reshape, T, A))
+#    Amatdev = dev(Amat) 
+#    return reinterpret(SVector{N, eltype(Amatdev)}, Amatdev)
+# end
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!   this is type piracy; we should not do this             !!!
+# !!!   this needs to be thought about very very carefully     !!!
+# (dev::AbstractGPUDevice)(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, dev)
+# (T::Type{AbstractGPUArray})(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
+# Base.convert(T::Type{<: AbstractGPUArray}, A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 
 Base.size(A::DevSparseMatrixCSR) = (A.m, A.n)
 Base.size(A::DevSparseMatrixCSR, i::Integer) = size(A)[i]
+Base.eltype(A::DevSparseMatrixCSR) = eltype(A.nzval)
 
 function mul(A::DevSparseMatrixCSR, b::AbstractVector)
    m, n = A.m, A.n 
@@ -34,12 +60,14 @@ function mul(A::DevSparseMatrixCSR, b::AbstractVector)
 end
 
 function mul(A::DevSparseMatrixCSR, B::AbstractMatrix)
-   X = similar(B, (size(A, 1), size(B, 2)))
+   TX = typeof(zero(eltype(A.nzval)) * zero(eltype(B)))
+   X = similar(B, TX, (size(A, 1), size(B, 2)))
    return mul!(X, A, B)
 end
 
 function mul(A::AbstractMatrix, B::DevSparseMatrixCSR)
-   X = similar(A, (size(A, 1), size(B, 2)))
+   TX = typeof(zero(eltype(A.nzval)) * zero(eltype(B)))
+   X = similar(A, TX, (size(A, 1), size(B, 2)))
    return mul!(X, A, B)
 end
 
@@ -57,7 +85,7 @@ function mul!(X::AbstractMatrix, A::DevSparseMatrixCSR, B::AbstractMatrix)
 
       nothing 
    end
-
+   
    m, n = A.m, A.n 
    rowptr = A.rowptr
    colval = A.colval

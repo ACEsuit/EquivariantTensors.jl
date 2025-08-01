@@ -35,7 +35,7 @@ LuxCore.initialstates(rng::AbstractRNG, l::SparseACElayer) =
 function evaluate(l::SparseACElayer, Φ, ps, st)
     # Φ is a tuple of embeddings. The first layer of the symbasis is the 
     # A basis (fused produce & pooling)
-    B = ka_evaluate(l.symbasis, Φ..., ps.symbasis, st.symbasis)
+    B, st = ka_evaluate(l.symbasis, Φ..., ps.symbasis, st.symbasis)
     @allowscalar begin 
         out = ntuple(i -> B[i] * ps.WLL[i], _get_NLL(l))
     end

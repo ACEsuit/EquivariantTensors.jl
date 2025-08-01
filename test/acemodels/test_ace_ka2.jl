@@ -1,5 +1,5 @@
 
-using LinearAlgebra, Lux, Random, EquivariantTensors, Test, Zygote
+using LinearAlgebra, Lux, Random, EquivariantTensors, Test, Zygote, StaticArrays
 using ACEbase.Testing: print_tf, println_slim
 
 import EquivariantTensors as ET 
@@ -35,6 +35,7 @@ acel = ET.SparseACElayer(𝔹basis, (1,))
 
 model = Lux.Chain(; embed = embed, ace = acel )
 ps, st = LuxCore.setup(MersenneTwister(1234), model)
+ps = ET.float32(ps); st = ET.float32(st)
 θ_0 = ps.ace.WLL[1] # for testing only 
 
 ##
@@ -73,13 +74,71 @@ function evaluate_env(model, 𝐑i)
    𝐫̂ij = [ ybasis.transin(𝐫, NamedTuple(), NamedTuple())[1] for 𝐫 in 𝐑i ]
    Ylm = P4ML.evaluate(ybasis.basis, 𝐫̂ij, NamedTuple(), NamedTuple())
    𝔹, = ET.evaluate(𝔹basis, Rnl, Ylm) 
-   return dot(𝔹, θ_0)
+   return transpose(𝔹) * θ_0
 end
 
 @info("Test Old Sequential vs KA Evaluation")
-φ_seq = [ evaluate_env(model, ET.neighbourhood(X, i)[2]) for i in 1:nnodes ]
-println_slim(@test φ1 ≈ φ_seq ≈ φ_dev1) 
+φ_seq = [ evaluate_env(model, ET.neighbourhood(X, i)[2])[1] for i in 1:nnodes ]
+println_slim(@test φ1 ≈ φ_seq ≈ φ_dev1)
 
 ##  
 
-# TODO: differentiation tests 
+@info("Test multiple outputs")
+
+acel = ET.SparseACElayer(𝔹basis, (8,))
+
+model = Lux.Chain(; embed = embed, ace = acel )
+ps, st = LuxCore.setup(MersenneTwister(1234), model)
+ps = ET.float32(ps); st = ET.float32(st)
+θ_0 = ps.ace.WLL[1] # for testing only 
+
+ps_dev = dev(ps)
+st_dev = dev(st)
+X_dev = dev(X)
+φ_dev, _ = model(X_dev, ps_dev, st_dev) 
+φ_dev1 = Array(φ_dev[1])
+φ, _ = model(X, ps, st) 
+φ1 = φ[1]
+φ_seq = reduce(vcat, 
+         [ evaluate_env(model, ET.neighbourhood(X, i)[2]) for i in 1:nnodes ])
+println_slim(@test φ1 ≈ φ_seq ≈ φ_dev1)
+
+##  
+
+@info("Test equivariant outputs")
+
+# 4 scalars (L=0), 2 vectors (L=1)
+# NOTE: sparse_nnll_set cannot manage a simplification by passing in 
+#       the LL tuple; this should be added to make basis generation more 
+#       efficient. 
+LL = (0, 1)
+NFEAT = (4, 2) 
+mb_spec = ET.sparse_nnll_set(; ORD = ORD, 
+                  minn = 0, maxn = Dtot, maxl = maxl, 
+                  level = bb -> sum((b.n + b.l) for b in bb; init=0), 
+                  maxlevel = Dtot)
+𝔹basis = ET.sparse_equivariant_tensors(; 
+            LL = LL, mb_spec = mb_spec, 
+            Rnl_spec = P4ML.natural_indices(rbasis.basis), 
+            Ylm_spec = P4ML.natural_indices(ybasis.basis), 
+            basis = real )
+
+acel = ET.SparseACElayer(𝔹basis, NFEAT)
+
+model = Lux.Chain(; embed = embed, ace = acel )
+ps, st = LuxCore.setup(MersenneTwister(1234), model)
+ps = ET.float32(ps); st = ET.float32(st)
+θ_0 = ps.ace.WLL[1] # for testing only 
+
+ps_dev = dev(ps)
+st_dev = dev(st)
+X_dev = dev(X)
+φ_dev, _ = model(X_dev, ps_dev, st_dev) 
+φ_dev1 = Array.(φ_dev)
+
+φ, _ = model(X, ps, st) 
+println_slim(@test size(φ[1]) == (nnodes, NFEAT[1]))
+println_slim(@test size(φ[2]) == (nnodes, NFEAT[2]))
+println_slim(@test eltype(φ[1]) == Float32)
+println_slim(@test eltype(φ[2]) == SVector{3, Float32})
+println_slim(@test all(φ_dev1 .≈ φ))
