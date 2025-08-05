@@ -37,7 +37,7 @@ module ACEKA
 
    function evaluate(model::SimpleACE, X::ET.ETGraph, ps, st)
       (Rn_3, Ylm_3), _ = ET.evaluate(model.embed, X, ps.embed, st.embed)
-      𝔹, _ = ET.ka_evaluate(model.symbasis, Rn_3, Ylm_3, ps.symbasis, st.symbasis)
+      (𝔹,), _ = ET.ka_evaluate(model.symbasis, Rn_3, Ylm_3, ps.symbasis, st.symbasis)
       # 𝔹 = (#nodes, #features); params = (#features, #readouts)
       # in this toy model, #readouts = 1.
       return 𝔹 * ps.params, st 
@@ -91,7 +91,8 @@ mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD,
 θ = randn(Float32, length(𝔹basis, 0))
 
 model = ACEKA.SimpleACE(embed, 𝔹basis, θ)
-ps, st = LuxCore.setup(MersenneTwister(1234), model)
+_ps, _st = LuxCore.setup(MersenneTwister(1234), model)
+ps = ET.float32(_ps); st = ET.float32(_st)
 
 ##
 # test evaluation 
@@ -138,5 +139,6 @@ println_slim(@test φ ≈ φ_seq ≈ φ_dev1)
 ##
 
 # This passes in interactive mode but fails in a CI/test run
+# to be revived asap. 
 # φ, ∂X = ACEKA.evaluate_with_grad(model, X_dev, ps_dev, st_dev)
 
