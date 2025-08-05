@@ -6,7 +6,6 @@ import EquivariantTensors as ET
 import Polynomials4ML as P4ML      
 
 include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
-dev = gpu_device() 
 
 ##
 # generate a model 
@@ -80,6 +79,22 @@ end
 @info("Test Old Sequential vs KA Evaluation")
 φ_seq = [ evaluate_env(model, ET.neighbourhood(X, i)[2])[1] for i in 1:nnodes ]
 println_slim(@test φ1 ≈ φ_seq ≈ φ_dev1)
+
+##
+# Check gradient w.r.t. parameters 
+
+Δ = randn(Float32, size(φ1))
+Δ_dev = dev(Δ)
+function _foo(_ps) 
+   out1 = model(X, _ps, st)
+   val = out1[1][1]
+   dot(val, Δ)
+end 
+_foo_dev(_ps) = dot(model(X_dev, _ps, st_dev)[1][1], Δ_dev)
+println_slim(@test _foo(ps) ≈ _foo_dev(ps_dev))
+
+Zygote.gradient(_foo, ps)
+
 
 ##  
 

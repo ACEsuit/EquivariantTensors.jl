@@ -36,8 +36,7 @@ function evaluate(l::SparseACElayer, Φ, ps, st)
     # Φ is a tuple of embeddings. The first layer of the symbasis is the 
     # A basis (fused produce & pooling)
     B, st = ka_evaluate(l.symbasis, Φ..., ps.symbasis, st.symbasis)
-    @allowscalar begin 
-        out = ntuple(i -> B[i] * ps.WLL[i], _get_NLL(l))
-    end
+    out = B .* ps.WLL 
     return out, st
 end
+
