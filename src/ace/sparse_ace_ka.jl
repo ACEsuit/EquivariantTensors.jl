@@ -34,10 +34,19 @@ end
 
 function _ka_pullback(∂𝔹, tensor::SparseACEbasis, Rnl_3, Ylm_3, A, AA, 
                       aspec, aaspecs, A2Bmaps)
-   # BB = 𝒞 * 𝔸' = (𝔸 * 𝒞')'  =>  ∇_𝔸 (∂BB : BB) = ∇_𝔸' Tr(𝔸 * 𝒞' * ∂BB)
-   # @show typeof(∂𝔹)
-   @show typeof(A2Bmaps[1])
-   ∂𝔸 = mul(unthunk(∂𝔹)[1], A2Bmaps[1])
+   # 𝔹 is a tuple of bases, so ∂𝔹 is a tuple of tangents, which is 
+   # managed as a ChainRulesCore.Tangent. (usually thunked) By 
+   # extracting them as ∂𝔹[i] we get the tangent for the ith element 
+   # of the forward pass. 
+
+   # Each 𝔹[i] is of the following form:  
+   #      𝔹 = (𝒞 * 𝔸')' = 𝔸 * 𝒞' 
+   #      ∂𝔹 : 𝔹 = (∂𝔹 * 𝒞) : 𝔸
+   #  =>  ∇_𝔸 (∂𝔹 : 𝔹) = ∂𝔹 * 𝒞
+
+   # TODO: Generalize this to multiple bases !!
+   @assert length(∂𝔹) == 1 "implement > 1 case!!"
+   ∂𝔸 = mul(∂𝔹[1], A2Bmaps[1])
    ∂A = ka_pullback(∂𝔸, tensor.aabasis, A, aaspecs)
    ∂Rnl, ∂Ylm = ka_pullback(∂A, tensor.abasis, (Rnl_3, Ylm_3), aspec)
    return ∂Rnl, ∂Ylm
@@ -52,8 +61,14 @@ function rrule(::typeof(_ka_evaluate), tensor::SparseACEbasis,
    𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl_3, Ylm_3, aspec, aaspecs, A2Bmaps)
 
    function _pb(∂𝔹A𝔸)
-      ∂𝔹 = ∂𝔹A𝔸[1] 
-      @show "blurg"
+      ∂𝔹 = ∂𝔹A𝔸[1]
+      # ∂𝔹A𝔸[2] == ∂𝔹A𝔸[2] == ZeroTangent() because A and 𝔸 are just 
+      # intermediates that we keep to accelerate the backprop, but are not 
+      # actually returned! 
+      if !(∂𝔹A𝔸[2] == ∂𝔹A𝔸[3] == ZeroTangent())
+         error("rrule for _ka_evaluate requires that only ∂𝔹 ≠ 0")
+      end
+
       ∂Rnl, ∂Ylm = _ka_pullback(∂𝔹, tensor, Rnl_3, Ylm_3, A, 𝔸, 
                                 aspec, aaspecs, A2Bmaps)
       return (∂Rnl, ∂Ylm, )

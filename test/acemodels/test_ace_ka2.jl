@@ -85,11 +85,7 @@ println_slim(@test φ1 ≈ φ_seq ≈ φ_dev1)
 
 Δ = randn(Float32, size(φ1))
 Δ_dev = dev(Δ)
-function _foo(_ps) 
-   out1 = model(X, _ps, st)
-   val = out1[1][1]
-   dot(val, Δ)
-end 
+_foo(_ps) = dot(model(X, _ps, st)[1][1], Δ)
 _foo_dev(_ps) = dot(model(X_dev, _ps, st_dev)[1][1], Δ_dev)
 println_slim(@test _foo(ps) ≈ _foo_dev(ps_dev))
 

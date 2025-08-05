@@ -55,4 +55,15 @@ evaluate(emb::ParallelEmbed, X::ETGraph, ps, st) =
    return Expr(:block, calls...)
 end
 
+import ChainRulesCore: rrule 
+function rrule(::typeof(evaluate), emb::ParallelEmbed, X::ETGraph, ps, st)
+   out, st = evaluate(emb, X, ps, st)
 
+   function _pb_ps(∂out) 
+      @show "blurg"
+      error("stop")
+   end
+
+   return (out, st), ∂out -> (NoTangent(), NoTangent(), NoTangent(), 
+                              _pb_ps(∂out), NoTangent()) 
+end

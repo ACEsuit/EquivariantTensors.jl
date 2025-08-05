@@ -22,34 +22,22 @@ end
 _floatT(T::Type{<: AbstractFloat}, A::DevSparseMatrixCSR) = 
    DevSparseMatrixCSR(A.m, A.n, A.rowptr, A.colval, _floatT(T, A.nzval))
 
-# note the __arr2dev__ is used to workaround the fact that arrays of non-number 
-# bitstypes are not automagically converted to GPUArrays. This seems a bug 
-# or missing feature either in MLDataDevices or in the GPU Arrays packages. 
-
-# Adapt.adapt(::AbstractGPUDevice, A::DevSparseMatrixCSR) = 
-#       DevSparseMatrixCSR(A.m, A.n, dev(A.rowptr), dev(A.colval), 
-#                          __arr2dev__(dev, A.nzval))
-
-# __arr2dev__(dev::AbstractGPUDevice, A::Vector{<: Number}) = dev(A) 
-
-# function __arr2dev__(dev::AbstractGPUDevice, A::Vector{SVector{N, T}}) where {N, T}
-#    Amat = collect(reinterpret(reshape, T, A))
-#    Amatdev = dev(Amat) 
-#    return reinterpret(SVector{N, eltype(Amatdev)}, Amatdev)
-# end
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!   this is type piracy; we should not do this             !!!
-# !!!   this needs to be thought about very very carefully     !!!
-# (dev::AbstractGPUDevice)(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, dev)
-# (T::Type{AbstractGPUArray})(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
-# Base.convert(T::Type{<: AbstractGPUArray}, A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
 Base.size(A::DevSparseMatrixCSR) = (A.m, A.n)
 Base.size(A::DevSparseMatrixCSR, i::Integer) = size(A)[i]
 Base.eltype(A::DevSparseMatrixCSR) = eltype(A.nzval)
+
+# this is not really used (also no unit tests), 
+# but it can be useful for debugging
+function Base.getindex(A::DevSparseMatrixCSR, i::Int, j::Int)
+   @assert 1 <= i <= A.m
+   @assert 1 <= j <= A.n
+   for idx = A.rowptr[i]:(A.rowptr[i+1]-1)
+      if A.colval[idx] == j
+         return A.nzval[idx]
+      end
+   end
+   return zero(eltype(A.nzval))
+end
 
 function mul(A::DevSparseMatrixCSR, b::AbstractVector)
    m, n = A.m, A.n 
@@ -66,7 +54,7 @@ function mul(A::DevSparseMatrixCSR, B::AbstractMatrix)
 end
 
 function mul(A::AbstractMatrix, B::DevSparseMatrixCSR)
-   TX = typeof(zero(eltype(A.nzval)) * zero(eltype(B)))
+   TX = typeof(zero(eltype(B.nzval)) * zero(eltype(A)))
    X = similar(A, TX, (size(A, 1), size(B, 2)))
    return mul!(X, A, B)
 end
@@ -102,6 +90,7 @@ function mul!(X::AbstractMatrix, A::DevSparseMatrixCSR, B::AbstractMatrix)
 end 
 
 
+
 function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR)
    # B = [ row1 ; row2 ; ... ] 
 
@@ -111,7 +100,11 @@ function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR)
       
       for idx = rowptr[rowB]:(rowptr[rowB+1]-1)
          colB = colval[idx]
-         X[rowA, colB] += A[rowA, rowB] * nzval[idx]
+         # This needs to be atomic because X[rowA, colB] is updated 
+         # in parallel; to avoid this, we need to switch to a CSC format 
+         # we can achieve this by storing A2Bmaps in both formats, one for the 
+         # forward pass, the other for the backward pass.
+         @atomic X[rowA, colB] += A[rowA, rowB] * nzval[idx]
       end
 
       nothing 
@@ -128,7 +121,7 @@ function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR)
    fill!(X, zero(eltype(X)))
 
    kernel! = _mul_ka_dense_sparse!(KernelAbstractions.get_backend(X))
-   kernel!(X, A, rowptr, colval, nzval; ndrange = (m, size(B, 2)))
+   kernel!(X, A, rowptr, colval, nzval; ndrange = (m, size(B, 1)))
    return X
 end 
 
