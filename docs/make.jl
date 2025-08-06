@@ -19,6 +19,7 @@ makedocs(;
         "Benchmarking" => "benchmarking.md",
 
     ],
+    checkdocs=:exports
 )
 
 deploydocs(;

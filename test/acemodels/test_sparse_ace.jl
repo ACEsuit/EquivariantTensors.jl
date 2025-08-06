@@ -7,7 +7,7 @@ using Zygote, LuxCore, Lux
 import Optimisers as OPT
 import ForwardDiff as FDiff 
 
-@info("Preliminary Pullback test for lux ace model with complex numbers")
+@info("Preliminary Pullback test for lux ace model")
 
 ##
 struct DotL <: Lux.AbstractLuxLayer 
@@ -46,14 +46,13 @@ nnll_long = ET.sparse_nnll_set(; ORD = ORD,
 model = Chain(; 
       embed = Parallel(nothing; 
                Rnl = Chain( WrappedFunction(𝐫 -> norm.(𝐫)),  
-                            P4ML.lux(rbasis) ), 
-               Ylm = P4ML.lux(ybasis)),
+                            rbasis ), 
+               Ylm = ybasis),
       𝔹 = 𝔹basis, 
       y01 = Parallel(nothing; 
             y0 = DotL(length(𝔹basis, 0)), 
             y1 = DotL(length(𝔹basis, 1)), ), 
-      iml = WrappedFunction(x -> (exp(im * x[1]) * x[1], exp.(im * x[2]) .* x[2])),
-      out = WrappedFunction(x -> real(x[1] + sum(abs2, x[2]) ))
+      out = WrappedFunction(x -> x[1] + sum(abs2, x[2]) )
       )
 
 ##
