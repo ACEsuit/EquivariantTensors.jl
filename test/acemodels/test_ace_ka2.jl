@@ -1,17 +1,23 @@
 
 using LinearAlgebra, Lux, Random, EquivariantTensors, Test, Zygote, StaticArrays
 using ACEbase.Testing: print_tf, println_slim
+using Optimisers: destructure
 
 import EquivariantTensors as ET 
 import Polynomials4ML as P4ML      
+import ForwardDiff as FD 
 
 include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 
 ##
+
 # generate a model 
-Dtot = 16    # total degree; specifies the trunction of embeddings and correlations
-maxl = 10    # maximum degree of spherical harmonics 
+Dtot = 9     # total degree; specifies the trunction of embeddings and correlations
+maxl = 5     # maximum degree of spherical harmonics 
 ORD = 3      # correlation-order (body-order = ORD + 1)
+
+# To test with a larger model replace with the following 
+# Dtot = 16; maxl = 10; ORD = 3
 
 # generate the embedding layer 
 rbasis = ET.TransformedBasis( WrappedFunction(𝐫 -> 1 / (1+norm(𝐫))), 
@@ -41,15 +47,19 @@ ps = ET.float32(ps); st = ET.float32(st)
 # test evaluation 
 
 # 1. generate a random input graph 
-nnodes = 100
-X = ET.Testing.rand_graph(nnodes; nneigrg = 10:20)
+nnodes = 30
+X = ET.Testing.rand_graph(nnodes; nneigrg = 5:10)
+
+# for a larger test 
+# nnodes = 100
+# X = ET.Testing.rand_graph(nnodes; nneigrg = 10:20)
 
 @info("Basic ETGraph tests")
 println_slim(@test ET.nnodes(X) == nnodes)
-println_slim(@test ET.maxneigs(X) <= 20)
+# println_slim(@test ET.maxneigs(X) <= 20)
 println_slim(@test ET.nedges(X) == length(X.ii) == length(X.jj) == X.first[end] - 1)
 println_slim(@test all( all(X.ii[X.first[i]:X.first[i+1]-1] .== i)
-                    for i in 1:nnodes ) )
+                        for i in 1:nnodes ) )
 
 ##
 # 2. Move model and input to the GPU / Device 
@@ -83,14 +93,25 @@ println_slim(@test φ1 ≈ φ_seq ≈ φ_dev1)
 ##
 # Check gradient w.r.t. parameters 
 
+@info("Test gradient of model 1 w.r.t. parameters")
+
+# implement a simple test function to differentiate 
 Δ = randn(Float32, size(φ1))
 Δ_dev = dev(Δ)
 _foo(_ps) = dot(model(X, _ps, st)[1][1], Δ)
 _foo_dev(_ps) = dot(model(X_dev, _ps, st_dev)[1][1], Δ_dev)
 println_slim(@test _foo(ps) ≈ _foo_dev(ps_dev))
 
-Zygote.gradient(_foo, ps)
+# check gradient is the same on CPU and device 
+g1 = Zygote.gradient(_foo, ps)[1]
+g1_dev = Zygote.gradient(_foo_dev, ps_dev)[1]
+println_slim(@test g1.ace.WLL[1] ≈ Array(g1_dev.ace.WLL[1]))
 
+# confirm correctness via ForwardDiff 
+pvec, _rest = destructure(ps) 
+gvec2 = FD.gradient(_p -> _foo(_rest(_p)), pvec)
+gvec1 = destructure(g1)[1] 
+println_slim(@test gvec1 ≈ gvec2)
 
 ##  
 

@@ -55,7 +55,9 @@ end
 
 
 
-
+#
+# this rrule is just a wrapper for _ka_pullback
+#
 function rrule(::typeof(_ka_evaluate), tensor::SparseACEbasis, 
                Rnl_3, Ylm_3, aspec, aaspecs, A2Bmaps)
    𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl_3, Ylm_3, aspec, aaspecs, A2Bmaps)

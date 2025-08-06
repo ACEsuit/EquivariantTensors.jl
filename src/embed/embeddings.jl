@@ -55,15 +55,34 @@ evaluate(emb::ParallelEmbed, X::ETGraph, ps, st) =
    return Expr(:block, calls...)
 end
 
-import ChainRulesCore: rrule 
+
+# -------------------------------------------------------------------
+
+# evaluate_ed(emb::ParallelEmbed, X::ETGraph, ps, st) = 
+#       _applyparallelembed_ed(emb.layers, X, ps, st)
+
+
+
+import ChainRulesCore: rrule, @not_implemented
+
 function rrule(::typeof(evaluate), emb::ParallelEmbed, X::ETGraph, ps, st)
    out, st = evaluate(emb, X, ps, st)
 
-   function _pb_ps(∂out) 
-      @show "blurg"
-      error("stop")
+   function _pb_X(∂out) 
+      return @not_implemented("backprop w.r.t. X not yet implemented")
    end
 
-   return (out, st), ∂out -> (NoTangent(), NoTangent(), NoTangent(), 
-                              _pb_ps(∂out), NoTangent()) 
+   function _pb_ps(∂out) 
+      # the simplest case is in fact that there are no parameters, so we 
+      # should simply return a ZeroTangent() 
+      if sizeof(ps) > 0 
+         return @not_implemented("Current implementation of ParallelEmbed rrule does not support parameters!")
+      end
+      return ZeroTangent() 
+   end
+
+   return (out, st), ∂out -> (NoTangent(), NoTangent(), 
+                              _pb_X(∂out), _pb_ps(∂out), NoTangent()) 
 end
+
+
