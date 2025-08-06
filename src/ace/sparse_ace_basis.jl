@@ -5,7 +5,7 @@ import ChainRulesCore: NoTangent, rrule, ZeroTangent
 import LuxCore: AbstractLuxLayer, initialparameters, initialstates, apply 
 
 
-struct SparseACE{NL, TA, TAA, TSYM} <: AbstractLuxLayer
+struct SparseACEbasis{NL, TA, TAA, TSYM} <: AbstractLuxLayer
    abasis::TA
    aabasis::TAA
    A2Bmaps::TSYM
@@ -15,7 +15,7 @@ struct SparseACE{NL, TA, TAA, TSYM} <: AbstractLuxLayer
    meta::Dict{String, Any}
 end
 
-function SparseACE(abasis, aabasis, A2Bmaps, meta) 
+function SparseACEbasis(abasis, aabasis, A2Bmaps, meta) 
    LL = []
    lens = [] 
    for i = 1:length(A2Bmaps)
@@ -23,13 +23,13 @@ function SparseACE(abasis, aabasis, A2Bmaps, meta)
       push!(LL, (tLp1 - 1) ÷ 2)
       push!(lens, size(A2Bmaps[i], 1))
    end
-   SparseACE(abasis, aabasis, A2Bmaps, 
+   SparseACEbasis(abasis, aabasis, A2Bmaps, 
              tuple(LL...), tuple(lens...), meta)
 end
 
-Base.length(tensor::SparseACE) = sum(tensor.lens)
+Base.length(tensor::SparseACEbasis) = sum(tensor.lens)
 
-function Base.length(tensor::SparseACE, L::Integer)
+function Base.length(tensor::SparseACEbasis, L::Integer)
    for (il, l) in enumerate(tensor.LL)
       if l == L
          return tensor.lens[il]
@@ -38,20 +38,20 @@ function Base.length(tensor::SparseACE, L::Integer)
    error("Layer does not have an for L = $L output")
 end
 
-function Base.show(io::IO, l::SparseACE)
-   print(io, "SparseACE(L = $(l.LL))")
+function Base.show(io::IO, l::SparseACEbasis)
+   print(io, "SparseACEbasis(L = $(l.LL))")
 end
 
 
 # ----------------------------------------
 # Lux integration 
 
-(l::SparseACE)(BB::Tuple, ps, st) = evaluate(l, BB..., ps, st), st 
+(l::SparseACEbasis)(BB::Tuple, ps, st) = evaluate(l, BB..., ps, st), st 
 
-initialparameters(rng::AbstractRNG, bas::SparseACE) = 
+initialparameters(rng::AbstractRNG, bas::SparseACEbasis) = 
          NamedTuple() 
 
-initialstates(rng::AbstractRNG, bas::SparseACE) = 
+initialstates(rng::AbstractRNG, bas::SparseACEbasis) = 
          ( aspec = bas.abasis.spec, 
             aaspecs = bas.aabasis.specs, 
             A2Bmaps = DevSparseMatrixCSR.(bas.A2Bmaps), )
@@ -61,7 +61,7 @@ initialstates(rng::AbstractRNG, bas::SparseACE) =
 # evaluation kernels 
 
 #=
-function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
+function evaluate!(B, tensor::SparseACEbasis{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
    TA = promote_type(eltype(Rnl), eltype(Ylm))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
@@ -79,7 +79,7 @@ function evaluate!(B, tensor::SparseACE{T}, Rnl, Ylm) where {T}
    return B
 end
 
-function whatalloc(::typeof(evaluate!), tensor::SparseACE, Rnl, Ylm)
+function whatalloc(::typeof(evaluate!), tensor::SparseACEbasis, Rnl, Ylm)
    TA = promote_type(eltype(Rnl), eltype(Ylm))
    TB = _promote_mul_type(TA, eltype(tensor.A2Bmap))
    return TB, length(tensor)
@@ -87,18 +87,18 @@ end
 
 =#
 
-evaluate(tensor::SparseACE, Rnl, Ylm) = 
+evaluate(tensor::SparseACEbasis, Rnl, Ylm) = 
       evaluate(tensor, Rnl, Ylm, NamedTuple(), NamedTuple()) 
 
 #=
-function evaluate(tensor::SparseACE, Rnl, Ylm, ps, st)
+function evaluate(tensor::SparseACEbasis, Rnl, Ylm, ps, st)
    allocinfo = whatalloc(evaluate!, tensor, Rnl, Ylm)
    B = zeros(allocinfo...)
    return evaluate!(B, tensor, Rnl, Ylm)
 end
 =#
 
-function evaluate(tensor::SparseACE, Rnl, Ylm, ps, st)
+function evaluate(tensor::SparseACEbasis, Rnl, Ylm, ps, st)
    TA = promote_type(eltype(Rnl), eltype(Ylm))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
@@ -116,7 +116,7 @@ end
 
 
 function pullback!(∂Rnl, ∂Ylm, 
-                   ∂BB, tensor::SparseACE, Rnl, Ylm, A)
+                   ∂BB, tensor::SparseACEbasis, Rnl, Ylm, A)
 
    @no_escape begin 
    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -151,7 +151,7 @@ function pullback!(∂Rnl, ∂Ylm,
 end
 
 function whatalloc(::typeof(pullback!),  
-                   ∂BB, tensor::SparseACE, Rnl, Ylm
+                   ∂BB, tensor::SparseACEbasis, Rnl, Ylm
                    )
    # TODO: may need to check the type of ∂BB too, but this is a bit 
    #       tricky because of the SVectors that can be in there...
@@ -160,7 +160,7 @@ function whatalloc(::typeof(pullback!),
    return (TA, size(Rnl)...), (TA, size(Ylm)...)
 end
 
-function pullback(∂BB, tensor::SparseACE{T}, Rnl, Ylm, A) where {T}
+function pullback(∂BB, tensor::SparseACEbasis{T}, Rnl, Ylm, A) where {T}
    alc_∂Rnl, alc_∂Ylm = whatalloc(pullback!, ∂BB, tensor, Rnl, Ylm)
    ∂Rnl = zeros(alc_∂Rnl...)
    ∂Ylm = zeros(alc_∂Ylm...)
@@ -171,7 +171,7 @@ end
 # ChainRules integration 
 using ChainRulesCore: unthunk 
 
-function rrule(::typeof(evaluate), tensor::SparseACE, Rnl, Ylm, ps, st)
+function rrule(::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
 
    # evaluate the A basis
    TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
@@ -196,7 +196,7 @@ const NT_NL_SPEC = NamedTuple{(:n, :l), Tuple{Int, Int}}
 
 _nl(bb) = [(n = b.n, l = b.l) for b in bb]
 
-function get_nnll_spec(tensor::SparseACE{NL, TA, TAA, TSYM}, idx) where {NL, TA, TAA, TSYM}
+function get_nnll_spec(tensor::SparseACEbasis{NL, TA, TAA, TSYM}, idx) where {NL, TA, TAA, TSYM}
    spec = tensor.meta["𝔸spec"]::Vector{Vector{@NamedTuple{n::Int, l::Int, m::Int}}}
    A2Bmap = tensor.A2Bmaps[idx]
    nBB = size(A2Bmap, 1)

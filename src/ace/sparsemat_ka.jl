@@ -1,8 +1,9 @@
 
 using SparseArrays: SparseMatrixCSC 
 import LinearAlgebra: mul! 
-using MLDataDevices: AbstractGPUDevice
+import MLDataDevices: AbstractGPUDevice
 using GPUArraysCore: AbstractGPUArray 
+import Adapt  
 
 struct DevSparseMatrixCSR{VECI, VECV}
    m::Int              # Number of rows
@@ -14,16 +15,29 @@ end
 
 
 function DevSparseMatrixCSR(A::SparseMatrixCSC, dev = identity)
-   At = SparseMatrixCSC(transpose(A)) 
+   At = SparseMatrixCSC(permutedims(A)) 
    return DevSparseMatrixCSR(A.m, A.n, dev(At.colptr), dev(At.rowval), dev(At.nzval))
 end
 
-(dev::AbstractGPUDevice)(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, dev)
-(T::Type{AbstractGPUArray})(A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
-Base.convert(T::Type{<: AbstractGPUArray}, A::SparseMatrixCSC) = DevSparseMatrixCSR(A, T)
+_floatT(T::Type{<: AbstractFloat}, A::DevSparseMatrixCSR) = 
+   DevSparseMatrixCSR(A.m, A.n, A.rowptr, A.colval, _floatT(T, A.nzval))
 
 Base.size(A::DevSparseMatrixCSR) = (A.m, A.n)
 Base.size(A::DevSparseMatrixCSR, i::Integer) = size(A)[i]
+Base.eltype(A::DevSparseMatrixCSR) = eltype(A.nzval)
+
+# this is not really used (also no unit tests), 
+# but it can be useful for debugging
+function Base.getindex(A::DevSparseMatrixCSR, i::Int, j::Int)
+   @assert 1 <= i <= A.m
+   @assert 1 <= j <= A.n
+   for idx = A.rowptr[i]:(A.rowptr[i+1]-1)
+      if A.colval[idx] == j
+         return A.nzval[idx]
+      end
+   end
+   return zero(eltype(A.nzval))
+end
 
 function mul(A::DevSparseMatrixCSR, b::AbstractVector)
    m, n = A.m, A.n 
@@ -34,13 +48,15 @@ function mul(A::DevSparseMatrixCSR, b::AbstractVector)
 end
 
 function mul(A::DevSparseMatrixCSR, B::AbstractMatrix)
-   X = similar(B, (size(A, 1), size(B, 2)))
+   TX = typeof(zero(eltype(A.nzval)) * zero(eltype(B)))
+   X = similar(B, TX, (size(A, 1), size(B, 2)))
    return mul!(X, A, B)
 end
 
-function mul(A::AbstractMatrix, B::DevSparseMatrixCSR)
-   X = similar(A, (size(A, 1), size(B, 2)))
-   return mul!(X, A, B)
+function mul(A::AbstractMatrix, B::DevSparseMatrixCSR, op = *)
+   TX = typeof( op(zero(eltype(A)), zero(eltype(B.nzval))) ) 
+   X = similar(A, TX, (size(A, 1), size(B, 2)))
+   return mul!(X, A, B, op)
 end
 
 
@@ -57,7 +73,7 @@ function mul!(X::AbstractMatrix, A::DevSparseMatrixCSR, B::AbstractMatrix)
 
       nothing 
    end
-
+   
    m, n = A.m, A.n 
    rowptr = A.rowptr
    colval = A.colval
@@ -74,16 +90,21 @@ function mul!(X::AbstractMatrix, A::DevSparseMatrixCSR, B::AbstractMatrix)
 end 
 
 
-function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR)
-   # B = [ row1 ; row2 ; ... ] 
 
+function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR, op=*)
+   # B = [ row1 ; row2 ; ... ] 
+   
    @kernel function _mul_ka_dense_sparse!(X, A, rowptr, colval, nzval)
       # X = A * B 
       rowA, rowB = @index(Global, NTuple)
       
       for idx = rowptr[rowB]:(rowptr[rowB+1]-1)
          colB = colval[idx]
-         X[rowA, colB] += A[rowA, rowB] * nzval[idx]
+         # This needs to be atomic because X[rowA, colB] is updated 
+         # in parallel; to avoid this, we need to switch to a CSC format 
+         # we can achieve this by storing A2Bmaps in both formats, one for the 
+         # forward pass, the other for the backward pass.
+         @atomic X[rowA, colB] += op(A[rowA, rowB], nzval[idx])
       end
 
       nothing 
@@ -100,7 +121,7 @@ function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR)
    fill!(X, zero(eltype(X)))
 
    kernel! = _mul_ka_dense_sparse!(KernelAbstractions.get_backend(X))
-   kernel!(X, A, rowptr, colval, nzval; ndrange = (m, size(B, 2)))
+   kernel!(X, A, rowptr, colval, nzval; ndrange = (m, size(B, 1)))
    return X
 end 
 

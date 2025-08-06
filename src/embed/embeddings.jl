@@ -29,6 +29,8 @@ ParallelEmbed(; name="Embedding", kwargs...) =
 evaluate(emb::ParallelEmbed, X::ETGraph, ps, st) = 
       _applyparallelembed(emb.layers, X, ps, st)
 
+(emb::ParallelEmbed)(args...) = evaluate(emb, args...)      
+
 # This here is almost copy-pasted from Lux.jl; with very minor difference, 
 # The real assumptions are made once we differentiate. 
 #
@@ -51,6 +53,36 @@ evaluate(emb::ParallelEmbed, X::ETGraph, ps, st) =
    push!(calls, :(st = NamedTuple{$names}((($(st_symbols...),)))))
    push!(calls, :(return out, st))
    return Expr(:block, calls...)
+end
+
+
+# -------------------------------------------------------------------
+
+# evaluate_ed(emb::ParallelEmbed, X::ETGraph, ps, st) = 
+#       _applyparallelembed_ed(emb.layers, X, ps, st)
+
+
+
+import ChainRulesCore: rrule, @not_implemented
+
+function rrule(::typeof(evaluate), emb::ParallelEmbed, X::ETGraph, ps, st)
+   out, st = evaluate(emb, X, ps, st)
+
+   function _pb_X(∂out) 
+      return @not_implemented("backprop w.r.t. X not yet implemented")
+   end
+
+   function _pb_ps(∂out) 
+      # the simplest case is in fact that there are no parameters, so we 
+      # should simply return a ZeroTangent() 
+      if sizeof(ps) > 0 
+         return @not_implemented("Current implementation of ParallelEmbed rrule does not support parameters!")
+      end
+      return ZeroTangent() 
+   end
+
+   return (out, st), ∂out -> (NoTangent(), NoTangent(), 
+                              _pb_X(∂out), _pb_ps(∂out), NoTangent()) 
 end
 
 

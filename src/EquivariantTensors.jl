@@ -56,6 +56,8 @@ include("utils/sparseprod.jl")
 include("utils/symmop.jl")
 include("utils/promotion.jl")
 
+# other utilities 
+include("utils/adapt.jl")
 
 # ------------------------------------------------------
 # Testing utilities 
