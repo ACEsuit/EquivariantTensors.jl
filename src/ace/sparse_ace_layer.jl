@@ -35,9 +35,39 @@ LuxCore.initialstates(rng::AbstractRNG, l::SparseACElayer) =
 function evaluate(l::SparseACElayer, Φ, ps, st)
     # Φ is a tuple of embeddings. The first layer of the symbasis is the 
     # A basis (fused produce & pooling)
-    B, st = ka_evaluate(l.symbasis, Φ..., ps.symbasis, st.symbasis)
-    @allowscalar begin 
-        out = ntuple(i -> B[i] * ps.WLL[i], _get_NLL(l))
-    end
+    𝔹, st = ka_evaluate(l.symbasis, Φ..., ps.symbasis, st.symbasis)
+
+    # TODO: 
+    # for some reason, Zygote cannot manage the pullback through this 
+    # broadcasted multiplication so we have to do it manually. 
+    # Maybe using a comprehension would work and we can skip _tupmul below? 
+    # out = 𝔹 .* ps.WLL 
+    out = _tupmul(𝔹, ps.WLL)
     return out, st
 end
+
+# -------------------------------------------------------------------
+# temporary hack for testing purposes
+#  Ai = 𝔹i, Bi = WLL[i] 
+# so Ai is a matrix of vectors, B a matrix of scalar weights 
+# qi = Ai * Bi  -> mat(vecs)
+# <∂qi | qi> = tr(Ai * Bi * ∂qi')
+# from this we can deduce the pullbacks below. 
+# note that transpose(Ai) * ∂qi is mat(vec') * mat(vec) -> mat(scal)
+#   which is the correct output since ∇_Bi should be mat(scal) 
+
+function _tupmul(A, B) 
+    return A .* B 
+end
+
+import ChainRulesCore: rrule 
+function rrule(::typeof(_tupmul), A, B)
+    out = _tupmul(A, B)
+    Nt = length(A)
+
+    _pbA(∂out) = [ ∂out[i] * transpose(B[i]) for i in 1:Nt ]
+    _pbB(∂out) = [ transpose(A[i]) * ∂out[i] for i in 1:Nt ]
+
+    return out, ∂out -> (NoTangent(), _pbA(∂out), _pbB(∂out))
+end
+
