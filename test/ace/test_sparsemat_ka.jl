@@ -13,7 +13,7 @@ include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 
 Random.seed!(6)
 for itest = 1:100 
-   local A, B, X  
+   local A, B, X, Y   
    m = rand(50:200)
    n = rand(100:300)
    nB = rand(30:100)

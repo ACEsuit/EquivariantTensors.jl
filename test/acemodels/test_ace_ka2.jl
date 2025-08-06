@@ -62,6 +62,9 @@ println_slim(@test all( all(X.ii[X.first[i]:X.first[i+1]-1] .== i)
                         for i in 1:nnodes ) )
 
 ##
+
+@info("Test model 1") 
+
 # 2. Move model and input to the GPU / Device 
 ps_dev = dev(ps)
 st_dev = dev(st)
@@ -98,24 +101,24 @@ println_slim(@test φ1 ≈ φ_seq ≈ φ_dev1)
 # implement a simple test function to differentiate 
 Δ = randn(Float32, size(φ1))
 Δ_dev = dev(Δ)
-_foo(_ps) = dot(model(X, _ps, st)[1][1], Δ)
-_foo_dev(_ps) = dot(model(X_dev, _ps, st_dev)[1][1], Δ_dev)
-println_slim(@test _foo(ps) ≈ _foo_dev(ps_dev))
+_foo1(_ps) = dot(model(X, _ps, st)[1][1], Δ)
+_foo1_dev(_ps) = dot(model(X_dev, _ps, st_dev)[1][1], Δ_dev)
+println_slim(@test _foo1(ps) ≈ _foo1_dev(ps_dev))
 
 # check gradient is the same on CPU and device 
-g1 = Zygote.gradient(_foo, ps)[1]
-g1_dev = Zygote.gradient(_foo_dev, ps_dev)[1]
+g1 = Zygote.gradient(_foo1, ps)[1]
+g1_dev = Zygote.gradient(_foo1_dev, ps_dev)[1]
 println_slim(@test g1.ace.WLL[1] ≈ Array(g1_dev.ace.WLL[1]))
 
 # confirm correctness via ForwardDiff 
 pvec, _rest = destructure(ps) 
-gvec2 = FD.gradient(_p -> _foo(_rest(_p)), pvec)
+gvec2 = FD.gradient(_p -> _foo1(_rest(_p)), pvec)
 gvec1 = destructure(g1)[1] 
 println_slim(@test gvec1 ≈ gvec2)
 
 ##  
 
-@info("Test multiple outputs")
+@info("Test model 2 - multiple outputs") 
 
 acel = ET.SparseACElayer(𝔹basis, (8,))
 
@@ -137,7 +140,7 @@ println_slim(@test φ1 ≈ φ_seq ≈ φ_dev1)
 
 ##  
 
-@info("Test equivariant outputs")
+@info("Test model 3 - equivariant outputs")
 
 # 4 scalars (L=0), 2 vectors (L=1)
 # NOTE: sparse_nnll_set cannot manage a simplification by passing in 
@@ -174,3 +177,27 @@ println_slim(@test size(φ[2]) == (nnodes, NFEAT[2]))
 println_slim(@test eltype(φ[1]) == Float32)
 println_slim(@test eltype(φ[2]) == SVector{3, Float32})
 println_slim(@test all(φ_dev1 .≈ φ))
+
+##
+# Check gradient w.r.t. parameters 
+
+@info("Test gradient of model 3 w.r.t. parameters")
+
+# implement a simple test function to differentiate 
+Δ0 = randn(Float32, size(φ[1]))
+Δ1 = randn(SVector{3, Float32}, size(φ[2]))
+Δ0_dev = dev(Δ0); Δ1_dev = dev(Δ1)
+_foo3(_ps) = sum( dot(a, b) for (a, b) in zip(model(X, _ps, st)[1], (Δ0, Δ1)))
+_foo3_dev(_ps) = sum( dot(a, b) for (a, b) in zip(model(X_dev, _ps, st_dev)[1], (Δ0_dev, Δ1_dev)))
+println_slim(@test _foo3(ps) ≈ _foo3_dev(ps_dev))
+
+# check gradient is the same on CPU and device 
+g1 = Zygote.gradient(_foo3, ps)[1]
+g1_dev = Zygote.gradient(_foo3_dev, ps_dev)[1]
+println_slim(@test g1.ace.WLL[1] ≈ Array(g1_dev.ace.WLL[1]))
+
+# confirm correctness via ForwardDiff 
+pvec, _rest = destructure(ps) 
+gvec2 = FD.gradient(_p -> _foo3(_rest(_p)), pvec)
+gvec1 = destructure(g1)[1] 
+println_slim(@test gvec1 ≈ gvec2)

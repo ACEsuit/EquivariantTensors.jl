@@ -53,10 +53,10 @@ function mul(A::DevSparseMatrixCSR, B::AbstractMatrix)
    return mul!(X, A, B)
 end
 
-function mul(A::AbstractMatrix, B::DevSparseMatrixCSR)
-   TX = typeof(zero(eltype(B.nzval)) * zero(eltype(A)))
+function mul(A::AbstractMatrix, B::DevSparseMatrixCSR, op = *)
+   TX = typeof( op(zero(eltype(A)), zero(eltype(B.nzval))) ) 
    X = similar(A, TX, (size(A, 1), size(B, 2)))
-   return mul!(X, A, B)
+   return mul!(X, A, B, op)
 end
 
 
@@ -91,9 +91,9 @@ end
 
 
 
-function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR)
+function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR, op=*)
    # B = [ row1 ; row2 ; ... ] 
-
+   
    @kernel function _mul_ka_dense_sparse!(X, A, rowptr, colval, nzval)
       # X = A * B 
       rowA, rowB = @index(Global, NTuple)
@@ -104,7 +104,7 @@ function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR)
          # in parallel; to avoid this, we need to switch to a CSC format 
          # we can achieve this by storing A2Bmaps in both formats, one for the 
          # forward pass, the other for the backward pass.
-         @atomic X[rowA, colB] += A[rowA, rowB] * nzval[idx]
+         @atomic X[rowA, colB] += op(A[rowA, rowB], nzval[idx])
       end
 
       nothing 

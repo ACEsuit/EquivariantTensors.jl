@@ -44,9 +44,7 @@ function _ka_pullback(∂𝔹, tensor::SparseACEbasis, Rnl_3, Ylm_3, A, AA,
    #      ∂𝔹 : 𝔹 = (∂𝔹 * 𝒞) : 𝔸
    #  =>  ∇_𝔸 (∂𝔹 : 𝔹) = ∂𝔹 * 𝒞
 
-   # TODO: Generalize this to multiple bases !!
-   @assert length(∂𝔹) == 1 "implement > 1 case!!"
-   ∂𝔸 = mul(∂𝔹[1], A2Bmaps[1])
+   ∂𝔸 = sum( mul(∂𝔹[i], A2Bmaps[i], (a, b) -> sum(a .* b)) for i = 1:length(A2Bmaps) )
    ∂A = ka_pullback(∂𝔸, tensor.aabasis, A, aaspecs)
    ∂Rnl, ∂Ylm = ka_pullback(∂A, tensor.abasis, (Rnl_3, Ylm_3), aspec)
    return ∂Rnl, ∂Ylm
