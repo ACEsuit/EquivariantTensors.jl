@@ -4,7 +4,7 @@
 #
 module MLIP
 
-using AtomsBase, Lux, Random, NeighbourLists
+using AtomsBase, NeighbourLists
 
 import EquivariantTensors as ET
 import Polynomials4ML as P4ML
@@ -33,12 +33,7 @@ end
 
 ## 
 
-using AtomsBase, Lux, Random, NeighbourLists, AtomsBuilder, Unitful 
-
-import EquivariantTensors as ET
-import Polynomials4ML as P4ML
-
-##
+using AtomsBuilder, Unitful 
 
 sys = bulk(:Si, cubic=true) * (3,3,2) 
 rcut = 5.0u"Å"
