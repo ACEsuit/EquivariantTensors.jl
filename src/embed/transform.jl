@@ -61,7 +61,7 @@ initialstates(rng::AbstractRNG, l::TransformedBasis) =
 function evaluate(tbasis::TransformedBasis, X, ps, st)
    Y = map(x -> evaluate(tbasis.transin, x, ps.transin, st.transin), X) 
    P = evaluate(tbasis.basis, Y, ps.basis, st.basis)
-   B = evaluate(tbasis.transout, P, X, ps.transout, st.transout)
+   B = evaluate(tbasis.transout, P, X, Y, ps.transout, st.transout)
    return B, st 
 end
 
@@ -98,12 +98,31 @@ evaluate(l::IDtrans, x, ps, st) = x
 # calling convention for output transformations 
 # here P is the basis, but the transformatino may utilize the 
 # original input x. 
-evaluate(l::IDtrans, P, x, ps, st) = P
+evaluate(l::IDtrans, P, x, y, ps, st) = P
 
 
 # --------------------------------------------------------- 
 #  wrapping a transfrom from a named tuple 
+#
+#  TODO: allow f to be parameterized
 
+"""
+If a particle x is represented as a NamedTuple, e.g., `x = (r = SA[...], Z = 13)`
+then an `NTtransform` can be used to embed this named tuple into ℝ in a differentiable 
+way, e.g., 
+```julia
+x = (𝐫 = randn(StaticVector{3, Float64}), Z = rand(10:50))
+r0 = Float64[ ... ]  # list of r0 values for rescaling r 
+trans = NTtransform(x -> 1 / (1 + norm(x.𝐫)/r0[x.Z]))
+```
+We can then evaluate and differenitate 
+```julia 
+y = evaluate(trans, x, ps, st)
+y, dy = evaluate_ed(trans, x, ps, st)
+```
+Here, `dy` is again a named-tuple with the derivative w.r.t. x.𝐫 stored as 
+`dy.𝐫`. The derivative w.r.t. Z is not taken because `Z` is a categorical variable.
+"""
 struct NTtransform{FT} <: AbstractLuxLayer
    f::FT 
    sym::Symbol 
