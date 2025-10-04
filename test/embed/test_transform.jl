@@ -52,7 +52,7 @@ end
 LuxCore.initialparameters(rng::AbstractRNG, l::SelectLinear) = (W = l.W,)
 LuxCore.initialstates(rng::AbstractRNG, l::SelectLinear) = NamedTuple()
 
-function ACEbase.evaluate(l::SelectLinear, P, X, ps, st) 
+function EquivariantTensors.evaluate(l::SelectLinear, P, X, _Y, ps, st) 
    B = zeros(Float64, length(X), size(ps.W, 2))
    for i in 1:length(X)
       B[i, :] = P[SA[i], :] * ps.W[:, :, X[i].z]
