@@ -38,8 +38,8 @@ embed = let rcut = ustrip(rcut), Dtot = Dtot
    rbasis = ET.TransformedBasis( ET.NTtransform(x -> 1 / (1+norm(x.𝐫/rcut))), 
                                  P4ML.ChebBasis(Dtot+1), 
                                  ET.Envelope( (x, y) -> env(y) ) )
-   ybasis = ET.TransformedBasis( ET.NTtransform(x -> x.𝐫 / norm(x.𝐫)), 
-                                 P4ML.real_solidharmonics(maxl; T = Float32, static=true) )
+   ybasis = ET.TransformedBasis( ET.NTtransform(x -> x.𝐫), 
+                                 P4ML.real_sphericalharmonics(maxl; T = Float32, static=true) )
    embed = ET.ParallelEmbed(; Rnl = rbasis, Ylm = ybasis)
 end 
 
@@ -66,4 +66,96 @@ model = Lux.Chain(; embed = embed,  # embedding layer
 ps, st = LuxCore.setup(MersenneTwister(1234), model)
 ps = ET.float32(ps); st = ET.float32(st)
 
-model(G_sys, ps, st) # evaluate the model on the graph
+E1, _ = model(G_sys, ps, st) # evaluate the model on the graph
+
+
+module ACE1 
+
+import AtomsBase: AbstractSystem
+import Random: AbstractRNG
+import LuxCore
+import Main.ETAtomsExt
+
+struct ACEModel{EMB, ACEL, TL}
+   embed::EMB
+   ace::ACEL
+   rcut::TL
+end
+
+function LuxCore.setup(rng::AbstractRNG, m::ACEModel)
+   ps_embed, st_embed = LuxCore.setup(rng, m.embed)
+   ps_ace, st_ace = LuxCore.setup(rng, m.ace)
+   ps = (embed = ps_embed, ace = ps_ace)
+   st = (embed = st_embed, ace = st_ace)
+   return ps, st
+end
+
+
+function energy(m::ACEModel, sys::AbstractSystem, ps, st)
+   G = ETAtomsExt.interaction_graph(sys, m.rcut)
+   Φ, st_embed = m.embed(G, ps.embed, st.embed)
+   φ, st_ace = m.ace(Φ, ps.ace, st.ace)
+   Es = φ[1]  # site energies => L = 0
+   st = (embed = st_embed, ace = st_ace)
+   return sum(Es), st 
+end
+
+# function energy_forces(m::ACEModel, sys::AbstractSystem, ps, st)
+#    G = ETAtomsExt.interaction_graph(sys, m.rcut)
+#    Φ, st_embed = m.embed(G, ps.embed, st.embed)
+#    φ, st_ace = m.ace(Φ, ps.ace, st.ace)
+#    Es = φ[1]  # site energies => L = 0
+#    E = sum(Es)
+#    # compute forces via backprop 
+#    ∂E_∂Es = ones(eltype(Es), size(Es))
+#    ∂E_∂φ, = ET.pullback(∂E_∂Es, m.ace, )
+#    ∂Φ, = ET.pullback(...) 
+#    ∂G = ET.pullback(...) 
+#    ∇E = ETAtomsExt.forces_from_graph(∂G, sys)
+
+#    st = (embed = st_embed, ace = st_ace)
+#    return sum(Es), st
+# end
+
+function update_graph(R, G) 
+   G_new = deepcopy(G)
+   for i = 1:length(G.edge_data)
+      e = G.edge_data[i]
+      𝐫i = Rij[i]
+      G_new.edge_data[i] = (𝐫 = 𝐫i, s0 = e.s0, s1 = e.s1)
+   end
+   return G_new
+end
+
+
+function energy_forces_enzyme(m::ACEModel, sys::AbstractSystem, ps, st)
+   G = ETAtomsExt.interaction_graph(sys, m.rcut)
+
+   # TODO NEXT: think about how to make this most efficient / convenient for Zygote
+   function _energy(R)
+      G_R = update_graph(R, G)
+      Φ, st_embed = m.embed(G_R, ps.embed, st.embed)
+      φ, st_ace = m.ace(Φ, ps.ace, st.ace)
+      return sum(φ[1])
+   end
+
+   Rij = [ e.𝐫 for e in G.edge_data ]
+   
+
+
+
+   st = (embed = st_embed, ace = st_ace)
+   return sum(Es), st
+end
+
+
+end 
+
+##
+
+acemodel = ACE1.ACEModel(embed, acel, rcut)
+E2, _st = ACE1.energy(acemodel, sys, ps, st)
+E1 == E2
+
+
+
