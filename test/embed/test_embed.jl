@@ -88,7 +88,7 @@ println_slim(@test gy_𝐫 ≈ gY1)
 #
 @info("TEST 4: test a parallel embedding with both radial and angular parts")
 
-embed = Parallel(nothing; Rnl = rbasis_nt, Ylm = ybasis)
+embed = BranchLayer(Rnl = rbasis_nt, Ylm = ybasis)
 ps, st = LuxCore.setup(rng, embed)
 ps.Rnl.lin.W[:] .= ps_r.lin.W[:]
 
@@ -106,3 +106,86 @@ ge = Zygote.gradient(fe, xx)[1]
 ge_𝐫 = [ dx.𝐫 for dx in ge ]
 
 println_slim(@test ge_𝐫 ≈ gy_𝐫 + g2_𝐫)
+
+##
+#
+@info("TEST 5: build a more complicated radial embedding ")
+
+"""
+- it is assumed that selector is categorical i.e. has no gradient 
+"""
+struct SelectLinL{TSEL} <: AbstractLuxLayer
+   in_dim::Int
+   out_dim::Int
+   ncat::Int
+   selector::TSEL
+end
+
+LuxCore.initialstates(rng::AbstractRNG, l::SelectLinL) = NamedTuple()
+
+function LuxCore.initialparameters(rng::AbstractRNG, l::SelectLinL) 
+   W = randn(rng, l.out_dim, l.in_dim, l.ncat) * sqrt(2 / (l.in_dim + l.out_dim))
+   return (W = W,)
+end
+
+function (l::SelectLinL)( P_X, ps, st)
+   P, X = P_X
+   B = reduce(vcat, transpose(ps.W[:, :, l.selector(x)] * P[i, :])
+                    for (i, x) in enumerate(X) )
+   return B, st 
+end
+
+# function ChainRulesCore.rrule(l::SelectLinL, P_X, ps, st) 
+#    B, st = l(P_X, ps, st)
+
+#    function _pb(∂B) 
+
+#    end
+# end 
+
+
+rbasis = let maxpoly = 15, maxn = 7, maxz = 3, aa = 0.5 .+ 0.5 * rand(maxz)
+
+   # x --> y = y(x.r, x.z)     ... transformed coordinates 
+   get_radial = ET.NTtransform(x -> begin 
+            z = x.z 
+            a = aa[z]
+            r = norm(x.𝐫) 
+         return 1 / (1 + a * r^2 )
+      end )
+
+   # y --> P(y)   ... polynomial basis in transformed coordinates 
+   polys = P4ML.ChebBasis(maxpoly)
+   
+   # P --> W[x.z] * P     ... make basis learnable with z-dependent weights 
+   lin = SelectLinL(maxpoly, maxn, maxz, x -> x.z)
+
+   # put it all together 
+   SkipConnection( Chain(; rtrans = get_radial, polys = polys), 
+                   lin )
+end
+
+ps, st = LuxCore.setup(rng, rbasis)
+
+R, _ = rbasis(xx, ps, st)
+
+# check correctness by evaluating this "manually" 
+get_y = rbasis.layers.layers.rtrans.f
+_yy = get_y.(xx)
+_P = (P4ML.ChebBasis(maxpoly))(_yy)
+_R = reduce(vcat, (ps.connection.W[:, :, x.z] * _P[i, :])' 
+            for (i, x) in enumerate(xx) )
+println_slim(@test _R ≈ R) 
+
+# check differentiation
+U = randn(size(R))
+fr = _xx -> dot(U, rbasis(_xx, ps, st)[1])
+gr = Zygote.gradient(fr, xx)[1]
+gr_𝐫 = [ dx.𝐫 for dx in gr ]
+
+𝐫2xx(𝐫𝐫) = [ (𝐫 = 𝐫, z = x.z) for (𝐫, x) in zip(𝐫𝐫, xx) ] 
+𝐫𝐫 = [ x.𝐫 for x in xx ]
+
+using ACEbase 
+success = ACEbase.Testing.fdtest(_𝐫𝐫 -> fr(𝐫2xx(_𝐫𝐫)), _𝐫𝐫 -> gr_𝐫, 𝐫𝐫)
+println_slim(@test success)
