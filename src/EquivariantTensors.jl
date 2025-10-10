@@ -56,6 +56,7 @@ include("utils/invmap.jl")
 include("utils/sparseprod.jl")
 include("utils/symmop.jl")
 include("utils/promotion.jl")
+include("utils/selectlinl.jl")
 
 # other utilities 
 include("utils/adapt.jl")
