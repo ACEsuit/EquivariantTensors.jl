@@ -135,10 +135,27 @@ Base.show(io::IO, l::NTtransform) = print(io, "NTtransform($(l.sym))")
 initialparameters(rng::AbstractRNG, l::NTtransform) = NamedTuple()
 initialstates(rng::AbstractRNG, l::NTtransform) = NamedTuple()
 
-(l::NTtransform)(x, ps, st) = l.f(x), st 
-(l::NTtransform)(x) = l.f(x)
+(l::NTtransform)(x::NamedTuple, ps, st) = l.f(x), st 
+(l::NTtransform)(x::NamedTuple) = l.f(x)
+
+(l::NTtransform)(x::AbstractVector{<: NamedTuple}, ps, st) = map(l.f, x), st 
+(l::NTtransform)(x::AbstractVector{<: NamedTuple}) = map(l.f, x) 
 
 evaluate(l::NTtransform, x::NamedTuple, ps, st) = l.f(x)
 
 evaluate_ed(l::NTtransform, x::NamedTuple, ps, st) = 
       (l.f(x), DiffNT.grad_fd(l.f, x))
+
+
+function rrule(trans::typeof(NTtransform), X::AbstractVector{<: NamedTuple}, ps, st) 
+   @assert ps == NamedTuple() "NTtransform cannot have parameters"
+   Y = map(trans.f, X)
+   dY = map(x -> DiffNT.grad_fd(trans.f, x), X)
+
+   function _pb_X(∂Y)
+      ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
+      return NoTangent(), ∂X, NoTangent(), NoTangent()
+   end
+
+   return Y, _pb_X 
+end
