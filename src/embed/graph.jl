@@ -119,7 +119,7 @@ function rev_reshape_embedding(P3, X::ETGraph)
    kernel! = _rev_reshape_embedding!(backend)
    kernel!(P, P3, X.first; ndrange = (nnodes(X), nfeatures))
    KernelAbstractions.synchronize(backend)
-   return P3
+   return P
 end
 
 
