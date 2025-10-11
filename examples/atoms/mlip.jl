@@ -15,6 +15,7 @@ sys = rattle!(bulk(:Si, cubic=true) * (3,3,2), 0.1u"Å")
 rcut = 5.0u"Å"
 G_sys = ETAtomsExt.interaction_graph(sys, rcut)
 
+
 ## 
 
 @info("Build a simple ACE model")
@@ -90,4 +91,31 @@ E1, _ = model(G_sys, ps, st) # evaluate the model on the graph
 using Zygote 
 
 ∇E = Zygote.gradient(G -> model(G, ps, st)[1], G_sys)[1]
+
+## 
+# with these proofs of concept we can now produce 
+# an MLIP type model 
+
+using ConcreteStructs
+@concrete struct ACEcalculator # make compatible with AtomsBase
+   model
+   ps 
+   st 
+end
+
+function energy(calc::ACEcalculator, sys)
+   G = ETAtomsExt.interaction_graph(sys, rcut)
+   E = calc.model(G, calc.ps, calc.st)[1]
+   return E
+end
+
+function forces(calc::ACEcalculator, sys)
+   G_sys = ETAtomsExt.interaction_graph(sys, rcut)
+   ∇E_G = Zygote.gradient(G -> model(G, ps, st)[1], G_sys)[1]
+   return ETAtomsExt.forces_from_edge_grads(sys, G_sys, ∇E_G.edge_data)
+end
+
+acepot = ACEcalculator(model, ps, st)
+E2 = energy(acepot, sys)
+F2 = forces(acepot, sys)
 

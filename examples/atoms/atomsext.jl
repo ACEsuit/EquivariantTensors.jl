@@ -27,4 +27,17 @@ function nlist2graph(nlist::NeighbourLists.PairList, sys::AbstractSystem)
    return G 
 end 
 
+function forces_from_edge_grads(sys::AbstractSystem, G::ET.ETGraph, ∇E_edges)
+   
+   TFRC = typeof(∇E_edges[1].𝐫)
+   F = zeros(TFRC, length(sys)) 
+
+   for (i, j, e) in zip(G.ii, G.jj, ∇E_edges) 
+      F[i] -= e.𝐫
+      F[j] += e.𝐫
+   end
+
+   return F
+end
+
 end
