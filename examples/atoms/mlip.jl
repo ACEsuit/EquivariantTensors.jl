@@ -95,7 +95,7 @@ using Zygote
 
 ## 
 # with these proofs of concept we can now produce 
-# an MLIP type model 
+# an MLIP prototype model 
 
 using ConcreteStructs
 @concrete struct ACEcalculator # make compatible with AtomsBase
@@ -138,4 +138,6 @@ _dualize(𝐫::SVector) = FD.Dual.(𝐫, one(eltype(𝐫)))
 _dualize(x) = x
 _dualize(nt::NamedTuple) = NamedTuple{keys(nt)}( _dualize.(values(nt)) )
 G_d = ET.ETGraph(G.ii, G.jj; edge_data = _dualize.(G.edge_data) )
-model(G_d, ps, st) 
+
+E_d, _ = model(G_d, ps, st) 
+
