@@ -20,9 +20,10 @@ G_sys = ETAtomsExt.interaction_graph(sys, rcut)
 
 @info("Build a simple ACE model")
 
-using Lux, Random, LinearAlgebra  
+using Lux, Random, LinearAlgebra, StaticArrays
 import EquivariantTensors as ET
 import Polynomials4ML as P4ML
+import ForwardDiff as FD
 
 # generate a model 
 Dtot = 9     # total degree; specifies the trunction of embeddings and correlations
@@ -119,3 +120,22 @@ acepot = ACEcalculator(model, ps, st)
 E2 = energy(acepot, sys)
 F2 = forces(acepot, sys)
 
+## 
+#
+# gradient of energy w.r.t. parameters, in preparation for 
+# gradients w.r.t. a loss function. 
+#
+
+G = ETAtomsExt.interaction_graph(sys, rcut)
+E = model(G, ps, st)[1]
+
+∇p = Zygote.gradient(p -> model(G, p, st)[1], ps)[1]
+
+# try to evaluate model with dual numbers 
+
+
+_dualize(𝐫::SVector) = FD.Dual.(𝐫, one(eltype(𝐫)))
+_dualize(x) = x
+_dualize(nt::NamedTuple) = NamedTuple{keys(nt)}( _dualize.(values(nt)) )
+G_d = ET.ETGraph(G.ii, G.jj; edge_data = _dualize.(G.edge_data) )
+model(G_d, ps, st) 
