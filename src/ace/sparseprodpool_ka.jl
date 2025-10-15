@@ -130,20 +130,24 @@ function ka_pullback!(∂BB, ∂A, basis::PooledSparseProduct{NB}, BB::TupTen3,
    backend = KernelAbstractions.get_backend(∂A)
    kernel! = _ka_pullback_PooledSparseProduct_v1!(backend)
    kernel!(∂BB, ∂A, BB, spec, nX, nneig, Val{NB}();
-           ndrange = (length(spec), nX, nneig))
+           ndrange = (nX, nneig))
    return nothing
 end
 
-
+#
+# TODO: rewrite this with scatter/gather
+#
 @kernel function _ka_pullback_PooledSparseProduct_v1!(
                   ∂BB, ∂A, BB, spec, nX, nneig, ::Val{NB}) where {NB}
-   iA, inode, ineig = @index(Global, NTuple) 
-   ϕ = spec[iA]
-   b = ntuple(t -> BB[t][ineig, inode, ϕ[t]], NB)
-   p, ∇prod = _static_prod_ed(b)
-   # A[inode, iA] += p
-   for t = 1:NB
-      @atomic ∂BB[t][ineig, inode, ϕ[t]] += ∂A[inode, iA] * ∇prod[t]
+   inode, ineig = @index(Global, NTuple) 
+   for iA = 1:length(spec) 
+      ϕ = spec[iA]
+      b = ntuple(t -> BB[t][ineig, inode, ϕ[t]], NB)
+      p, ∇prod = _static_prod_ed(b)
+      # A[inode, iA] += p
+      for t = 1:NB
+         ∂BB[t][ineig, inode, ϕ[t]] += ∂A[inode, iA] * ∇prod[t]
+      end
    end
    nothing 
 end 
