@@ -90,6 +90,46 @@ function mul!(X::AbstractMatrix, A::DevSparseMatrixCSR, B::AbstractMatrix)
 end 
 
 
+# OLD VERSION WHICH HAS PROBLEMS WITH DUAL
+# function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR, op=*)
+#    # B = [ row1 ; row2 ; ... ] 
+   
+#    @kernel function _mul_ka_dense_sparse!(X, A, rowptr, colval, nzval)
+#       # X = A * B 
+#       rowA, rowB = @index(Global, NTuple)
+      
+#       for idx = rowptr[rowB]:(rowptr[rowB+1]-1)
+#          colB = colval[idx]
+#          # This needs to be atomic because X[rowA, colB] is updated 
+#          # in parallel; to avoid this, we need to switch to a CSC format 
+#          # we can achieve this by storing A2Bmaps in both formats, one for the 
+#          # forward pass, the other for the backward pass.
+#          @atomic X[rowA, colB] += op(A[rowA, rowB], nzval[idx])
+#       end
+
+#       nothing 
+#    end
+   
+
+#    m, n = size(A)
+#    k = size(B, 2)
+#    rowptr = B.rowptr
+#    colval = B.colval
+#    nzval = B.nzval
+
+#    @assert size(B) == (n, k)
+#    @assert size(X) == (m, k)
+#    fill!(X, zero(eltype(X)))
+
+#    @show eltype(X) 
+#    @show eltype(A) 
+#    @show eltype(nzval)
+
+#    kernel! = _mul_ka_dense_sparse!(KernelAbstractions.get_backend(X))
+#    kernel!(X, A, rowptr, colval, nzval; ndrange = (m, size(B, 1)))
+#    return X
+# end 
+
 
 function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR, op=*)
    # B = [ row1 ; row2 ; ... ] 
@@ -104,11 +144,13 @@ function mul!(X::AbstractMatrix, A::AbstractMatrix, B::DevSparseMatrixCSR, op=*)
          # in parallel; to avoid this, we need to switch to a CSC format 
          # we can achieve this by storing A2Bmaps in both formats, one for the 
          # forward pass, the other for the backward pass.
-         @atomic X[rowA, colB] += op(A[rowA, rowB], nzval[idx])
+         # @atomic 
+         X[rowA, colB] += op(A[rowA, rowB], nzval[idx])
       end
 
       nothing 
    end
+   
 
    m, n = size(A)
    k = size(B, 2)
