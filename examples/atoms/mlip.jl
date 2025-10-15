@@ -131,8 +131,7 @@ E = model(G, ps, st)[1]
 
 ∇p = Zygote.gradient(p -> model(G, p, st)[1], ps)[1]
 
-# try to evaluate model with dual numbers 
-
+## try to evaluate model with dual numbers 
 
 _dualize(𝐫::SVector) = FD.Dual.(𝐫, one(eltype(𝐫)))
 _dualize(x) = x
@@ -140,4 +139,13 @@ _dualize(nt::NamedTuple) = NamedTuple{keys(nt)}( _dualize.(values(nt)) )
 G_d = ET.ETGraph(G.ii, G.jj; edge_data = _dualize.(G.edge_data) )
 
 E_d, _ = model(G_d, ps, st) 
+FD.value(E_d) ≈ model(G, ps, st)[1]
 
+##
+
+# evaluate grad-params with a dual numbers input...
+
+_grad_E_ps = G -> Zygote.gradient(p -> model(G, p, st)[1], ps)[1]
+_grad_E_ps(G) == ∇p
+
+_grad_E_ps(G_d)
