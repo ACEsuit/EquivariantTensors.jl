@@ -2,6 +2,7 @@ using EquivariantTensors
 using Test
 
 isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
+include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 
 ##
 
