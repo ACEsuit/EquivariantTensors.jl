@@ -1,10 +1,12 @@
 
 # interface to use the ka kernel if the output arrays is a GPU array 
-function evaluate!(A::AbstractGPUArray, 
-                   basis::PooledSparseProduct{NB}, 
-                   BB::TupMat) where {NB}
-   return ka_evaluate!(A, basis, BB)
-end
+# This interface function is already provided elsewhere. Here we only 
+# implement the ka_*** versions
+# function evaluate!(A::AbstractGPUArray, 
+#                    basis::PooledSparseProduct{NB}, 
+#                    BB::TupMat) where {NB}
+#    return ka_evaluate!(A, basis, BB)
+# end
 
 function ka_evaluate(basis::PooledSparseProduct{NB}, 
                      BB::TupMat, 

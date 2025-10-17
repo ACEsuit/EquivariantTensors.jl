@@ -19,8 +19,8 @@ Envelope(f; sym = Symbol("")) = Envelope(f, Symbol(sym))
 
 Base.show(io::IO, l::Envelope) = print(io, "Envelope($(l.sym))")
 
-initialparameters(rng::AbstractRNG, l::NTtransform) = NamedTuple()
-initialstates(rng::AbstractRNG, l::NTtransform) = NamedTuple()
+initialparameters(rng::AbstractRNG, l::Envelope) = NamedTuple()
+initialstates(rng::AbstractRNG, l::Envelope) = NamedTuple()
 
 (l::Envelope)(args...) = evaluate(l, args...)
 

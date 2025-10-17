@@ -20,8 +20,8 @@ function LuxCore.initialparameters(rng::AbstractRNG, l::SparseACElayer)
     @assert length(LL) == length(nfeats) == length(lens)
 
     ps_symbasis = LuxCore.initialparameters(rng, l.symbasis)
-    params = [ glorot_normal(rng, lens[i], nfeats[i])
-               for i = 1:length(LL) ]
+    params = tuple( [ glorot_normal(rng, lens[i], nfeats[i])
+                      for i = 1:length(LL) ]... )
     ps = (symbasis = ps_symbasis, WLL = params, )
     return ps
 end

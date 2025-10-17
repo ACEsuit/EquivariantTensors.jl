@@ -55,6 +55,7 @@ if !isdefined(Main, :___EQT_UTILS_GPU___)
 
    if !__has_cuda && !__has_roc && !__has_metal
       @info "No GPU is available. Using CPU."
+      global gpu = global dev = identity 
    end
 
    
