@@ -72,7 +72,7 @@ ps, st = Lux.setup(rng, model)
 pvec, _rest = OPT.destructure(ps)
 gf = _rest(FDiff.gradient(p -> Lux.apply(model, 𝐫, _rest(p), st)[1], pvec))
 
-# Differentiate with Zygote (this fails currently)
+# Differentiate with Zygote
 gz, = Zygote.gradient(p -> Lux.apply(model, 𝐫, p, st)[1], ps)
 
 println(@test OPT.destructure(gf)[1] ≈ OPT.destructure(gz)[1])

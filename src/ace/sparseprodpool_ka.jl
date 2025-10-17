@@ -97,7 +97,7 @@ end
    a = zero(eltype(A))
    for ineig = 1:nneig 
       b = ntuple(t -> BB[t][ineig, inode, ϕ[t]], NB)
-      a += prod(b) 
+      a += prod(b)
    end
 
    A[inode, iA] = a

@@ -2,6 +2,9 @@
 using SparseArrays: SparseMatrixCSC 
 import LinearAlgebra: mul! 
 
+import Adapt
+using Adapt: adapt 
+
 
 """
    struct SparseMatCSX
@@ -30,6 +33,13 @@ function SparseMatCSX(A::SparseMatrixCSC, dev = identity)
                dev(At.colptr), dev(At.rowval), dev(At.nzval), 
                dev(A.colptr),  dev(A.rowval),  dev(A.nzval)  )
 end
+
+function Adapt.adapt_structure(to, X::SparseMatCSX) 
+   SparseMatCSX( X.m, X.n,  
+                 adapt(to, X.rowptr), adapt(to, X.colval), adapt(to, X.nzval_csr), 
+                 adapt(to, X.colptr), adapt(to, X.rowval), adapt(to, X.nzval_csc) )
+end
+
 
 _floatT(T::Type{<: AbstractFloat}, A::SparseMatCSX) = 
    SparseMatCSX(A.m, A.n, A.rowptr, A.colval, _floatT(T, A.nzval_csr), 

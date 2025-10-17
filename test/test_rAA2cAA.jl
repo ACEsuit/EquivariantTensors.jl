@@ -2,7 +2,7 @@ using Test, EquivariantTensors, StaticArrays
 using EquivariantTensors.O3: mm_generate, rAA2cAA
 using LinearAlgebra
 
-isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
+include("test_utils/utils_testO3.jl")
 
 ___O3_TESTS___ = :small 
 # :___O3_TESTS___ = :large
