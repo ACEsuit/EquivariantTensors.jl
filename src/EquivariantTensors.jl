@@ -25,6 +25,7 @@ include("embed/transform.jl")
 include("embed/graph.jl")
 include("embed/rnlylmbasis.jl")
 include("embed/embeddings.jl")
+include("embed/envelope.jl")
 
 
 # ------------------------------------------------------
@@ -55,9 +56,14 @@ include("utils/invmap.jl")
 include("utils/sparseprod.jl")
 include("utils/symmop.jl")
 include("utils/promotion.jl")
+include("utils/selectlinl.jl")
 
 # other utilities 
 include("utils/adapt.jl")
+
+# ------------------------------------------------------
+# extensions 
+include("extensions/atoms.jl")
 
 # ------------------------------------------------------
 # Testing utilities 

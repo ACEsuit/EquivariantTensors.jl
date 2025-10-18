@@ -57,10 +57,10 @@ model = Chain(;
 
 ##
 
-rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )
-rand_x() = (0.1 + 0.9 * rand()) * rand_sphere()
+__rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )
+__rand_x() = (0.1 + 0.9 * rand()) * __rand_sphere()
 nX = 7
-𝐫 = [ rand_x() for _ = 1:nX ]
+𝐫 = [ __rand_x() for _ = 1:nX ]
 
 rng = Random.MersenneTwister(1234)
 ps, st = Lux.setup(rng, model)
@@ -72,7 +72,7 @@ ps, st = Lux.setup(rng, model)
 pvec, _rest = OPT.destructure(ps)
 gf = _rest(FDiff.gradient(p -> Lux.apply(model, 𝐫, _rest(p), st)[1], pvec))
 
-# Differentiate with Zygote (this fails currently)
+# Differentiate with Zygote
 gz, = Zygote.gradient(p -> Lux.apply(model, 𝐫, p, st)[1], ps)
 
 println(@test OPT.destructure(gf)[1] ≈ OPT.destructure(gz)[1])

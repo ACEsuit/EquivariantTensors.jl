@@ -61,7 +61,7 @@ initialstates(rng::AbstractRNG, l::TransformedBasis) =
 function evaluate(tbasis::TransformedBasis, X, ps, st)
    Y = map(x -> evaluate(tbasis.transin, x, ps.transin, st.transin), X) 
    P = evaluate(tbasis.basis, Y, ps.basis, st.basis)
-   B = evaluate(tbasis.transout, P, X, ps.transout, st.transout)
+   B = evaluate(tbasis.transout, P, X, Y, ps.transout, st.transout)
    return B, st 
 end
 
@@ -98,12 +98,31 @@ evaluate(l::IDtrans, x, ps, st) = x
 # calling convention for output transformations 
 # here P is the basis, but the transformatino may utilize the 
 # original input x. 
-evaluate(l::IDtrans, P, x, ps, st) = P
+evaluate(l::IDtrans, P, x, y, ps, st) = P
 
 
 # --------------------------------------------------------- 
 #  wrapping a transfrom from a named tuple 
+#
+#  TODO: allow f to be parameterized
 
+"""
+If a particle x is represented as a NamedTuple, e.g., `x = (r = SA[...], Z = 13)`
+then an `NTtransform` can be used to embed this named tuple into ℝ in a differentiable 
+way, e.g., 
+```julia
+x = (𝐫 = randn(StaticVector{3, Float64}), Z = rand(10:50))
+r0 = Float64[ ... ]  # list of r0 values for rescaling r 
+trans = NTtransform(x -> 1 / (1 + norm(x.𝐫)/r0[x.Z]))
+```
+We can then evaluate and differenitate 
+```julia 
+y = evaluate(trans, x, ps, st)
+y, dy = evaluate_ed(trans, x, ps, st)
+```
+Here, `dy` is again a named-tuple with the derivative w.r.t. x.𝐫 stored as 
+`dy.𝐫`. The derivative w.r.t. Z is not taken because `Z` is a categorical variable.
+"""
 struct NTtransform{FT} <: AbstractLuxLayer
    f::FT 
    sym::Symbol 
@@ -116,10 +135,27 @@ Base.show(io::IO, l::NTtransform) = print(io, "NTtransform($(l.sym))")
 initialparameters(rng::AbstractRNG, l::NTtransform) = NamedTuple()
 initialstates(rng::AbstractRNG, l::NTtransform) = NamedTuple()
 
-(l::NTtransform)(x, ps, st) = l.f(x), st 
-(l::NTtransform)(x) = l.f(x)
+(l::NTtransform)(x::NamedTuple, ps, st) = l.f(x), st 
+(l::NTtransform)(x::NamedTuple) = l.f(x)
+
+(l::NTtransform)(x::AbstractVector{<: NamedTuple}, ps, st) = map(l.f, x), st 
+(l::NTtransform)(x::AbstractVector{<: NamedTuple}) = map(l.f, x) 
 
 evaluate(l::NTtransform, x::NamedTuple, ps, st) = l.f(x)
 
 evaluate_ed(l::NTtransform, x::NamedTuple, ps, st) = 
       (l.f(x), DiffNT.grad_fd(l.f, x))
+
+
+function rrule(trans::typeof(NTtransform), X::AbstractVector{<: NamedTuple}, ps, st) 
+   @assert ps == NamedTuple() "NTtransform cannot have parameters"
+   Y = map(trans.f, X)
+   dY = map(x -> DiffNT.grad_fd(trans.f, x), X)
+
+   function _pb_X(∂Y)
+      ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
+      return NoTangent(), ∂X, NoTangent(), NoTangent()
+   end
+
+   return Y, _pb_X 
+end

@@ -2,6 +2,10 @@
 using MLDataDevices: AbstractDevice
 import LuxCore: AbstractLuxLayer, initialparameters, initialstates
 
+import Adapt
+using Adapt: adapt 
+
+
 struct ETGraph{VECI, TN, TE}
    ii::VECI     # center particle indices / source indices
    jj::VECI     # neighbour particle indices / target indices
@@ -41,11 +45,17 @@ function ETGraph(ii::AbstractVector{TI}, jj::AbstractVector{TI};
    maxneigs = maximum(first[2:end] .- first[1:end-1])
 
    return ETGraph(ii, jj, first, node_data, edge_data, maxneigs)
-end                 
+end               
 
-(dev::AbstractDevice)(X::ETGraph) = 
-      ETGraph(dev(X.ii), dev(X.jj), dev(X.first), 
+function Adapt.adapt_structure(to, X::ETGraph) 
+   ETGraph( adapt(to, X.ii), adapt(to, X.jj), adapt(to, X.first), 
+            adapt(to, X.node_data), adapt(to, X.edge_data), X.maxneigs)
+end
+
+function (dev::AbstractDevice)(X::ETGraph) 
+   ETGraph(dev(X.ii), dev(X.jj), dev(X.first), 
               dev(X.node_data), dev(X.edge_data), X.maxneigs)
+end
 
 function neighbourhood(X::ETGraph, i::Int)
    # Returns the indices and edge data of the neighbours of node i
@@ -119,7 +129,7 @@ function rev_reshape_embedding(P3, X::ETGraph)
    kernel! = _rev_reshape_embedding!(backend)
    kernel!(P, P3, X.first; ndrange = (nnodes(X), nfeatures))
    KernelAbstractions.synchronize(backend)
-   return P3
+   return P
 end
 
 

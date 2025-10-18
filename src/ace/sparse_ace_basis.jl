@@ -54,7 +54,7 @@ initialparameters(rng::AbstractRNG, bas::SparseACEbasis) =
 initialstates(rng::AbstractRNG, bas::SparseACEbasis) = 
          ( aspec = bas.abasis.spec, 
             aaspecs = bas.aabasis.specs, 
-            A2Bmaps = DevSparseMatrixCSR.(bas.A2Bmaps), )
+            A2Bmaps = SparseMatCSX.(bas.A2Bmaps), )
 
 
 # ----------------------------------------

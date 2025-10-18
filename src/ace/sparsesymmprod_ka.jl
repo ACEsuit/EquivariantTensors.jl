@@ -120,21 +120,26 @@ function ka_pullback!(∂A, ∂AA, basis::SparseSymmProd{ORD}, A,
    @nexprs 10 N -> begin 
       if N <= ORD 
          kernel!(∂A, ∂AA, A, specs[N], Val{N}(), offsets[N]; 
-                 ndrange = (nX, length(specs[N])))
+                 ndrange = (nX, ))
       end
    end
    return ∂A
 end
 
+#
+# TODO: must replace this with an optimized scatter/gather operation!!!
+#
 @kernel function _ka_pullback_SparseSymmProd_v1!(∂A, ∂AA, A, 
                                               spec, ::Val{N}, offset) where {N}
-   iX, iAA = @index(Global, NTuple)
-   ∂AA_cur = ∂AA[iX, offset+iAA-1]
-   ϕ = spec[iAA]   # NTuple{N, Int}                                       
-   aa = ntuple(t -> A[iX, ϕ[t]], N)  # extract values from A
-   _, ∇prod = _static_prod_ed(aa) 
-   for j = 1:N 
-      @atomic ∂A[iX, ϕ[j]] += ∂AA_cur * ∇prod[j]
+   iX = @index(Global)
+   for iAA = 1:length(spec)
+      ∂AA_cur = ∂AA[iX, offset+iAA-1]
+      ϕ = spec[iAA]   # NTuple{N, Int}                                       
+      aa = ntuple(t -> A[iX, ϕ[t]], N)  # extract values from A
+      _, ∇prod = _static_prod_ed(aa) 
+      for j = 1:N 
+         ∂A[iX, ϕ[j]] += ∂AA_cur * ∇prod[j]
+      end
    end
    nothing 
 end

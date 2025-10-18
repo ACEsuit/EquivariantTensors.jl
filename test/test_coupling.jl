@@ -4,7 +4,7 @@ using PartialWaveFunctions: clebschgordan
 using LinearAlgebra, Random
 using WignerD, Rotations, BlockDiagonals
 
-isdefined(Main, :___UTILS_FOR_TESTS___) || include("utils/utils_testO3.jl")
+include("test_utils/utils_testO3.jl")
 
 # The full test set is quite large and takes a while, for a quick sanity test 
 # it is better to keep the test small so it runs quickly. 

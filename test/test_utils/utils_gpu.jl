@@ -5,6 +5,7 @@ if !isdefined(Main, :___EQT_UTILS_GPU___)
    global __has_cuda = false    
    global __has_roc = false 
    global __has_metal = false
+   global gpu = global dev = nothing 
 
    try    
       using CUDA
@@ -12,6 +13,7 @@ if !isdefined(Main, :___EQT_UTILS_GPU___)
          @info "Using CUDA"
          CUDA.versioninfo()
          global __has_cuda = true
+         global gpu = global dev = cu 
       else 
          @info("CUDA is not functional")
       end
@@ -26,6 +28,7 @@ if !isdefined(Main, :___EQT_UTILS_GPU___)
             @info "Using AMD"
             AMDGPU.versioninfo()
             global __has_roc = true
+            global gpu = global dev = gpu_device() 
          else
             @info("AMDGPU is not functional")
          end
@@ -41,6 +44,7 @@ if !isdefined(Main, :___EQT_UTILS_GPU___)
             @info "Using Metal"
             Metal.versioninfo()
             global __has_metal = true
+            global gpu = global dev = mtl 
          else
             @info("Metal is not functional")
          end
@@ -51,9 +55,10 @@ if !isdefined(Main, :___EQT_UTILS_GPU___)
 
    if !__has_cuda && !__has_roc && !__has_metal
       @info "No GPU is available. Using CPU."
+      global gpu = global dev = identity 
    end
 
-   gpu = dev = gpu_device() 
+   
 
    global ___EQT_UTILS_GPU___ = true
 

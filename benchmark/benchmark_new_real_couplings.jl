@@ -8,7 +8,7 @@ using BenchmarkTools
 
 import EquivariantTensors.O3 as O3
 
-isdefined(Main, :___UTILS_FOR_TESTS___) || include("../test/utils/utils_testO3.jl")
+include("../test/test_utils/utils_testO3.jl")
 
 # The full test set is quite large and takes a while, for a quick sanity test 
 # it is better to keep the test small so it runs quickly. 

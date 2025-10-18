@@ -215,3 +215,46 @@ for itest = 1:ntest
    all(∂BB1[t] ≈ ∂BB2[t] ≈ Array(∂BB3[t]) for t = 1:length(∂BB1)) 
 end
 println() 
+
+##
+
+# temporary test to evaluate with dual numbers as input 
+# this needs to be revisited / extended / redesigned
+
+using StaticArrays
+import ForwardDiff as FD
+_dualize(A::AbstractArray{<: Number}) = FD.Dual.(A, one(eltype(A)))
+_dualize(x) = x
+_dualize(nt::NamedTuple) = NamedTuple{keys(nt)}( _dualize.(values(nt)) )
+
+order = 2
+basis = _generate_basis(; order=order, len = rand(50:200))
+BB = _generate_input(basis) 
+BB_32 = ntuple(i -> Float32.(BB[i]), length(BB))
+BB_gpu = gpu.(BB_32)
+nX = size(BB[1], 1)
+spec_gpu = gpu(basis.spec)
+
+# Float64 tests, CPU only  
+P1 = evaluate(basis, BB)
+P2 = similar(P1) 
+ET.ka_evaluate!(P2, basis, BB)
+print_tf(@test P1 ≈ P2)
+
+BB_d = _dualize.(BB)
+P1_d = ET.evaluate(basis, BB_d)
+
+# ------
+
+P3 = Float32.(P2)
+ET.ka_evaluate!(P3, basis, BB_32)
+
+##
+
+P4 = gpu(similar(P3))
+ET.ka_evaluate!(P4, basis, BB_gpu, spec_gpu, nX)
+
+BB_gpu_d = _dualize.(BB_gpu)
+P4_d = _dualize(P4)
+ET.ka_evaluate!(P4_d, basis, BB_gpu_d, spec_gpu, nX)
+

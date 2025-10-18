@@ -7,7 +7,6 @@ import Polynomials4ML as P4ML
 import KernelAbstractions as KA
 
 include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
-dev = gpu_device() 
 
 ##
 
@@ -113,6 +112,8 @@ print_tf(@test all( all(X.ii[X.first[i]:X.first[i+1]-1] .== i)
 ps_dev = dev(ps)
 st_dev = dev(st)
 X_dev = dev(X)
+
+# adapt(MtlArrayAdaptor{storage}(), xs)
 
 φ_dev, _ = ACEKA.evaluate(model, X_dev, ps_dev, st_dev) 
 φ_dev1 = Array(φ_dev)

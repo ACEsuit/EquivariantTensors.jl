@@ -86,3 +86,35 @@ function rrule(::typeof(evaluate), emb::ParallelEmbed, X::ETGraph, ps, st)
 end
 
 
+
+# -------------------------------------------------------------------
+#
+# alternative, maybe simpler embedding layer that utilizes more 
+# of the Lux infrastructure / automatic differentiation.
+#
+
+
+@concrete struct EdgeEmbed <: AbstractLuxWrapperLayer{:layer}
+   layer
+   name
+end
+
+EdgeEmbed(layer; name = "Edge Embedding") = EdgeEmbed(layer, name)
+
+function (l::EdgeEmbed)(X::ETGraph, ps, st)
+   Φ2, st = l.layer(X.edge_data, ps, st)
+   Φ3 = map(ϕ2 -> reshape_embedding(ϕ2, X), Φ2)
+   return Φ3, st
+end
+
+
+function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
+   ϕ3 = reshape_embedding(ϕ2, X)
+
+   function _pb_ϕ(∂ϕ3)
+      ∂ϕ2 = rev_reshape_embedding(∂ϕ3, X)
+      return NoTangent(), ∂ϕ2, NoTangent()
+   end
+
+   return ϕ3, _pb_ϕ
+end

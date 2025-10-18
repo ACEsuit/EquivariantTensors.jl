@@ -1,13 +1,11 @@
-
-const ___UTILS_FOR_TESTS___ = true 
-
 using Test, SpheriCart, StaticArrays, BlockDiagonals
 using SpheriCart: idx2lm, lm2idx 
 using EquivariantTensors.O3: Ctran
+using ACEbase.Testing: println_slim, print_tf
 
 ##
 
-using ACEbase.Testing: println_slim, print_tf
+if !isdefined(Main, :___UTILS_TESTO3___)
 
 # print_tf(::Test.Pass) = printstyled("+", bold=true, color=:green)
 # print_tf(::Test.Fail) = printstyled("-", bold=true, color=:red)
@@ -15,7 +13,6 @@ using ACEbase.Testing: println_slim, print_tf
 
 # println_slim(::Test.Pass) = printstyled("Test Passed\n", bold=true, color=:green)
 # println_slim(::Test.Fail) = printstyled("Test Failed\n", bold=true, color=:red)
-
 
 ##
 
@@ -289,4 +286,7 @@ function eval_basis(ll, Ure, Mll, X; Real = true)
  
     return val 
 end
- 
+
+global ___UTILS_TESTO3___ = true 
+
+end
