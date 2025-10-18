@@ -1,6 +1,6 @@
 name = "EquivariantTensors"
 uuid = "5e107534-7145-4f8f-b06f-47a52840c895"
-version = "0.2.0"
+version = "0.3.0"
 
 [deps]
 ACEbase = "14bae519-eb20-449c-a949-9c58ed33163e"
@@ -55,7 +55,7 @@ Metal = "1.9.0"
 NamedTupleTools = "0.14.0"
 NeighbourLists = "0.5.10"
 PartialWaveFunctions = "0.2.0"
-Polynomials4ML = "0.5.0"
+Polynomials4ML = "0.5.3"
 Random = "1.10"
 Rotations = "1.7.1"
 SparseArrays = "1.10"
