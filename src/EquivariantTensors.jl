@@ -62,6 +62,10 @@ include("utils/selectlinl.jl")
 include("utils/adapt.jl")
 
 # ------------------------------------------------------
+# extensions 
+include("extensions/atoms.jl")
+
+# ------------------------------------------------------
 # Testing utilities 
 include("testing/testing.jl")
 

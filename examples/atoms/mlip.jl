@@ -1,19 +1,19 @@
 #
-# This example is incomplete since it doesn't yet allow the computation 
-# of gradients i.e. forces. 
+# This example implements a simple ACE potential using only 
+# ET, P4ML and its extensions for AtomsBase and NeighbourLists
 #
-
-include(@__DIR__() * "/atomsext.jl")
 
 ## 
 
 @info("Convert a structure to an ETGraph")
 
-using AtomsBuilder, Unitful 
+# need to load NeighbourLists to trigger the atoms extension 
+using AtomsBuilder, NeighbourLists, Unitful 
+import EquivariantTensors as ET
 
 sys = rattle!(bulk(:Si, cubic=true) * (3,3,2), 0.1u"Å")
 rcut = 5.0u"Å"
-G_sys = ETAtomsExt.interaction_graph(sys, rcut)
+G_sys = ET.Atoms.interaction_graph(sys, rcut)
 
 
 ## 
@@ -21,7 +21,6 @@ G_sys = ETAtomsExt.interaction_graph(sys, rcut)
 @info("Build a simple ACE model")
 
 using Lux, Random, LinearAlgebra, StaticArrays
-import EquivariantTensors as ET
 import Polynomials4ML as P4ML
 import ForwardDiff as FD
 
@@ -105,15 +104,15 @@ using ConcreteStructs
 end
 
 function energy(calc::ACEcalculator, sys)
-   G = ETAtomsExt.interaction_graph(sys, rcut)
+   G = ET.Atoms.interaction_graph(sys, rcut)
    E = calc.model(G, calc.ps, calc.st)[1]
    return E
 end
 
 function forces(calc::ACEcalculator, sys)
-   G_sys = ETAtomsExt.interaction_graph(sys, rcut)
+   G_sys = ET.Atoms.interaction_graph(sys, rcut)
    ∇E_G = Zygote.gradient(G -> model(G, ps, st)[1], G_sys)[1]
-   return ETAtomsExt.forces_from_edge_grads(sys, G_sys, ∇E_G.edge_data)
+   return ET.Atoms.forces_from_edge_grads(sys, G_sys, ∇E_G.edge_data)
 end
 
 acepot = ACEcalculator(model, ps, st)
@@ -126,7 +125,7 @@ F2 = forces(acepot, sys)
 # gradients w.r.t. a loss function. 
 #
 
-G = ETAtomsExt.interaction_graph(sys, rcut)
+G = ET.Atoms.interaction_graph(sys, rcut)
 E = model(G, ps, st)[1]
 
 ∇p = Zygote.gradient(p -> model(G, p, st)[1], ps)[1]
