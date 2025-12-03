@@ -15,8 +15,8 @@ bond_len(s::Symbol) = bond_len(ChemicalSpecies(s))
 bond_len(s::ChemicalSpecies) = bond_len(atomic_number(s.atomic_number))
 
 function bond_len(z::Integer)   # assume Integer === atomic number 
-   if haskey(AtomsData.lengthscales, z)
-      return AtomsData.lengthscales[z]["bond_len"][1]
+   if haskey(LENGTHSCALES, z)
+      return LENGTHSCALES[z]["bond_len"][1]
    end
    error("No default bond length for chemical species $(ChemicalSpecies(z)) (Z = $z).")
 end

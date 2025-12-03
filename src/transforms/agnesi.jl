@@ -27,13 +27,13 @@ function agnesi_params(pcut::Integer, pin::Integer,
 
    # now we want to normalize this to map to [-1, 1]
    # linear mapping to [-1, 1]
-   #   x -> y(r) = 2 * (x - xcut) / (xin - xcut) - 1             
+   #   x -> y(r) = 2 * (x - xin) / (xcut - xin) - 1             
    #             = b1 * x + b0
-   #  where b1 = 2 / (xin - xcut), b0 = -1 - 2 * xcut / (xin - xcut)
-   xin = _x(rin)
-   xcut = _x(rcut)
-   b1 = 2 / (xin - xcut)
-   b0 = -1 - 2 * xcut / (xin - xcut)
+   #  where b1 = 2 / (xcut - xin), b0 = -1 - 2 * xin / (xcut - xin)
+   xin = _x(rin)     # -> -1
+   xcut = _x(rcut)   # -> 1 
+   b1 = 2 / (xcut - xin)
+   b0 = -1 - 2 * xin / (xcut - xin)
 
    # parameter structure / named-tuple 
    params = (pin = pin, pcut = pcut, 

@@ -3,18 +3,17 @@
 # transforming an interatomic distance. 
 
 
-import EquivariantTensors.Transforms: agnesi_params, eval_agnesi, 
-               NTtransformST
+import EquivariantTensors: agnesi_params, eval_agnesi, 
+                           NTtransformST
 
 import EquivariantTensors as ET                
 
-function _rineqcut(zi, zj)
+function _rineqcut(zi, zj, rinfactor, rcutfactor)
    req = bond_len(zi, zj)
    return (rin = req * rinfactor, req = req, rcut = req * rcutfactor)
 end
 
 function at_agnesi_params(zlist; 
-                       pin = 4, pcut = 2, 
                        rcuts = nothing, 
                        rinfactor = 0.0, 
                        rcutfactor = 2.5)
@@ -41,41 +40,25 @@ function at_agnesi_params(zlist;
    end 
 
    idx = 0 
+   rins1 = Dict(); reqs1 = Dict(); rcuts1 = Dict();
    for i in 1:NZ, j in i:NZ 
-      # confirm that the indexing is correct
-      idx += 1
-      @assert idx == symidx(i, j, NZ)  
-      # build the parameters for zi, zj 
       zi = zlist[i]; zj = zlist[j]
-      rs = _rineqcut(zi, zj)
-      params[idx] = agnesi_params(pcut, pin, rs.rin, rs.req, 
-                                   __rcut(zi, zj, rs.rcut)) 
+      rs = _rineqcut(zi, zj, rinfactor, rcutfactor) 
+      rins1[(zi, zj)] = rs.rin
+      reqs1[(zi, zj)] = rs.req
+      rcuts1[(zi, zj)] = __rcut(zi, zj, rs.rcut)
    end
 
-   return identity.(params)
+   return rins1, reqs1, rcuts1
 end
 
 
-function ET.Atoms.agnesi_transform(zlist; kwargs...) 
+function ET.Atoms.agnesi_transform(zlist; pin = 4, pcut = 2, kwargs...) 
+   rins, reqs, rcuts = at_agnesi_params(zlist; kwargs...)
 
-   params = at_agnesi_params(zlist; kwargs...)
+   display(rins)
+   display(reqs)
+   display(rcuts)
 
-   # the params should be all of the same type so can be stored in an 
-   # SVector for efficiency. (is this efficient??)
-   # this will be the reference state for the NTtransform 
-   st = ( zlist = zlist, 
-          params = SVector{length(params)}(params), )
-
-   # build the actual transform mapping 
-   f_agnesi = let 
-      (x, st) -> begin
-         r = norm(x.𝐫)
-         idx = catcat2idx_sym(st.zlist, x.s0, x.s1)
-         y = eval_agnesi(r, st.params[idx])
-         return y 
-      end   
-   end
-
-   return NTtransformST(f_agnesi, st; 
-                        sym = :GeneralizedAgnesi)
+   return ET.agnesi_transform(zlist, rins, reqs, rcuts, pin, pcut)
 end

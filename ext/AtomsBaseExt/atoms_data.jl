@@ -1,4 +1,3 @@
-module AtomsData 
 
 # MISSING: 
 #   2 (He), 25 (Mn),85 (At), 87 (Fr), 88 (Ra), ≥ 92 (U and beyond)
@@ -323,4 +322,3 @@ const LENGTHSCALES = Dict(
   71 => Dict{String, Vector{Any}}("bond_len"=>[3.44157, "AtomsBuilder data"])   
 )
 
-end
