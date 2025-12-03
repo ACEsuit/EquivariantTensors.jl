@@ -112,6 +112,17 @@ function evaluate(tensor::SparseACEbasis, Rnl, Ylm, ps, st)
    return BB
 end 
 
+# for Ten3 inputs, there is no CPU implementation 
+#   TODO (fix this!!!)
+evaluate(tensor::SparseACEbasis, BB::TupTen3, args...) = 
+      ka_evaluate(tensor, BB, args...)
+
+
+evaluate(tensor::SparseACEbasis, Rnl::Array{T, 3}, Ylm::Array{T, 3}, ps, st
+          ) where {T} = 
+      ka_evaluate(tensor, Rnl, Ylm, ps, st)[1] 
+
+
 # ---------
 
 
