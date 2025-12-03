@@ -1,7 +1,7 @@
-using Pkg; Pkg.activate(joinpath(@__DIR__(), "..", ".."))
-using TestEnv; TestEnv.activate();
-Pkg.develop(url = joinpath(@__DIR__(), "..", ".."))
-Pkg.add("AtomsBase")
+# using Pkg; Pkg.activate(joinpath(@__DIR__(), "..", ".."))
+# using TestEnv; TestEnv.activate();
+# Pkg.develop(url = joinpath(@__DIR__(), "..", ".."))
+# Pkg.add("AtomsBase")
 
 ##
 
