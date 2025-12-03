@@ -1,3 +1,8 @@
+#
+# TODO: to be retired 
+#       replace with simple Chain and SkipConnection layers.
+#
+
 # ----------------------------------------------- 
 # simple example embedding layer for radial and angular embeddings 
 # to be replaced asap with a generic implementation. 

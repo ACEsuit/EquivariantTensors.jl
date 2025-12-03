@@ -1,3 +1,7 @@
+#
+# TODO: remove ParallelEmbed, and polish EdgeEmbed instead 
+#
+
 using ConcreteStructs 
 using Lux: AbstractLuxWrapperLayer
 import Lux 

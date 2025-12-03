@@ -1,4 +1,6 @@
-
+#
+# TODO: get rid of NT and replace with DP 
+#
 
 module DiffNT 
 
@@ -147,15 +149,16 @@ end
 
 
 """
-   grad_fd(f, x::NamedTuple)  
+   grad_fd(f, x::NamedTuple, args...)
 
 `ForwardDiff` gradient of a function `f` with respect to the continuous 
 variables stored in the NamedTuple `x`; returns a NamedTuple with 
-the gradient values corresponding to the continuous variables in `x`.
+the gradient values corresponding to the continuous variables in `x`. 
+The `args...` are taken as constant paramteters during this differentiation. 
 """
-function grad_fd(f, x::NamedTuple)
-   v_nt = _ctsnt(x)  # extract continuous variables 
-   _fvec = _v -> f(_replace(x, _svec2nt(_v, v_nt)))
+function grad_fd(f, x::NamedTuple, args...)
+   v_nt = _ctsnt(x)  # extract continuous variables into an SVector 
+   _fvec = _v -> f(_replace(x, _svec2nt(_v, v_nt)), args...)
    g = ForwardDiff.gradient(_fvec, _nt2svec(v_nt))
    return _svec2nt(g, v_nt)  # return as NamedTuple
 end 
