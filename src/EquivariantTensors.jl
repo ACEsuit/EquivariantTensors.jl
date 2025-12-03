@@ -60,6 +60,9 @@ include("utils/promotion.jl")
 include("utils/selectlinl.jl")
 include("utils/selector.jl")
 
+# transforms 
+include("transforms/agnesi.jl")
+
 # other utilities 
 include("utils/adapt.jl")
 

@@ -185,7 +185,7 @@ NOT PART OF THE OFFICIAL API YET! CAN CHANGE WITHOUT NOTICE!
 """
 struct NTtransformST{FT, ST} <: AbstractLuxLayer
    f::FT 
-   reftstate::ST
+   refstate::ST
    sym::Symbol 
 end
 
@@ -196,7 +196,7 @@ NTtransformST(f, refstate = NamedTuple();
 Base.show(io::IO, l::NTtransformST) = print(io, "NTtransformST($(l.sym))")
 
 initialparameters(rng::AbstractRNG, l::NTtransformST) = NamedTuple()
-initialstates(rng::AbstractRNG, l::NTtransformST) = deepcopy(l.reftstate)
+initialstates(rng::AbstractRNG, l::NTtransformST) = deepcopy(l.refstate)
 
 (l::NTtransformST)(x::NamedTuple, ps, st) = l.f(x, st), st 
 
