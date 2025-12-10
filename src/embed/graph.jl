@@ -6,13 +6,13 @@ import Adapt
 using Adapt: adapt 
 
 
-struct ETGraph{VECI, TN, TE}
+struct ETGraph{VECI, TN, TE, TG}
    ii::VECI     # center particle indices / source indices
    jj::VECI     # neighbour particle indices / target indices
    first::VECI   # first[i] = first index of (i, j) pairs in ii, jj
    node_data::TN     # node data 
    edge_data::TE     # edge data 
-   # graph_data::TG    # graph data
+   graph_data::TG    # graph data
    maxneigs::Int     # maximum number of neighbors per node (for allocations)                      
 end
 
@@ -21,7 +21,8 @@ nedges(X::ETGraph) = length(X.ii)
 maxneigs(X::ETGraph) = X.maxneigs
 
 function ETGraph(ii::AbstractVector{TI}, jj::AbstractVector{TI}; 
-                 node_data = nothing, edge_data = nothing) where {TI} 
+                 node_data = nothing, edge_data = nothing, graph_data = nothing
+                 ) where {TI}
    if !issorted(ii) 
       error("i indices must be sorted")
    end
@@ -45,17 +46,19 @@ function ETGraph(ii::AbstractVector{TI}, jj::AbstractVector{TI};
 
    maxneigs = maximum(first[2:end] .- first[1:end-1])
 
-   return ETGraph(ii, jj, first, node_data, edge_data, maxneigs)
+   return ETGraph(ii, jj, first, node_data, edge_data, graph_data, maxneigs)
 end               
 
 function Adapt.adapt_structure(to, X::ETGraph) 
    ETGraph( adapt(to, X.ii), adapt(to, X.jj), adapt(to, X.first), 
-            adapt(to, X.node_data), adapt(to, X.edge_data), X.maxneigs)
+            adapt(to, X.node_data), adapt(to, X.edge_data), 
+            adapt(to, X.graph_data), X.maxneigs)
 end
 
 function (dev::AbstractDevice)(X::ETGraph) 
    ETGraph(dev(X.ii), dev(X.jj), dev(X.first), 
-              dev(X.node_data), dev(X.edge_data), X.maxneigs)
+              dev(X.node_data), dev(X.edge_data), dev(X.graph_data), 
+              X.maxneigs)
 end
 
 function neighbourhood(X::ETGraph, i::Int)

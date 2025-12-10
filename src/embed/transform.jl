@@ -155,18 +155,18 @@ evaluate_ed(l::NTtransform, x::NamedTuple, ps, st) =
       (l.f(x), DiffNT.grad_fd(l.f, x))
 
 
-function rrule(trans::typeof(NTtransform), X::AbstractVector{<: NamedTuple}, ps, st) 
-   @assert ps == NamedTuple() "NTtransform cannot have parameters"
-   Y = map(trans.f, X)
-   dY = map(x -> DiffNT.grad_fd(trans.f, x), X)
+# function rrule(trans::typeof(NTtransform), X::AbstractVector{<: NamedTuple}, ps, st) 
+#    @assert ps == NamedTuple() "NTtransform cannot have parameters"
+#    Y = map(trans.f, X)
+#    dY = map(x -> DiffNT.grad_fd(trans.f, x), X)
 
-   function _pb_X(∂Y)
-      ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
-      return NoTangent(), ∂X, NoTangent(), NoTangent()
-   end
+#    function _pb_X(∂Y)
+#       ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
+#       return NoTangent(), ∂X, NoTangent(), NoTangent()
+#    end
 
-   return Y, _pb_X 
-end
+#    return Y, _pb_X 
+# end
 
 
 # -------------------------------------------------------------- 
@@ -217,16 +217,16 @@ evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) =
          (l.f(x, st), DiffNT.grad_fd(l.f, x, st))
 
 
-function rrule(trans::typeof(NTtransformST), X::AbstractVector{<: NamedTuple}, ps, st) 
-   @assert ps == NamedTuple() "NTtransformST cannot have parameters"
-   # TODO: rewrite this using a single Dual number evaluation 
-   Y = trans(X, st)   # map(x -> l.f(x, st), x)
-   dY = map(x -> DiffNT.grad_fd(trans.f, x, st), X)
+# function rrule(trans::typeof(NTtransformST), X::AbstractVector{<: NamedTuple}, ps, st) 
+#    @assert ps == NamedTuple() "NTtransformST cannot have parameters"
+#    # TODO: rewrite this using a single Dual number evaluation 
+#    Y = trans(X, st)   # map(x -> l.f(x, st), x)
+#    dY = map(x -> DiffNT.grad_fd(trans.f, x, st), X)
 
-   function _pb_X(∂Y)
-      ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
-      return NoTangent(), ∂X, NoTangent(), NoTangent()
-   end
+#    function _pb_X(∂Y)
+#       ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
+#       return NoTangent(), ∂X, NoTangent(), NoTangent()
+#    end
 
-   return Y, _pb_X 
-end
+#    return Y, _pb_X 
+# end

@@ -31,7 +31,7 @@ module ACEKA
                 params = copy(m.params), )
 
    initialstates(rng::AbstractRNG, m::SimpleACE) = 
-            (    embed = initialparameters(rng, m.embed), 
+            (    embed = initialstates(rng, m.embed), 
               symbasis = initialstates(rng, m.symbasis), )
 
    function evaluate(model::SimpleACE, X::ET.ETGraph, ps, st)
@@ -72,11 +72,20 @@ maxl = 10    # maximum degree of spherical harmonics
 ORD = 3     # correlation-order (body-order = ORD + 1)
 
 # generate the embedding layer 
+
+# TODO: replace with newer implementation??
+# rbasis = Chain( WrappedFunction(𝐫 -> 1 ./ (1 .+ norm.(𝐫)) ), 
+#                 P4ML.ChebBasis(Dtot+1) )
+# ybasis = P4ML.real_sphericalharmonics(maxl; T = Float32, static=true)
+
 rbasis = ET.TransformedBasis( WrappedFunction(𝐫 -> 1 / (1+norm(𝐫))), 
                               P4ML.ChebBasis(Dtot+1) )
 ybasis = ET.TransformedBasis( WrappedFunction(𝐫 -> 𝐫 / norm(𝐫)), 
                               P4ML.real_solidharmonics(maxl; T = Float32, static=true) )
+
 embed = ET.ParallelEmbed(; Rnl = rbasis, Ylm = ybasis)
+
+# st = LuxCore.initialstates(MersenneTwister(1234), embed)
 
 mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
                   minn = 0, maxn = Dtot, maxl = maxl, 

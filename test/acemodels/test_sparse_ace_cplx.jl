@@ -10,7 +10,14 @@ import ForwardDiff as FDiff
 @info("Preliminary Pullback test for lux ace model with complex numbers")
 
 ##
-struct DotL <: Lux.AbstractLuxLayer 
+
+module _D
+
+import LuxCore 
+using Random: AbstractRNG
+using StaticArrays, LinearAlgebra
+
+struct DotL <: LuxCore.AbstractLuxLayer 
    nin::Int 
 end
 
@@ -21,6 +28,11 @@ LuxCore.initialstates(rng::AbstractRNG, l::DotL) =
       NamedTuple()
 
 (l::DotL)(x, ps, st) = sum(ps.w .* x), st
+
+rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )
+rand_x() = (0.1 + 0.9 * rand()) * rand_sphere()
+
+end
 
 ## 
 Dtot = 8
@@ -50,7 +62,7 @@ model = Chain(;
                Ylm = ybasis),
       𝔹 = 𝔹basis, 
       y01 = Parallel(nothing; 
-            y0 = DotL(length(𝔹basis, 0)), 
+            y0 = _D.DotL(length(𝔹basis, 0)), 
             y1 = DotL(length(𝔹basis, 1)), ), 
       iml = WrappedFunction(x -> (exp(im * x[1]) * x[1], exp.(im * x[2]) .* x[2])),
       out = WrappedFunction(x -> real(x[1] + sum(abs2, x[2]) ))
@@ -58,10 +70,8 @@ model = Chain(;
 
 ##
 
-rand_sphere() = ( u = randn(SVector{3, Float64}); u / norm(u) )
-rand_x() = (0.1 + 0.9 * rand()) * rand_sphere()
 nX = 7
-𝐫 = [ rand_x() for _ = 1:nX ]
+𝐫 = [ _D.rand_x() for _ = 1:nX ]
 
 rng = Random.MersenneTwister(1234)
 ps, st = Lux.setup(rng, model)
