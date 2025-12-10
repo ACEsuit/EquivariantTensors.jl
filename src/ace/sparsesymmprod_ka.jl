@@ -13,6 +13,12 @@ function ka_evaluate(basis::SparseSymmProd{ORD}, A::AbstractArray,
 	return AA
 end 
 
+function ka_evaluate(basis::SparseSymmProd{ORD}, A::AbstractVector, 
+                     specs = basis.specs) where {ORD}
+   AA = similar(A, (sum(length, specs),))
+	_ka_evaluate_launcher!(AA, basis, A, specs)
+	return AA
+end 
 
 function ka_evaluate!(AA::AbstractArray, basis::SparseSymmProd{ORD},
                       A::AbstractArray, 

@@ -1,3 +1,9 @@
+#
+# TODO: to be retired 
+#       replace with simple Chain and SkipConnection layers.
+#
+# Only keep the NTtransform 
+#
 
 
 import ForwardDiff as FD 
@@ -104,7 +110,9 @@ evaluate(l::IDtrans, P, x, y, ps, st) = P
 # --------------------------------------------------------- 
 #  wrapping a transfrom from a named tuple 
 #
-#  TODO: allow f to be parameterized
+#  TODO: 
+#    - allow f to have states 
+#    - allow f to have parameters 
 
 """
 If a particle x is represented as a NamedTuple, e.g., `x = (r = SA[...], Z = 13)`
@@ -147,15 +155,78 @@ evaluate_ed(l::NTtransform, x::NamedTuple, ps, st) =
       (l.f(x), DiffNT.grad_fd(l.f, x))
 
 
-function rrule(trans::typeof(NTtransform), X::AbstractVector{<: NamedTuple}, ps, st) 
-   @assert ps == NamedTuple() "NTtransform cannot have parameters"
-   Y = map(trans.f, X)
-   dY = map(x -> DiffNT.grad_fd(trans.f, x), X)
+# function rrule(trans::typeof(NTtransform), X::AbstractVector{<: NamedTuple}, ps, st) 
+#    @assert ps == NamedTuple() "NTtransform cannot have parameters"
+#    Y = map(trans.f, X)
+#    dY = map(x -> DiffNT.grad_fd(trans.f, x), X)
 
-   function _pb_X(∂Y)
-      ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
-      return NoTangent(), ∂X, NoTangent(), NoTangent()
-   end
+#    function _pb_X(∂Y)
+#       ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
+#       return NoTangent(), ∂X, NoTangent(), NoTangent()
+#    end
 
-   return Y, _pb_X 
+#    return Y, _pb_X 
+# end
+
+
+# -------------------------------------------------------------- 
+#   a variant of NTtransform that allows parameters and states 
+
+
+"""
+Experimental extension of NTtransform that allows states.
+(to be extended to also allow paramters)
+
+Maybe a better approach would be to have just wrap a callable, and let that 
+callable take care of the parameters. otoh, what we are doing here is 
+more convenient to build on-the-fly ...
+
+NOT PART OF THE OFFICIAL API YET! CAN CHANGE WITHOUT NOTICE!
+"""
+struct NTtransformST{FT, ST} <: AbstractLuxLayer
+   f::FT 
+   refstate::ST
+   sym::Symbol 
 end
+
+NTtransformST(f, refstate = NamedTuple(); 
+              sym = Symbol(""))  = 
+      NTtransformST(f, refstate, Symbol(sym))
+
+Base.show(io::IO, l::NTtransformST) = print(io, "NTtransformST($(l.sym))")
+
+initialparameters(rng::AbstractRNG, l::NTtransformST) = NamedTuple()
+initialstates(rng::AbstractRNG, l::NTtransformST) = deepcopy(l.refstate)
+
+(l::NTtransformST)(x::NamedTuple, ps, st) = l.f(x, st), st 
+
+# this non-standard calling convention assumes that st is not changed 
+(l::NTtransformST)(x::NamedTuple, st) = l.f(x, st)
+
+(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, ps, st) = 
+         l(x, st), st 
+
+(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, st) = 
+         broadcast(l.f, x, Ref(st))
+         # map(x -> l.f(x, st), x)
+
+evaluate(l::NTtransformST, x::NamedTuple, ps, st) = 
+         l.f(x, st)
+
+evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) = 
+         (l.f(x, st), DiffNT.grad_fd(l.f, x, st))
+
+
+# function rrule(trans::typeof(NTtransformST), X::AbstractVector{<: NamedTuple}, ps, st) 
+#    @assert ps == NamedTuple() "NTtransformST cannot have parameters"
+#    # TODO: rewrite this using a single Dual number evaluation 
+#    Y = trans(X, st)   # map(x -> l.f(x, st), x)
+#    dY = map(x -> DiffNT.grad_fd(trans.f, x, st), X)
+
+#    function _pb_X(∂Y)
+#       ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
+#       return NoTangent(), ∂X, NoTangent(), NoTangent()
+#    end
+
+#    return Y, _pb_X 
+# end

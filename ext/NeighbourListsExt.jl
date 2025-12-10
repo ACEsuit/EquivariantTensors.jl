@@ -21,7 +21,13 @@ function ET.Atoms.nlist2graph(nlist::NeighbourLists.PairList, sys::AbstractSyste
    S_j = [ NeighbourLists.AtomsBase.species(sys, j) for j in jj ]
    X_ij = [ (𝐫 = 𝐫, s0 = si, s1 = sj) for (𝐫, si, sj) in zip(R_ij, S_i, S_j) ]
 
-   G = ET.ETGraph(ii, jj; edge_data = X_ij)
+   # for node data we use _only_ the atomic species for now so that we 
+   # don't even give the option of using position information directly. 
+   # ... until we sort out how to best handle this in ET. 
+   X_i = [ (s = NeighbourLists.AtomsBase.species(sys, i),) 
+           for i = 1:length(sys) ]
+
+   G = ET.ETGraph(ii, jj; edge_data = X_ij, node_data = X_i)
    @assert G.first == first
 
    return G 

@@ -11,5 +11,8 @@ _floatT(T, A::AbstractArray{<: AbstractArray}) = _float_T.(T, A)
 _float32(A) = _floatT(Float32, A)
 _float64(A) = _floatT(Float64, A)
 
+float32(x::AbstractFloat) = Float32(x)
+float64(x::AbstractFloat) = Float64(x)
+
 float32(nt::NamedTuple) = Functors.fmap(_float32, nt) 
 float64(nt::NamedTuple) = Functors.fmap(_float64, nt)

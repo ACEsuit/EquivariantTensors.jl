@@ -28,16 +28,20 @@ WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
 WithAlloc = "fb1aa66a-603c-4c1d-9bc4-66947c7b08dd"
 
 [weakdeps]
-AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
 NeighbourLists = "2fcf5ba9-9ed4-57cf-b73f-ff513e316b9c"
+AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
+AtomsBuilder = "f5cc8831-eeb7-4288-8d9f-d6c1ddb77004"
+
 
 [extensions]
 NeighbourListsExt = "NeighbourLists"
+AtomsBaseExt = "AtomsBase"
 
 [compat]
 ACEbase = "0.4.5"
 Adapt = "4.3.0"
 AtomsBase = "0.5"
+AtomsBuilder = "0.2.2"
 Bumper = "0.7.1"
 CUDA = "5.9.1"
 ChainRulesCore = "1.25.1"
@@ -77,4 +81,4 @@ WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", "Printf", "Zygote", "Optimisers", "CUDA", "Metal", ]
+test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", "Printf", "Zygote", "Optimisers", "CUDA", "Metal"]
