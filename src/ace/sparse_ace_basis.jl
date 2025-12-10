@@ -100,12 +100,11 @@ end
 
 function evaluate(tensor::SparseACEbasis, Rnl, Ylm, ps, st)
    TA = promote_type(eltype(Rnl), eltype(Ylm))
-   A = zeros(TA, length(tensor.abasis))    # use Bumper here
-   evaluate!(A, tensor.abasis, (Rnl, Ylm))
+   A = ka_evaluate(tensor.abasis, (Rnl, Ylm))
 
    # evaluate the AA basis
-   AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
-   evaluate!(AA, tensor.aabasis, A)
+   # AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
+   AA = ka_evaluate(tensor.aabasis, A)
 
    # evaluate the coupling coefficients
    BB = tensor.A2Bmaps .* Ref(AA)
@@ -114,12 +113,13 @@ end
 
 # for Ten3 inputs, there is no CPU implementation 
 #   TODO (fix this!!!)
+
 evaluate(tensor::SparseACEbasis, BB::TupTen3, args...) = 
       ka_evaluate(tensor, BB, args...)
 
 
-evaluate(tensor::SparseACEbasis, Rnl::Array{T, 3}, Ylm::Array{T, 3}, ps, st
-          ) where {T} = 
+evaluate(tensor::SparseACEbasis, Rnl::AbstractArray{T, 3}, Ylm::AbstractArray{T, 3}, 
+         ps, st) where {T} = 
       ka_evaluate(tensor, Rnl, Ylm, ps, st)[1] 
 
 

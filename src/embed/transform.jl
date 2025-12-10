@@ -204,10 +204,11 @@ initialstates(rng::AbstractRNG, l::NTtransformST) = deepcopy(l.refstate)
 (l::NTtransformST)(x::NamedTuple, st) = l.f(x, st)
 
 (l::NTtransformST)(x::AbstractVector{<: NamedTuple}, ps, st) = 
-         map(x -> l.f(x, st), x), st 
+         l(x, st), st 
 
 (l::NTtransformST)(x::AbstractVector{<: NamedTuple}, st) = 
-         map(x -> l.f(x, st), x)
+         broadcast(l.f, x, Ref(st))
+         # map(x -> l.f(x, st), x)
 
 evaluate(l::NTtransformST, x::NamedTuple, ps, st) = 
          l.f(x, st)

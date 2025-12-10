@@ -12,6 +12,7 @@ struct ETGraph{VECI, TN, TE}
    first::VECI   # first[i] = first index of (i, j) pairs in ii, jj
    node_data::TN     # node data 
    edge_data::TE     # edge data 
+   # graph_data::TG    # graph data
    maxneigs::Int     # maximum number of neighbors per node (for allocations)                      
 end
 

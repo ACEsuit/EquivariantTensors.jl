@@ -21,7 +21,8 @@ function cat2idx(categories, a)
            return i
        end
    end 
-   error("Value $a not found in categories")
+   # error("Value $a not found in categories")
+   return -1 
 end
 
 function idx2cat(categories, i)
