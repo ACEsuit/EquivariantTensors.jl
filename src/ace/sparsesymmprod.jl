@@ -311,7 +311,7 @@ function rrule(::typeof(pullback), ∂AA, basis::SparseSymmProd, A)
 end
 
 
-# -------------- frules for ForwardDiff compatibility
+# -------------- frules for forward-mode AD
 
 import ChainRulesCore: frule
 

@@ -544,7 +544,7 @@ function rrule(::typeof(pullback), Δ, basis::PooledSparseProduct, BB)
    return ∂BB, pb
 end
 
-# --------------------- frules for ForwardDiff compatibility
+# --------------------- frules for forward-mode AD
 
 import ChainRulesCore: frule, Tangent
 

@@ -219,7 +219,7 @@ function rrule(::typeof(evaluate), tensor::SparseACEbasis,
    return (𝔹, st), pb_3d
 end
 
-# -------------- frules for ForwardDiff compatibility
+# -------------- frules for forward-mode AD
 
 import ChainRulesCore: frule
 
