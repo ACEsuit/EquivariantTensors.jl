@@ -148,7 +148,7 @@ import ChainRulesCore: rrule, NoTangent
 
 function whatalloc(::typeof(pullback!),
                    ∂AA, basis::SparseSymmProd, A)
-   T∂A = _promote_type_dual(eltype(∂AA), eltype(A))
+   T∂A = promote_type(eltype(∂AA), eltype(A))
    return (T∂A, size(A)... )
 end
 
@@ -211,7 +211,7 @@ function whatalloc(::typeof(pullback2!),
                    ∂∇A,   # cotangent to be pulled back
                    ∂AA,   # cotangent from pullback(∂AA, basis, A)
                    basis::SparseSymmProd, A)
-   T = _promote_type_dual(eltype(∂∇A), eltype(∂AA), eltype(A))
+   T = promote_type(eltype(∂∇A), eltype(∂AA), eltype(A))
    return (T, size(∂AA)...), (T, size(A)...)
 end
 
@@ -220,7 +220,7 @@ end
 function pullback2!(∇_∂AA, ∇_A,
                     ∂∇A, ∂AA, basis, A)
    @assert size(∂∇A) == size(A)
-   T = _promote_type_dual(eltype(∂∇A), eltype(∂AA), eltype(A))
+   T = promote_type(eltype(∂∇A), eltype(∂AA), eltype(A))
    d = Dual{T}(zero(T), one(T))
    DT = typeof(d)
    @no_escape begin 
@@ -252,7 +252,7 @@ function whatalloc(::typeof(pushforward!),
                    A::AbstractVector, ΔA::AbstractVector)
    nAA = length(basis)
    TAA = eltype(A)
-   T∂AA = _promote_type_dual(TAA, eltype(ΔA))
+   T∂AA = promote_type(TAA, eltype(ΔA))
    return (TAA, nAA), (T∂AA, nAA)
 end
 
@@ -261,7 +261,7 @@ function whatalloc(::typeof(pushforward!),
                    A::AbstractMatrix, ΔA::AbstractMatrix)
    nAA = length(basis)
    TAA = eltype(A)
-   T∂AA = _promote_type_dual(TAA, eltype(ΔA))
+   T∂AA = promote_type(TAA, eltype(ΔA))
    nX = size(A, 1)
    return (TAA, nX, nAA), (T∂AA, nX, nAA)
 end
@@ -270,7 +270,7 @@ end
 function pushforward!(AA, ∂AA, basis::SparseSymmProd, A, ∂A)
    @assert size(∂A) == size(A)
    @assert size(∂AA) == size(AA)
-   T = _promote_type_dual(eltype(A), eltype(∂A))
+   T = promote_type(eltype(A), eltype(∂A))
    d = Dual{T}(zero(T), one(T))
    DT = typeof(d)
    @no_escape begin 

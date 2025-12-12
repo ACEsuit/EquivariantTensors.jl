@@ -58,7 +58,7 @@ function unsafe_pullback!(∂A, ∂AA::AbstractVector,
    @assert length(∂AA) >= length(dag)
    @assert length(∂A) >= num1
 
-   TΔ = _promote_type_dual(eltype(∂AA), eltype(AA))
+   TΔ = promote_type(eltype(∂AA), eltype(AA))
    Δ̃ = zeros(TΔ, length(dag))
    @inbounds for i = 1:length(dag)
       Δ̃[i] = ∂AA[i]
@@ -88,7 +88,7 @@ function unsafe_pullback(∂AA, dag::SparseSymmProdDAG, AA::AbstractVector)
    #    accelerate evaluation of the pullback but we don't need to differentiate 
    #    wrt to it. Think of AA as just a buffer. same elsewhere...
 
-   T∂A = _promote_type_dual(eltype(∂AA), eltype(AA))
+   T∂A = promote_type(eltype(∂AA), eltype(AA))
    ∂A = zeros(T∂A, length(A))
    unsafe_pullback!(∂A, ∂AA, dag, AA)
    return ∂A

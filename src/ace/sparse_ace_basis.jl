@@ -63,7 +63,7 @@ initialstates(rng::AbstractRNG, bas::SparseACEbasis) =
 #=
 function evaluate!(B, tensor::SparseACEbasis{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
-   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm))
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -80,7 +80,7 @@ function evaluate!(B, tensor::SparseACEbasis{T}, Rnl, Ylm) where {T}
 end
 
 function whatalloc(::typeof(evaluate!), tensor::SparseACEbasis, Rnl, Ylm)
-   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm))
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
    TB = _promote_mul_type(TA, eltype(tensor.A2Bmap))
    return TB, length(tensor)
 end
@@ -99,7 +99,7 @@ end
 =#
 
 function evaluate(tensor::SparseACEbasis, Rnl, Ylm, ps, st)
-   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm))
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
    A = ka_evaluate(tensor.abasis, (Rnl, Ylm))
 
    # evaluate the AA basis
@@ -147,7 +147,7 @@ function pullback!(∂Rnl, ∂Ylm,
    T_∂AA = eltype(∂AA)
 
    # ∂Ei / ∂A = ∂Ei / ∂AA * ∂AA / ∂A = pullback(aabasis, ∂AA)
-   T_∂A = _promote_type_dual(T_∂AA, eltype(A))
+   T_∂A = promote_type(T_∂AA, eltype(A))
    ∂A = @alloc(T_∂A, length(tensor.abasis))
    pullback!(∂A, ∂AA, tensor.aabasis, A)
    
@@ -166,7 +166,7 @@ function whatalloc(::typeof(pullback!),
    # TODO: may need to check the type of ∂BB too, but this is a bit 
    #       tricky because of the SVectors that can be in there...
    TB = eltype.(eltype.(∂BB))
-   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm), TB...)
+   TA = promote_type(eltype(Rnl), eltype(Ylm), TB...)
    return (TA, size(Rnl)...), (TA, size(Ylm)...)
 end
 
@@ -184,7 +184,7 @@ using ChainRulesCore: unthunk
 function rrule(::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
 
    # evaluate the A basis
-   TA = _promote_type_dual(eltype(Rnl), eltype(eltype(Ylm)))
+   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -233,7 +233,7 @@ function frule((_, Δtensor, ΔRnl, ΔYlm, Δps, Δst),
    # 3. BB = A2Bmaps .* AA
    #    ∂BB = A2Bmaps .* ∂AA
 
-   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm))
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
 
    # Forward pass through A basis
    A = zeros(TA, length(tensor.abasis))
@@ -242,7 +242,7 @@ function frule((_, Δtensor, ΔRnl, ΔYlm, Δps, Δst),
    # Compute tangent of A using frule or direct differentiation
    # For the pooled sparse product: A[i] = ∑_α Rnl[α, n] * Ylm[α, l]
    # ∂A[i] = ∑_α (ΔRnl[α, n] * Ylm[α, l] + Rnl[α, n] * ΔYlm[α, l])
-   T∂A = _promote_type_dual(eltype(ΔRnl), eltype(ΔYlm), eltype(Rnl), eltype(Ylm))
+   T∂A = promote_type(eltype(ΔRnl), eltype(ΔYlm), eltype(Rnl), eltype(Ylm))
    ∂A = zeros(T∂A, length(tensor.abasis))
    _pushforward_abasis!(∂A, tensor.abasis, Rnl, Ylm, ΔRnl, ΔYlm)
 

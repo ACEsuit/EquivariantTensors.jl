@@ -146,32 +146,6 @@ println()
 
 ##
 
-@info("Testing type promotion preserves Dual with mixed types")
-
-# This tests _promote_type_dual directly
-using EquivariantTensors: _promote_type_dual
-
-for ntest = 1:5
-   local T1, T2, result
-   # Test Float64 + Dual{Float64}
-   T1 = Float64
-   T2 = ForwardDiff.Dual{Nothing, Float64, 1}
-   result = _promote_type_dual(T1, T2)
-   @test result <: ForwardDiff.Dual
-   print_tf(@test true)
-
-   # Test Float32 + Dual{Float64} -> should promote to Dual{Float64}
-   T1 = Float32
-   T2 = ForwardDiff.Dual{Nothing, Float64, 1}
-   result = _promote_type_dual(T1, T2)
-   @test result <: ForwardDiff.Dual
-   @test _promote_type_dual(T1, T2).parameters[2] == Float64  # base type is promoted
-   print_tf(@test true)
-end
-println()
-
-##
-
 @info("Testing frule for PooledSparseProduct")
 
 using ChainRulesCore

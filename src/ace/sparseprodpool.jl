@@ -66,10 +66,10 @@ end
 # ----------------------- evaluation and allocation interfaces 
 
 _valtype(basis::PooledSparseProduct, BB::Tuple) =
-      mapreduce(eltype, _promote_type_dual, BB)
+      mapreduce(eltype, promote_type, BB)
 
 _gradtype(basis::PooledSparseProduct, BB::Tuple) =
-      mapreduce(eltype, _promote_type_dual, BB)
+      mapreduce(eltype, promote_type, BB)
 
 function _generate_input_1(basis::PooledSparseProduct{NB}) where {NB} 
    NN = [ maximum(b[i] for b in basis.spec) for i = 1:NB ]
@@ -130,7 +130,7 @@ function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupVec) where {NB}
    fill!(A, 0)
    @inbounds for (iA, ϕ) in enumerate(spec)
       b = ntuple(t -> BB[t][ϕ[t]], NB)
-      A[iA] = prod(b)  # Removed @fastmath for ForwardDiff compatibility
+      A[iA] = @fastmath(prod(b))
    end
    return A
 end
@@ -147,7 +147,7 @@ function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupMat,
       a = zero(eltype(A))
       @simd ivdep for j = 1:nX
          b = ntuple(t -> BB[t][j, ϕ[t]], NB)
-         a += prod(b)  # Removed @fastmath for ForwardDiff compatibility
+         a += @fastmath(prod(b))
       end
       A[iA] = a
    end
@@ -207,13 +207,13 @@ using StaticArrays
 
 function whatalloc(::typeof(pullback!),
                    ∂A, basis::PooledSparseProduct{NB}, BB::TupMat) where  {NB}
-   TA = _promote_type_dual(eltype.(BB)..., eltype(∂A))
+   TA = promote_type(eltype.(BB)..., eltype(∂A))
    return ntuple(i -> (TA, size(BB[i])...), NB)
 end
 
 function whatalloc(::typeof(pullback!),
                    ∂A, basis::PooledSparseProduct{NB}, BB::TupVec) where  {NB}
-   TA = _promote_type_dual(eltype.(BB)..., eltype(∂A))
+   TA = promote_type(eltype.(BB)..., eltype(∂A))
    return ntuple(i -> (TA, length(BB[i])), NB)
 end
 
@@ -419,7 +419,7 @@ end
 
 function whatalloc(::typeof(pullback2!), ∂∂BB, ∂A, 
                    basis::PooledSparseProduct{NB}, BB) where {NB}
-   TA = _promote_type_dual(eltype.(BB)..., eltype(∂A), eltype.(∂∂BB)...)
+   TA = promote_type(eltype.(BB)..., eltype(∂A), eltype.(∂∂BB)...)
    return ( (TA, size(∂A)...),
             ntuple(i -> (TA, size(BB[i])...), NB)...)
 end
@@ -450,7 +450,7 @@ function pullback2!(∇_∂A, ∇_BB::Tuple,  # outputs
                     ∂A, basis::PooledSparseProduct{NB}, BB)  where {NB}
 
    function _dual(i)
-      T = _promote_type_dual(eltype(BB[i]), eltype(∂∂BB[i]))
+      T = promote_type(eltype(BB[i]), eltype(∂∂BB[i]))
       return Dual{T}(zero(T), one(T))
    end
 
@@ -485,15 +485,15 @@ using ForwardDiff: value
 
 function whatalloc(::typeof(pushforward!),
                    basis::PooledSparseProduct{NB}, BB, ∂BB) where {NB}
-   TA = _promote_type_dual(eltype.(BB)...)
-   T∂A = _promote_type_dual(TA, eltype.(∂BB)...)
+   TA = promote_type(eltype.(BB)...)
+   T∂A = promote_type(TA, eltype.(∂BB)...)
    return (TA, length(basis)), (T∂A, length(basis))
 end
 
 function pushforward!(A, ∂A, basis::PooledSparseProduct{NB}, BB, ∂BB) where {NB}
 
    function _dual(i)
-      T = _promote_type_dual(eltype(BB[i]), eltype(∂BB[i]))
+      T = promote_type(eltype(BB[i]), eltype(∂BB[i]))
       return Dual{T}(zero(T), one(T))
    end
 
