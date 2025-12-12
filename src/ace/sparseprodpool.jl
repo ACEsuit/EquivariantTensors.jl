@@ -65,10 +65,10 @@ end
 
 # ----------------------- evaluation and allocation interfaces 
 
-_valtype(basis::PooledSparseProduct, BB::Tuple) = 
+_valtype(basis::PooledSparseProduct, BB::Tuple) =
       mapreduce(eltype, promote_type, BB)
 
-_gradtype(basis::PooledSparseProduct, BB::Tuple) = 
+_gradtype(basis::PooledSparseProduct, BB::Tuple) =
       mapreduce(eltype, promote_type, BB)
 
 function _generate_input_1(basis::PooledSparseProduct{NB}) where {NB} 
@@ -138,7 +138,7 @@ end
 using KernelAbstractions, GPUArraysCore
 using KernelAbstractions: @atomic
 
-function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupMat, 
+function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupMat,
                    nX = size(BB[1], 1)) where {NB}
    @assert all(B->size(B, 1) >= nX, BB)
    spec = basis.spec
@@ -205,10 +205,16 @@ end
 using StaticArrays
 
 
-function whatalloc(::typeof(pullback!), 
+function whatalloc(::typeof(pullback!),
                    ∂A, basis::PooledSparseProduct{NB}, BB::TupMat) where  {NB}
    TA = promote_type(eltype.(BB)..., eltype(∂A))
-   return ntuple(i -> (TA, size(BB[i])...), NB)                   
+   return ntuple(i -> (TA, size(BB[i])...), NB)
+end
+
+function whatalloc(::typeof(pullback!),
+                   ∂A, basis::PooledSparseProduct{NB}, BB::TupVec) where  {NB}
+   TA = promote_type(eltype.(BB)..., eltype(∂A))
+   return ntuple(i -> (TA, length(BB[i])), NB)
 end
 
 function pullback(∂A, basis::PooledSparseProduct, BB)
@@ -414,7 +420,7 @@ end
 function whatalloc(::typeof(pullback2!), ∂∂BB, ∂A, 
                    basis::PooledSparseProduct{NB}, BB) where {NB}
    TA = promote_type(eltype.(BB)..., eltype(∂A), eltype.(∂∂BB)...)
-   return ( (TA, size(∂A)...), 
+   return ( (TA, size(∂A)...),
             ntuple(i -> (TA, size(BB[i])...), NB)...)
 end
 
@@ -439,8 +445,8 @@ pullback2!(∇_∂A, ∇_BB1, ∇_BB2, ∇_BB3, ∇_BB4, ∂∂BB, ∂A, basis::
       pullback2!(∇_∂A, (∇_BB1, ∇_BB2, ∇_BB3, ∇_BB4), ∂∂BB, ∂A, basis, BB) 
 
 
-function pullback2!(∇_∂A, ∇_BB::Tuple,  # outputs 
-                    ∂∂BB,    # perturbation 
+function pullback2!(∇_∂A, ∇_BB::Tuple,  # outputs
+                    ∂∂BB,    # perturbation
                     ∂A, basis::PooledSparseProduct{NB}, BB)  where {NB}
 
    function _dual(i)
@@ -477,9 +483,9 @@ end
 
 using ForwardDiff: value
 
-function whatalloc(::typeof(pushforward!), 
+function whatalloc(::typeof(pushforward!),
                    basis::PooledSparseProduct{NB}, BB, ∂BB) where {NB}
-   TA = promote_type(eltype.(BB)...) 
+   TA = promote_type(eltype.(BB)...)
    T∂A = promote_type(TA, eltype.(∂BB)...)
    return (TA, length(basis)), (T∂A, length(basis))
 end
@@ -538,8 +544,23 @@ function rrule(::typeof(pullback), Δ, basis::PooledSparseProduct, BB)
    return ∂BB, pb
 end
 
-# TODO: frules 
+# --------------------- frules for forward-mode AD
 
+import ChainRulesCore: frule, Tangent
+
+function frule((_, Δbasis, ΔBB), ::typeof(evaluate), basis::PooledSparseProduct, BB)
+   A = evaluate(basis, BB)
+   # Use existing pushforward! implementation
+   _, ∂A = @withalloc pushforward!(basis, BB, ΔBB)
+   return A, ∂A
+end
+
+function frule((_, Δbasis, ΔBB), ::typeof(evaluate!), A, basis::PooledSparseProduct, BB)
+   evaluate!(A, basis, BB)
+   # Use existing pushforward! implementation
+   _, ∂A = @withalloc pushforward!(basis, BB, ΔBB)
+   return A, ∂A
+end
 
 
 # --------------------- connect with Lux 
