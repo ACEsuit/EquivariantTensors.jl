@@ -146,9 +146,9 @@ end
 
 import ChainRulesCore: rrule, NoTangent 
 
-function whatalloc(::typeof(pullback!), 
+function whatalloc(::typeof(pullback!),
                    ∂AA, basis::SparseSymmProd, A)
-   T∂A = promote_type(eltype(∂AA), eltype(A))
+   T∂A = _promote_type_dual(eltype(∂AA), eltype(A))
    return (T∂A, size(A)... )
 end
 
@@ -207,20 +207,20 @@ end
 #  ∇_∂AA, ∇_A = pullback2(∂∇A, ∂AA, basis, A)
 #
 
-function whatalloc(::typeof(pullback2!), 
-                   ∂∇A,   # cotangent to be pulled back 
+function whatalloc(::typeof(pullback2!),
+                   ∂∇A,   # cotangent to be pulled back
                    ∂AA,   # cotangent from pullback(∂AA, basis, A)
                    basis::SparseSymmProd, A)
-   T = promote_type(eltype(∂∇A), eltype(∂AA), eltype(A))
+   T = _promote_type_dual(eltype(∂∇A), eltype(∂AA), eltype(A))
    return (T, size(∂AA)...), (T, size(A)...)
 end
 
 
 
-function pullback2!(∇_∂AA, ∇_A, 
+function pullback2!(∇_∂AA, ∇_A,
                     ∂∇A, ∂AA, basis, A)
-   @assert size(∂∇A) == size(A)                     
-   T = promote_type(eltype(∂∇A), eltype(∂AA), eltype(A))
+   @assert size(∂∇A) == size(A)
+   T = _promote_type_dual(eltype(∂∇A), eltype(∂AA), eltype(A))
    d = Dual{T}(zero(T), one(T))
    DT = typeof(d)
    @no_escape begin 
@@ -247,21 +247,21 @@ end
 
 using ForwardDiff
 
-function whatalloc(::typeof(pushforward!), 
-                   basis::SparseSymmProd, 
+function whatalloc(::typeof(pushforward!),
+                   basis::SparseSymmProd,
                    A::AbstractVector, ΔA::AbstractVector)
    nAA = length(basis)
    TAA = eltype(A)
-   T∂AA = promote_type(TAA, eltype(ΔA))
+   T∂AA = _promote_type_dual(TAA, eltype(ΔA))
    return (TAA, nAA), (T∂AA, nAA)
 end
 
-function whatalloc(::typeof(pushforward!), 
-                   basis::SparseSymmProd, 
+function whatalloc(::typeof(pushforward!),
+                   basis::SparseSymmProd,
                    A::AbstractMatrix, ΔA::AbstractMatrix)
    nAA = length(basis)
    TAA = eltype(A)
-   T∂AA = promote_type(TAA, eltype(ΔA))
+   T∂AA = _promote_type_dual(TAA, eltype(ΔA))
    nX = size(A, 1)
    return (TAA, nX, nAA), (T∂AA, nX, nAA)
 end
@@ -270,7 +270,7 @@ end
 function pushforward!(AA, ∂AA, basis::SparseSymmProd, A, ∂A)
    @assert size(∂A) == size(A)
    @assert size(∂AA) == size(AA)
-   T = promote_type(eltype(A), eltype(∂A))
+   T = _promote_type_dual(eltype(A), eltype(∂A))
    d = Dual{T}(zero(T), one(T))
    DT = typeof(d)
    @no_escape begin 
@@ -301,7 +301,7 @@ function rrule(::typeof(evaluate), basis::SparseSymmProd, A)
    return AA, pb
 end
 
-function rrule(::typeof(pullback), ∂AA, basis::SparseSymmProd, A) 
+function rrule(::typeof(pullback), ∂AA, basis::SparseSymmProd, A)
    ∂A = pullback(∂AA, basis, A)
    function pb(∂∂A)
       ∂²∂AA, ∂²A = pullback2(∂∂A, ∂AA, basis, A)
@@ -310,6 +310,23 @@ function rrule(::typeof(pullback), ∂AA, basis::SparseSymmProd, A)
    return ∂A, pb
 end
 
+
+# -------------- frules for ForwardDiff compatibility
+
+import ChainRulesCore: frule
+
+function frule((_, Δbasis, ΔA), ::typeof(evaluate), basis::SparseSymmProd, A)
+   # Use existing pushforward! implementation
+   AA, ∂AA = @withalloc pushforward!(basis, A, ΔA)
+   return AA, ∂AA
+end
+
+function frule((_, ΔAA, Δbasis, ΔA), ::typeof(evaluate!), AA, basis::SparseSymmProd, A)
+   evaluate!(AA, basis, A)
+   # Use existing pushforward! to compute derivative
+   _, ∂AA = @withalloc pushforward!(basis, A, ΔA)
+   return AA, ∂AA
+end
 
 
 # -------------- Lux integration 

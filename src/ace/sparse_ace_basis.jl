@@ -63,7 +63,7 @@ initialstates(rng::AbstractRNG, bas::SparseACEbasis) =
 #=
 function evaluate!(B, tensor::SparseACEbasis{T}, Rnl, Ylm) where {T}
    # evaluate the A basis
-   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -74,13 +74,13 @@ function evaluate!(B, tensor::SparseACEbasis{T}, Rnl, Ylm) where {T}
    # evaluate the coupling coefficients
    # B = tensor.A2Bmap * AA
 
-   mul!(B, tensor.A2Bmap, AA)   
+   mul!(B, tensor.A2Bmap, AA)
 
    return B
 end
 
 function whatalloc(::typeof(evaluate!), tensor::SparseACEbasis, Rnl, Ylm)
-   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm))
    TB = _promote_mul_type(TA, eltype(tensor.A2Bmap))
    return TB, length(tensor)
 end
@@ -99,11 +99,10 @@ end
 =#
 
 function evaluate(tensor::SparseACEbasis, Rnl, Ylm, ps, st)
-   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm))
    A = ka_evaluate(tensor.abasis, (Rnl, Ylm))
 
    # evaluate the AA basis
-   # AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
    AA = ka_evaluate(tensor.aabasis, A)
 
    # evaluate the coupling coefficients
@@ -148,7 +147,7 @@ function pullback!(∂Rnl, ∂Ylm,
    T_∂AA = eltype(∂AA)
 
    # ∂Ei / ∂A = ∂Ei / ∂AA * ∂AA / ∂A = pullback(aabasis, ∂AA)
-   T_∂A = promote_type(T_∂AA, eltype(A))
+   T_∂A = _promote_type_dual(T_∂AA, eltype(A))
    ∂A = @alloc(T_∂A, length(tensor.abasis))
    pullback!(∂A, ∂AA, tensor.aabasis, A)
    
@@ -167,7 +166,7 @@ function whatalloc(::typeof(pullback!),
    # TODO: may need to check the type of ∂BB too, but this is a bit 
    #       tricky because of the SVectors that can be in there...
    TB = eltype.(eltype.(∂BB))
-   TA = promote_type(eltype(Rnl), eltype(Ylm), TB...)
+   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm), TB...)
    return (TA, size(Rnl)...), (TA, size(Ylm)...)
 end
 
@@ -185,7 +184,7 @@ using ChainRulesCore: unthunk
 function rrule(::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
 
    # evaluate the A basis
-   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
+   TA = _promote_type_dual(eltype(Rnl), eltype(eltype(Ylm)))
    A = zeros(TA, length(tensor.abasis))    # use Bumper here
    evaluate!(A, tensor.abasis, (Rnl, Ylm))
 
@@ -202,6 +201,108 @@ function rrule(::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
    end
    return BB, pb
 end
+
+# rrule for 3D array inputs (batched evaluation) - delegates to ka_evaluate
+function rrule(::typeof(evaluate), tensor::SparseACEbasis,
+               Rnl::Array{T, 3}, Ylm::Array{T, 3}, ps, st) where {T}
+   # Delegate to ka_evaluate which has its own rrule
+   𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl, Ylm,
+                          st.aspec, st.aaspecs, st.A2Bmaps)
+
+   function pb_3d(∂out)
+      ∂𝔹 = ∂out[1]  # gradient w.r.t. 𝔹 (∂out[2] is for st which is NoTangent)
+      ∂Rnl, ∂Ylm = _ka_pullback(∂𝔹, tensor, Rnl, Ylm, A, 𝔸,
+                                st.aspec, st.aaspecs, st.A2Bmaps)
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, NoTangent(), NoTangent()
+   end
+
+   return (𝔹, st), pb_3d
+end
+
+# -------------- frules for ForwardDiff compatibility
+
+import ChainRulesCore: frule
+
+function frule((_, Δtensor, ΔRnl, ΔYlm, Δps, Δst),
+               ::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
+   # Forward pass with tangent computation using chain rule
+   # 1. A = abasis(Rnl, Ylm)
+   #    ∂A = ∂abasis/∂Rnl * ΔRnl + ∂abasis/∂Ylm * ΔYlm
+   # 2. AA = aabasis(A)
+   #    ∂AA = ∂aabasis/∂A * ∂A
+   # 3. BB = A2Bmaps .* AA
+   #    ∂BB = A2Bmaps .* ∂AA
+
+   TA = _promote_type_dual(eltype(Rnl), eltype(Ylm))
+
+   # Forward pass through A basis
+   A = zeros(TA, length(tensor.abasis))
+   evaluate!(A, tensor.abasis, (Rnl, Ylm))
+
+   # Compute tangent of A using frule or direct differentiation
+   # For the pooled sparse product: A[i] = ∑_α Rnl[α, n] * Ylm[α, l]
+   # ∂A[i] = ∑_α (ΔRnl[α, n] * Ylm[α, l] + Rnl[α, n] * ΔYlm[α, l])
+   T∂A = _promote_type_dual(eltype(ΔRnl), eltype(ΔYlm), eltype(Rnl), eltype(Ylm))
+   ∂A = zeros(T∂A, length(tensor.abasis))
+   _pushforward_abasis!(∂A, tensor.abasis, Rnl, Ylm, ΔRnl, ΔYlm)
+
+   # Forward pass through AA basis
+   AA = zeros(TA, length(tensor.aabasis))
+   evaluate!(AA, tensor.aabasis, A)
+
+   # Compute tangent of AA using chain rule through SparseSymmProd
+   # AA[i] = ∏_t A[ϕ_t(i)]
+   # ∂AA[i] = AA[i] * ∑_t (∂A[ϕ_t(i)] / A[ϕ_t(i)])
+   ∂AA = zeros(T∂A, length(tensor.aabasis))
+   _pushforward_aabasis!(∂AA, tensor.aabasis, A, ∂A)
+
+   # Apply coupling coefficients: BB = A2Bmaps .* AA
+   BB = tensor.A2Bmaps .* Ref(AA)
+   ∂BB = tensor.A2Bmaps .* Ref(∂AA)
+
+   return BB, ∂BB
+end
+
+# Helper: pushforward through the A (pooled sparse product) basis
+function _pushforward_abasis!(∂A, abasis, Rnl, Ylm, ΔRnl, ΔYlm)
+   for (iA, (n, l)) in enumerate(abasis.spec)
+      ∂a = zero(eltype(∂A))
+      for α in axes(Rnl, 1)
+         ∂a += ΔRnl[α, n] * Ylm[α, l] + Rnl[α, n] * ΔYlm[α, l]
+      end
+      ∂A[iA] = ∂a
+   end
+   return ∂A
+end
+
+# Helper: pushforward through the AA (sparse symmetric product) basis
+# We compute both AA and ∂AA simultaneously to avoid redundant evaluation
+function _pushforward_aabasis!(∂AA, aabasis, A, ∂A)
+   num1 = aabasis.num1
+   nodes = aabasis.nodes
+
+   # We need the AA values as we go, so compute them in a temporary
+   # The first num1 elements of "nodes" correspond to A[1:num1]
+   TAA = eltype(A)
+   AA_local = zeros(TAA, length(nodes))
+
+   # First num1 elements are just copies of A
+   for i = 1:num1
+      AA_local[i] = A[i]
+      ∂AA[i] = ∂A[i]
+   end
+
+   # Higher order terms use the DAG structure
+   for iAA = num1+1:length(nodes)
+      n1, n2 = nodes[iAA]
+      # AA[iAA] = AA[n1] * AA[n2]
+      AA_local[iAA] = AA_local[n1] * AA_local[n2]
+      # ∂AA[iAA] = ∂AA[n1] * AA[n2] + AA[n1] * ∂AA[n2]
+      ∂AA[iAA] = ∂AA[n1] * AA_local[n2] + AA_local[n1] * ∂AA[n2]
+   end
+   return ∂AA
+end
+
 
 const NT_NL_SPEC = NamedTuple{(:n, :l), Tuple{Int, Int}}
 
