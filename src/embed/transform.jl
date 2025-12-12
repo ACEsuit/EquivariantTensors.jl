@@ -1,12 +1,12 @@
 #
-# TODO: to be retired 
+# TODO: to be retired
 #       replace with simple Chain and SkipConnection layers.
 #
-# Only keep the NTtransform 
+# Only keep the NTtransform
 #
 
 
-import ForwardDiff as FD 
+import ForwardDiff as FD
 
 """
    struct TransformedBasis
@@ -155,17 +155,32 @@ evaluate_ed(l::NTtransform, x::NamedTuple, ps, st) =
       (l.f(x), DiffNT.grad_fd(l.f, x))
 
 
-function rrule(trans::typeof(NTtransform), X::AbstractVector{<: NamedTuple}, ps, st) 
+function rrule(trans::NTtransform, X::AbstractVector{<: NamedTuple}, ps, st)
    @assert ps == NamedTuple() "NTtransform cannot have parameters"
+   # Forward pass: returns (Y, st) tuple
    Y = map(trans.f, X)
-   dY = map(x -> DiffNT.grad_fd(trans.f, x), X)
 
-   function _pb_X(∂Y)
-      ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
+   function _pb_nttransform(∂out)
+      # ∂out is gradient of (Y, st) tuple
+      # Extract gradient of Y
+      ∂Y = if ∂out isa Tuple
+         ∂out[1]
+      elseif ∂out isa ChainRulesCore.Tangent
+         ∂out[1]
+      else
+         ∂out  # fallback
+      end
+
+      # Unthunk if necessary
+      ∂Y_unthunked = ChainRulesCore.unthunk(∂Y)
+
+      # Compute gradient w.r.t. X element-wise using VJP
+      # This works for both scalar and vector-valued functions
+      ∂X = map( (x, ∂y) -> DiffNT.vjp_fd(trans.f, x, ∂y), X, ∂Y_unthunked )
       return NoTangent(), ∂X, NoTangent(), NoTangent()
    end
 
-   return Y, _pb_X 
+   return (Y, st), _pb_nttransform
 end
 
 
@@ -212,20 +227,35 @@ initialstates(rng::AbstractRNG, l::NTtransformST) = deepcopy(l.refstate)
 evaluate(l::NTtransformST, x::NamedTuple, ps, st) = 
          l.f(x, st)
 
-evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) = 
+evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) =
          (l.f(x, st), DiffNT.grad_fd(l.f, x, st))
 
 
-function rrule(trans::typeof(NTtransformST), X::AbstractVector{<: NamedTuple}, ps, st) 
+function rrule(trans::NTtransformST, X::AbstractVector{<: NamedTuple}, ps, st)
    @assert ps == NamedTuple() "NTtransformST cannot have parameters"
-   # TODO: rewrite this using a single Dual number evaluation 
-   Y = trans(X, st)   # map(x -> l.f(x, st), x)
-   dY = map(x -> DiffNT.grad_fd(trans.f, x, st), X)
+   # Forward pass: returns (Y, st) tuple
+   Y = map(x -> trans.f(x, st), X)
 
-   function _pb_X(∂Y)
-      ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
+   function _pb_nttransformst(∂out)
+      # ∂out is gradient of (Y, st) tuple
+      # Extract gradient of Y (∂out[1] or first element)
+      # Handle both Tuple and ChainRulesCore.Tangent types
+      ∂Y = if ∂out isa Tuple
+         ∂out[1]
+      elseif ∂out isa ChainRulesCore.Tangent
+         ∂out[1]
+      else
+         ∂out  # fallback: assume ∂out is just ∂Y
+      end
+
+      # Unthunk if necessary
+      ∂Y_unthunked = ChainRulesCore.unthunk(∂Y)
+
+      # Compute gradient w.r.t. X element-wise using VJP
+      # This works for both scalar and vector-valued functions
+      ∂X = map( (x, ∂y) -> DiffNT.vjp_fd(trans.f, x, ∂y, st), X, ∂Y_unthunked )
       return NoTangent(), ∂X, NoTangent(), NoTangent()
    end
 
-   return Y, _pb_X 
+   return (Y, st), _pb_nttransformst
 end

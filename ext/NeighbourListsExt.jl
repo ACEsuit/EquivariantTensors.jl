@@ -34,16 +34,37 @@ function ET.Atoms.nlist2graph(nlist::NeighbourLists.PairList, sys::AbstractSyste
 end 
 
 function ET.Atoms.forces_from_edge_grads(sys::AbstractSystem, G::ET.ETGraph, ∇E_edges)
-   
-   TFRC = typeof(∇E_edges[1].𝐫)
-   F = zeros(TFRC, length(sys)) 
+   # Given 𝐫_ij = X_j - X_i, and F = -∂E/∂X:
+   # F[i] = -∂E/∂X_i = +∂E/∂𝐫_ij (since ∂𝐫_ij/∂X_i = -I)
+   # F[j] = -∂E/∂X_j = -∂E/∂𝐫_ij (since ∂𝐫_ij/∂X_j = +I)
 
-   for (i, j, e) in zip(G.ii, G.jj, ∇E_edges) 
-      F[i] -= e.𝐫
-      F[j] += e.𝐫
+   TFRC = typeof(∇E_edges[1].𝐫)
+   F = zeros(TFRC, length(sys))
+
+   for (i, j, e) in zip(G.ii, G.jj, ∇E_edges)
+      F[i] += e.𝐫
+      F[j] -= e.𝐫
    end
 
    return F
+end
+
+function ET.Atoms.virial_from_edge_grads(G::ET.ETGraph, ∇E_edges)
+   # Virial stress tensor: σ = -∑_edges (∂E/∂𝐫_ij) ⊗ 𝐫_ij
+   # where 𝐫_ij is the edge position vector and ⊗ is outer product
+
+   T = eltype(∇E_edges[1].𝐫)
+   virial = zeros(T, 3, 3)
+
+   for (edge_data, ∇E_edge) in zip(G.edge_data, ∇E_edges)
+      𝐫ij = edge_data.𝐫
+      ∂E_∂𝐫 = ∇E_edge.𝐫
+      for α in 1:3, β in 1:3
+         virial[α, β] -= ∂E_∂𝐫[α] * 𝐫ij[β]
+      end
+   end
+
+   return virial
 end
 
 end

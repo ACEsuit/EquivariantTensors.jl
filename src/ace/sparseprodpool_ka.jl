@@ -141,8 +141,8 @@ end
 #
 @kernel function _ka_pullback_PooledSparseProduct_v1!(
                   ∂BB, ∂A, BB, spec, nX, nneig, ::Val{NB}) where {NB}
-   inode, ineig = @index(Global, NTuple) 
-   for iA = 1:length(spec) 
+   inode, ineig = @index(Global, NTuple)
+   for iA = 1:length(spec)
       ϕ = spec[iA]
       b = ntuple(t -> BB[t][ineig, inode, ϕ[t]], NB)
       p, ∇prod = _static_prod_ed(b)
@@ -151,5 +151,38 @@ end
          ∂BB[t][ineig, inode, ϕ[t]] += ∂A[inode, iA] * ∇prod[t]
       end
    end
-   nothing 
-end 
+   nothing
+end
+
+
+# ---------------------------------
+#  ChainRulesCore rrule for ka_evaluate (TupTen3 version)
+import ChainRulesCore: rrule, NoTangent
+
+function rrule(::typeof(ka_evaluate), basis::PooledSparseProduct{NB},
+               BB::TupTen3, spec, nX, nneig) where {NB}
+   A = ka_evaluate(basis, BB, spec, nX, nneig)
+
+   function ka_evaluate_pb(∂A)
+      ∂BB = ka_pullback(∂A, basis, BB, spec, nX, nneig)
+      return NoTangent(), NoTangent(), ∂BB, NoTangent(), NoTangent(), NoTangent()
+   end
+
+   return A, ka_evaluate_pb
+end
+
+# rrule for ka_evaluate with default arguments
+function rrule(::typeof(ka_evaluate), basis::PooledSparseProduct{NB},
+               BB::TupTen3) where {NB}
+   spec = basis.spec
+   nX = size(BB[1], 2)
+   nneig = size(BB[1], 1)
+   A = ka_evaluate(basis, BB, spec, nX, nneig)
+
+   function ka_evaluate_pb(∂A)
+      ∂BB = ka_pullback(∂A, basis, BB, spec, nX, nneig)
+      return NoTangent(), NoTangent(), ∂BB
+   end
+
+   return A, ka_evaluate_pb
+end

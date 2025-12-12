@@ -74,6 +74,28 @@ function rrule(::typeof(_ka_evaluate), tensor::SparseACEbasis,
       return (∂Rnl, ∂Ylm, )
    end
 
-   return (𝔹, A, 𝔸), ∂𝔹A𝔸 -> (NoTangent(), NoTangent(), _pb(∂𝔹A𝔸)..., 
+   return (𝔹, A, 𝔸), ∂𝔹A𝔸 -> (NoTangent(), NoTangent(), _pb(∂𝔹A𝔸)...,
                               NoTangent(), NoTangent(), NoTangent())
+end
+
+
+#
+# rrule for the outer ka_evaluate function (wrapper for _ka_evaluate)
+# This is needed because evaluate(tensor, Rnl::Array{T,3}, Ylm::Array{T,3}, ps, st)
+# calls ka_evaluate, and we need Zygote to find this rrule
+#
+function rrule(::typeof(ka_evaluate), tensor::SparseACEbasis,
+               Rnl_3, Ylm_3, ps, st)
+   # Forward pass
+   𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl_3, Ylm_3,
+                          st.aspec, st.aaspecs, st.A2Bmaps)
+
+   function ka_pb(∂out)
+      ∂𝔹 = ∂out[1]  # gradient w.r.t. 𝔹 (∂out[2] is for st which is NoTangent)
+      ∂Rnl, ∂Ylm = _ka_pullback(∂𝔹, tensor, Rnl_3, Ylm_3, A, 𝔸,
+                                st.aspec, st.aaspecs, st.A2Bmaps)
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, NoTangent(), NoTangent()
+   end
+
+   return (𝔹, st), ka_pb
 end

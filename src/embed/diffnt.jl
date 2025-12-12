@@ -151,17 +151,55 @@ end
 """
    grad_fd(f, x::NamedTuple, args...)
 
-`ForwardDiff` gradient of a function `f` with respect to the continuous 
-variables stored in the NamedTuple `x`; returns a NamedTuple with 
-the gradient values corresponding to the continuous variables in `x`. 
-The `args...` are taken as constant paramteters during this differentiation. 
+`ForwardDiff` gradient of a function `f` with respect to the continuous
+variables stored in the NamedTuple `x`; returns a NamedTuple with
+the gradient values corresponding to the continuous variables in `x`.
+The `args...` are taken as constant paramteters during this differentiation.
+
+NOTE: This only works for scalar-valued functions f: NamedTuple -> R.
+For vector-valued functions, use `vjp_fd` instead.
 """
 function grad_fd(f, x::NamedTuple, args...)
-   v_nt = _ctsnt(x)  # extract continuous variables into an SVector 
+   v_nt = _ctsnt(x)  # extract continuous variables into an SVector
    _fvec = _v -> f(_replace(x, _svec2nt(_v, v_nt)), args...)
    g = ForwardDiff.gradient(_fvec, _nt2svec(v_nt))
    return _svec2nt(g, v_nt)  # return as NamedTuple
-end 
+end
+
+
+"""
+   vjp_fd(f, x::NamedTuple, ∂y, args...)
+
+Vector-Jacobian Product using `ForwardDiff` for a function `f` with respect
+to the continuous variables stored in the NamedTuple `x`.
+Given ∂y (the gradient w.r.t. output), returns ∂x = J^T * ∂y as a NamedTuple.
+
+This works for both scalar-valued and vector-valued functions:
+- Scalar f: NamedTuple -> R : same as grad_fd(f, x) scaled by ∂y
+- Vector f: NamedTuple -> R^m : computes J^T * ∂y where J is the Jacobian
+"""
+function vjp_fd(f, x::NamedTuple, ∂y, args...)
+   v_nt = _ctsnt(x)  # extract continuous variables into a NamedTuple
+   v = _nt2svec(v_nt)  # flatten to SVector
+   _fvec = _v -> f(_replace(x, _svec2nt(_v, v_nt)), args...)
+
+   y = _fvec(v)  # evaluate to determine output type
+
+   if y isa Number
+      # Scalar output: use gradient directly
+      g = ForwardDiff.gradient(_fvec, v)
+      return _svec2nt(g .* ∂y, v_nt)
+   else
+      # Vector/array output: use Jacobian
+      # For SVector output, ForwardDiff.jacobian returns a matrix
+      # We need J^T * ∂y
+      J = ForwardDiff.jacobian(_fvec, v)
+      # J is (output_dim, input_dim), ∂y is (output_dim,)
+      # J^T * ∂y is (input_dim,)
+      ∂v = J' * collect(∂y)  # collect in case ∂y is SVector
+      return _svec2nt(SVector{length(∂v)}(∂v...), v_nt)
+   end
+end
 
 
 end 

@@ -129,17 +129,48 @@ end
 #
 # TODO: must replace this with an optimized scatter/gather operation!!!
 #
-@kernel function _ka_pullback_SparseSymmProd_v1!(∂A, ∂AA, A, 
+@kernel function _ka_pullback_SparseSymmProd_v1!(∂A, ∂AA, A,
                                               spec, ::Val{N}, offset) where {N}
    iX = @index(Global)
    for iAA = 1:length(spec)
       ∂AA_cur = ∂AA[iX, offset+iAA-1]
-      ϕ = spec[iAA]   # NTuple{N, Int}                                       
+      ϕ = spec[iAA]   # NTuple{N, Int}
       aa = ntuple(t -> A[iX, ϕ[t]], N)  # extract values from A
-      _, ∇prod = _static_prod_ed(aa) 
-      for j = 1:N 
+      _, ∇prod = _static_prod_ed(aa)
+      for j = 1:N
          ∂A[iX, ϕ[j]] += ∂AA_cur * ∇prod[j]
       end
    end
-   nothing 
+   nothing
+end
+
+
+# ---------------------------------
+#  ChainRulesCore rrule for ka_evaluate
+import ChainRulesCore: rrule, NoTangent
+
+function rrule(::typeof(ka_evaluate), basis::SparseSymmProd{ORD}, A::AbstractMatrix,
+               specs) where {ORD}
+   AA = ka_evaluate(basis, A, specs)
+
+   function ka_evaluate_pb(∂AA)
+      ∂A = ka_pullback(∂AA, basis, A, specs)
+      return NoTangent(), NoTangent(), ∂A, NoTangent()
+   end
+
+   return AA, ka_evaluate_pb
+end
+
+# rrule for ka_evaluate with default arguments
+function rrule(::typeof(ka_evaluate), basis::SparseSymmProd{ORD},
+               A::AbstractMatrix) where {ORD}
+   specs = basis.specs
+   AA = ka_evaluate(basis, A, specs)
+
+   function ka_evaluate_pb(∂AA)
+      ∂A = ka_pullback(∂AA, basis, A, specs)
+      return NoTangent(), NoTangent(), ∂A
+   end
+
+   return AA, ka_evaluate_pb
 end

@@ -18,7 +18,7 @@ function nlist2graph end
 
 function forces_from_edge_grads end
 
-
+function virial_from_edge_grads end
 
 
 end 

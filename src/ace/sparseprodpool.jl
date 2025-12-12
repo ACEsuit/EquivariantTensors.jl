@@ -205,10 +205,16 @@ end
 using StaticArrays
 
 
-function whatalloc(::typeof(pullback!), 
+function whatalloc(::typeof(pullback!),
                    ∂A, basis::PooledSparseProduct{NB}, BB::TupMat) where  {NB}
    TA = promote_type(eltype.(BB)..., eltype(∂A))
-   return ntuple(i -> (TA, size(BB[i])...), NB)                   
+   return ntuple(i -> (TA, size(BB[i])...), NB)
+end
+
+function whatalloc(::typeof(pullback!),
+                   ∂A, basis::PooledSparseProduct{NB}, BB::TupVec) where  {NB}
+   TA = promote_type(eltype.(BB)..., eltype(∂A))
+   return ntuple(i -> (TA, length(BB[i])), NB)
 end
 
 function pullback(∂A, basis::PooledSparseProduct, BB)
@@ -234,12 +240,25 @@ pullback!(∂B1, ∂B2, ∂A, basis::PooledSparseProduct{2}, BB::TupMat) =
 pullback!(∂B1, ∂B2, ∂B3, ∂A, basis::PooledSparseProduct{3}, BB::TupMat) = 
          pullback!((∂B1, ∂B2, ∂B3,), ∂A, basis, BB)
 
-pullback!(∂B1, ∂B2, ∂B3, ∂B4, ∂A, basis::PooledSparseProduct{4}, BB::TupMat) = 
+pullback!(∂B1, ∂B2, ∂B3, ∂B4, ∂A, basis::PooledSparseProduct{4}, BB::TupMat) =
+         pullback!((∂B1, ∂B2, ∂B3, ∂B4,), ∂A, basis, BB)
+
+# TupVec helper methods (for vector inputs - no pooling)
+pullback!(∂B1::AbstractVector, ∂A, basis::PooledSparseProduct{1}, BB::TupVec) =
+         pullback!((∂B1,), ∂A, basis, BB)
+
+pullback!(∂B1, ∂B2, ∂A, basis::PooledSparseProduct{2}, BB::TupVec) =
+         pullback!((∂B1, ∂B2,), ∂A, basis, BB)
+
+pullback!(∂B1, ∂B2, ∂B3, ∂A, basis::PooledSparseProduct{3}, BB::TupVec) =
+         pullback!((∂B1, ∂B2, ∂B3,), ∂A, basis, BB)
+
+pullback!(∂B1, ∂B2, ∂B3, ∂B4, ∂A, basis::PooledSparseProduct{4}, BB::TupVec) =
          pullback!((∂B1, ∂B2, ∂B3, ∂B4,), ∂A, basis, BB)
 
 
-function pullback!(∂BB::Tuple, # output 
-                   ∂A, basis::PooledSparseProduct{NB}, BB::TupMat # inputs 
+function pullback!(∂BB::Tuple, # output
+                   ∂A, basis::PooledSparseProduct{NB}, BB::TupMat # inputs
                    ) where {NB}
    nX = size(BB[1], 1)
    @assert all(nX <= size(BB[i], 1) for i = 1:NB)
@@ -398,20 +417,157 @@ function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{4}, BB::TupMat
          ∂B2[j, ϕ2] = muladd(∂A_iA, b1*b3*b4, ∂B2[j, ϕ2])
          ∂B3[j, ϕ3] = muladd(∂A_iA, b1*b2*b4, ∂B3[j, ϕ3])
          ∂B4[j, ϕ4] = muladd(∂A_iA, b1*b2*b3, ∂B4[j, ϕ4])
-      end 
+      end
    end
-   return ∂BB 
+   return ∂BB
+end
+
+
+# -------------------- TupVec pullback implementations (no pooling)
+# For vector inputs, there's no pooling over rows - each spec element
+# maps directly to a product of vector elements
+
+# Generic TupVec pullback
+function pullback!(∂BB::Tuple, # output
+                   ∂A, basis::PooledSparseProduct{NB}, BB::TupVec # inputs
+                   ) where {NB}
+   @assert all(length(BB[i]) >= maximum(ϕ[i] for ϕ in basis.spec) for i = 1:NB)
+   @assert all(length(∂BB[i]) >= length(BB[i]) for i = 1:NB)
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == NB
+   @assert length(∂BB) == NB
+
+   for i = 1:NB
+      fill!(∂BB[i], zero(eltype(∂BB[i])))
+   end
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      b = ntuple(Val(NB)) do i
+         BB[i][ϕ[i]]
+      end
+      _, g = _static_prod_ed(b)
+      for i = 1:NB
+         ϕi = ϕ[i]
+         ∂BB[i][ϕi] = muladd(∂A_iA, g[i], ∂BB[i][ϕi])
+      end
+   end
+   return ∂BB
+end
+
+# NB = 1 specialized for correctness
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{1}, BB::TupVec)
+   NB = 1
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == length(∂BB) == NB
+
+   BB1 = BB[1]
+   ∂BB1 = ∂BB[1]
+
+   fill!(∂BB1, zero(eltype(∂BB1)))
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      ϕ1 = ϕ[1]
+      # A[iA] = b1, so ∂BB1[ϕ1] += ∂A_iA
+      ∂BB1[ϕ1] += ∂A_iA
+   end
+   return ∂BB
+end
+
+# NB = 2 specialized for performance
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{2}, BB::TupVec)
+   NB = 2
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == length(∂BB) == NB
+
+   BB1, BB2 = BB
+   ∂BB1, ∂BB2 = ∂BB
+
+   for i = 1:length(∂BB)
+      fill!(∂BB[i], zero(eltype(∂BB[i])))
+   end
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      ϕ1 = ϕ[1]
+      ϕ2 = ϕ[2]
+      b1 = BB1[ϕ1]
+      b2 = BB2[ϕ2]
+      ∂BB1[ϕ1] = muladd(∂A_iA, b2, ∂BB1[ϕ1])
+      ∂BB2[ϕ2] = muladd(∂A_iA, b1, ∂BB2[ϕ2])
+   end
+   return ∂BB
+end
+
+# NB = 3 specialized for performance
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{3}, BB::TupVec)
+   NB = 3
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == length(∂BB) == NB
+
+   B1, B2, B3 = BB
+   ∂B1, ∂B2, ∂B3 = ∂BB
+
+   for i = 1:length(∂BB)
+      fill!(∂BB[i], zero(eltype(∂BB[i])))
+   end
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      ϕ1 = ϕ[1]
+      ϕ2 = ϕ[2]
+      ϕ3 = ϕ[3]
+      b1 = B1[ϕ1]
+      b2 = B2[ϕ2]
+      b3 = B3[ϕ3]
+      ∂B1[ϕ1] = muladd(∂A_iA, b2*b3, ∂B1[ϕ1])
+      ∂B2[ϕ2] = muladd(∂A_iA, b1*b3, ∂B2[ϕ2])
+      ∂B3[ϕ3] = muladd(∂A_iA, b1*b2, ∂B3[ϕ3])
+   end
+   return ∂BB
+end
+
+# NB = 4 specialized for performance
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{4}, BB::TupVec)
+   NB = 4
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == length(∂BB) == NB
+
+   B1, B2, B3, B4 = BB
+   ∂B1, ∂B2, ∂B3, ∂B4 = ∂BB
+
+   for i = 1:length(∂BB)
+      fill!(∂BB[i], zero(eltype(∂BB[i])))
+   end
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      ϕ1 = ϕ[1]
+      ϕ2 = ϕ[2]
+      ϕ3 = ϕ[3]
+      ϕ4 = ϕ[4]
+      b1 = B1[ϕ1]
+      b2 = B2[ϕ2]
+      b3 = B3[ϕ3]
+      b4 = B4[ϕ4]
+      ∂B1[ϕ1] = muladd(∂A_iA, b2*b3*b4, ∂B1[ϕ1])
+      ∂B2[ϕ2] = muladd(∂A_iA, b1*b3*b4, ∂B2[ϕ2])
+      ∂B3[ϕ3] = muladd(∂A_iA, b1*b2*b4, ∂B3[ϕ3])
+      ∂B4[ϕ4] = muladd(∂A_iA, b1*b2*b3, ∂B4[ϕ4])
+   end
+   return ∂BB
 end
 
 
 # ---------------------------------------------------------------
-#  reverse over reverse 
+#  reverse over reverse
 
 #    A = evaluate(basis, BB)
-#  ∂BB = pullback(∂A, basis, BB) 
+#  ∂BB = pullback(∂A, basis, BB)
 # ∂∂BB is the perturbation to ∂BB
 
-function whatalloc(::typeof(pullback2!), ∂∂BB, ∂A, 
+function whatalloc(::typeof(pullback2!), ∂∂BB, ∂A,
                    basis::PooledSparseProduct{NB}, BB) where {NB}
    TA = promote_type(eltype.(BB)..., eltype(∂A), eltype.(∂∂BB)...)
    return ( (TA, size(∂A)...), 
@@ -521,9 +677,20 @@ function rrule(::typeof(evaluate), basis::PooledSparseProduct{NB}, BB::TupMat) w
    function pb(Δ)
       ∂BB = pullback(Δ, basis, BB)
       return NoTangent(), NoTangent(), ∂BB
-   end 
+   end
 
-   return A, pb 
+   return A, pb
+end
+
+function rrule(::typeof(evaluate), basis::PooledSparseProduct{NB}, BB::TupVec) where {NB}
+   A = evaluate(basis, BB)
+
+   function pb(Δ)
+      ∂BB = pullback(Δ, basis, BB)
+      return NoTangent(), NoTangent(), ∂BB
+   end
+
+   return A, pb
 end
 
 

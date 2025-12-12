@@ -198,9 +198,26 @@ function rrule(::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
 
    function pb(∂BB)
       ∂Rnl, ∂Ylm = pullback(unthunk.(∂BB), tensor, Rnl, Ylm, A)
-      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, ZeroTangent(), NoTangent() 
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, ZeroTangent(), NoTangent()
    end
    return BB, pb
+end
+
+# rrule for 3D array inputs (batched evaluation) - delegates to ka_evaluate
+function rrule(::typeof(evaluate), tensor::SparseACEbasis,
+               Rnl::Array{T, 3}, Ylm::Array{T, 3}, ps, st) where {T}
+   # Delegate to ka_evaluate which has its own rrule
+   𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl, Ylm,
+                          st.aspec, st.aaspecs, st.A2Bmaps)
+
+   function pb_3d(∂out)
+      ∂𝔹 = ∂out[1]  # gradient w.r.t. 𝔹 (∂out[2] is for st which is NoTangent)
+      ∂Rnl, ∂Ylm = _ka_pullback(∂𝔹, tensor, Rnl, Ylm, A, 𝔸,
+                                st.aspec, st.aaspecs, st.A2Bmaps)
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, NoTangent(), NoTangent()
+   end
+
+   return (𝔹, st), pb_3d
 end
 
 const NT_NL_SPEC = NamedTuple{(:n, :l), Tuple{Int, Int}}
