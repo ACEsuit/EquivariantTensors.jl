@@ -368,34 +368,34 @@ function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{3}, BB::TupMat
    return ∂BB 
 end
 
-function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{4}, BB::TupMat; 
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{4}, BB::TupMat;
                               sizecheck = true)
    nX = size(BB[1], 1)
-   NB = 4 
+   NB = 4
 
-   if sizecheck 
+   if sizecheck
       @assert all(nX <= size(BB[i], 1) for i = 1:NB)
       @assert all(nX <= size(∂BB[i], 1) for i = 1:NB)
       @assert all(size(∂BB[i], 2) >= size(BB[i], 2) for i = 1:NB)
       @assert length(∂A) == length(basis)
-      @assert length(BB) == NB 
-      @assert length(∂BB) == NB 
+      @assert length(BB) == NB
+      @assert length(∂BB) == NB
    end
 
    for i = 1:length(∂BB)
       fill!(∂BB[i], zero(eltype(∂BB[i])))
    end
-   
+
    B1 = BB[1]; B2 = BB[2]; B3 = BB[3]; B4 = BB[4]
    ∂B1 = ∂BB[1]; ∂B2 = ∂BB[2]; ∂B3 = ∂BB[3]; ∂B4 = ∂BB[4]
-   
+
    @inbounds for (iA, ϕ) in enumerate(basis.spec)
       ∂A_iA = ∂A[iA]
       ϕ1 = ϕ[1]
       ϕ2 = ϕ[2]
       ϕ3 = ϕ[3]
       ϕ4 = ϕ[4]
-      @simd ivdep for j = 1:nX 
+      @simd ivdep for j = 1:nX
          b1 = B1[j, ϕ1]
          b2 = B2[j, ϕ2]
          b3 = B3[j, ϕ3]
@@ -404,9 +404,158 @@ function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{4}, BB::TupMat
          ∂B2[j, ϕ2] = muladd(∂A_iA, b1*b3*b4, ∂B2[j, ϕ2])
          ∂B3[j, ϕ3] = muladd(∂A_iA, b1*b2*b4, ∂B3[j, ϕ3])
          ∂B4[j, ϕ4] = muladd(∂A_iA, b1*b2*b3, ∂B4[j, ϕ4])
-      end 
+      end
    end
-   return ∂BB 
+   return ∂BB
+end
+
+# -------------------- reverse mode gradient for vectors (serial/non-batched evaluation)
+
+# convenience wrappers for splatted vector arguments
+pullback!(∂B1::AbstractVector, ∂A, basis::PooledSparseProduct{1}, BB::TupVec) =
+         pullback!((∂B1,), ∂A, basis, BB)
+
+pullback!(∂B1::AbstractVector, ∂B2::AbstractVector, ∂A, basis::PooledSparseProduct{2}, BB::TupVec) =
+         pullback!((∂B1, ∂B2,), ∂A, basis, BB)
+
+pullback!(∂B1::AbstractVector, ∂B2::AbstractVector, ∂B3::AbstractVector, ∂A, basis::PooledSparseProduct{3}, BB::TupVec) =
+         pullback!((∂B1, ∂B2, ∂B3,), ∂A, basis, BB)
+
+pullback!(∂B1::AbstractVector, ∂B2::AbstractVector, ∂B3::AbstractVector, ∂B4::AbstractVector, ∂A, basis::PooledSparseProduct{4}, BB::TupVec) =
+         pullback!((∂B1, ∂B2, ∂B3, ∂B4,), ∂A, basis, BB)
+
+# generic vector pullback for any NB
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{NB}, BB::TupVec) where {NB}
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == NB
+   @assert length(∂BB) == NB
+   @assert all(length(∂BB[i]) >= length(BB[i]) for i = 1:NB)
+
+   for i = 1:NB
+      fill!(∂BB[i], zero(eltype(∂BB[i])))
+   end
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      b = ntuple(Val(NB)) do i
+         BB[i][ϕ[i]]
+      end
+      a, g = _static_prod_ed(b)
+      for i = 1:NB
+         ϕi = ϕ[i]
+         ∂BB[i][ϕi] = muladd(∂A_iA, g[i], ∂BB[i][ϕi])
+      end
+   end
+   return ∂BB
+end
+
+# NB = 1 for correctness (vectors)
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{1}, BB::TupVec)
+   NB = 1
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == length(∂BB) == NB
+   @assert length(∂BB[1]) >= length(BB[1])
+   BB1 = BB[1]
+   ∂BB1 = ∂BB[1]
+
+   fill!(∂BB1, zero(eltype(∂BB1)))
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      ϕ1 = ϕ[1]
+      # A[iA] = b1, so ∂b1 = ∂A_iA
+      ∂BB1[ϕ1] += ∂A_iA
+   end
+   return ∂BB
+end
+
+# NB = 2 for performance (vectors)
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{2}, BB::TupVec)
+   NB = 2
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == length(∂BB) == 2
+   @assert all(length(∂BB[i]) >= length(BB[i]) for i = 1:NB)
+   BB1, BB2 = BB
+   ∂BB1, ∂BB2 = ∂BB
+
+   fill!(∂BB1, zero(eltype(∂BB1)))
+   fill!(∂BB2, zero(eltype(∂BB2)))
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      ϕ1 = ϕ[1]
+      ϕ2 = ϕ[2]
+      b1 = BB1[ϕ1]
+      b2 = BB2[ϕ2]
+      # A[iA] = b1 * b2, so ∂b1 = ∂A_iA * b2, ∂b2 = ∂A_iA * b1
+      ∂BB1[ϕ1] = muladd(∂A_iA, b2, ∂BB1[ϕ1])
+      ∂BB2[ϕ2] = muladd(∂A_iA, b1, ∂BB2[ϕ2])
+   end
+   return ∂BB
+end
+
+# NB = 3 for performance (vectors)
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{3}, BB::TupVec)
+   NB = 3
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == length(∂BB) == NB
+   @assert all(length(∂BB[i]) >= length(BB[i]) for i = 1:NB)
+
+   B1 = BB[1]; B2 = BB[2]; B3 = BB[3]
+   ∂B1 = ∂BB[1]; ∂B2 = ∂BB[2]; ∂B3 = ∂BB[3]
+
+   fill!(∂B1, zero(eltype(∂B1)))
+   fill!(∂B2, zero(eltype(∂B2)))
+   fill!(∂B3, zero(eltype(∂B3)))
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      ϕ1 = ϕ[1]
+      ϕ2 = ϕ[2]
+      ϕ3 = ϕ[3]
+      b1 = B1[ϕ1]
+      b2 = B2[ϕ2]
+      b3 = B3[ϕ3]
+      # A[iA] = b1 * b2 * b3
+      ∂B1[ϕ1] = muladd(∂A_iA, b2*b3, ∂B1[ϕ1])
+      ∂B2[ϕ2] = muladd(∂A_iA, b1*b3, ∂B2[ϕ2])
+      ∂B3[ϕ3] = muladd(∂A_iA, b1*b2, ∂B3[ϕ3])
+   end
+   return ∂BB
+end
+
+# NB = 4 for performance (vectors)
+function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{4}, BB::TupVec)
+   NB = 4
+   @assert length(∂A) >= length(basis)
+   @assert length(BB) == length(∂BB) == NB
+   @assert all(length(∂BB[i]) >= length(BB[i]) for i = 1:NB)
+
+   B1 = BB[1]; B2 = BB[2]; B3 = BB[3]; B4 = BB[4]
+   ∂B1 = ∂BB[1]; ∂B2 = ∂BB[2]; ∂B3 = ∂BB[3]; ∂B4 = ∂BB[4]
+
+   fill!(∂B1, zero(eltype(∂B1)))
+   fill!(∂B2, zero(eltype(∂B2)))
+   fill!(∂B3, zero(eltype(∂B3)))
+   fill!(∂B4, zero(eltype(∂B4)))
+
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      ∂A_iA = ∂A[iA]
+      ϕ1 = ϕ[1]
+      ϕ2 = ϕ[2]
+      ϕ3 = ϕ[3]
+      ϕ4 = ϕ[4]
+      b1 = B1[ϕ1]
+      b2 = B2[ϕ2]
+      b3 = B3[ϕ3]
+      b4 = B4[ϕ4]
+      # A[iA] = b1 * b2 * b3 * b4
+      ∂B1[ϕ1] = muladd(∂A_iA, b2*b3*b4, ∂B1[ϕ1])
+      ∂B2[ϕ2] = muladd(∂A_iA, b1*b3*b4, ∂B2[ϕ2])
+      ∂B3[ϕ3] = muladd(∂A_iA, b1*b2*b4, ∂B3[ϕ3])
+      ∂B4[ϕ4] = muladd(∂A_iA, b1*b2*b3, ∂B4[ϕ4])
+   end
+   return ∂BB
 end
 
 
@@ -519,17 +668,29 @@ end
 # --------------------- connect with ChainRules 
 # can this be generalized again? 
 
-import ChainRulesCore: rrule, NoTangent
+import ChainRulesCore: rrule, NoTangent, unthunk
 
 function rrule(::typeof(evaluate), basis::PooledSparseProduct{NB}, BB::TupMat) where {NB}
    A = evaluate(basis, BB)
 
    function pb(Δ)
-      ∂BB = pullback(Δ, basis, BB)
+      ∂BB = pullback(unthunk(Δ), basis, BB)
       return NoTangent(), NoTangent(), ∂BB
-   end 
+   end
 
-   return A, pb 
+   return A, pb
+end
+
+# rrule for vector inputs (serial/non-batched evaluation)
+function rrule(::typeof(evaluate), basis::PooledSparseProduct{NB}, BB::TupVec) where {NB}
+   A = evaluate(basis, BB)
+
+   function pb(Δ)
+      ∂BB = pullback(unthunk(Δ), basis, BB)
+      return NoTangent(), NoTangent(), ∂BB
+   end
+
+   return A, pb
 end
 
 
