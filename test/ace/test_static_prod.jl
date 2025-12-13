@@ -1,7 +1,7 @@
 
 using EquivariantTensors, StaticArrays, ForwardDiff, Test, LinearAlgebra
 using ACEbase.Testing: fdtest, println_slim, print_tf
-ET = EquivariantTensors
+import EquivariantTensors as ET 
 
 ##
 
