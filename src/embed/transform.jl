@@ -203,57 +203,16 @@ initialstates(rng::AbstractRNG, l::NTtransformST) = deepcopy(l.refstate)
 # this non-standard calling convention assumes that st is not changed 
 (l::NTtransformST)(x::NamedTuple, st) = l.f(x, st)
 
-(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, ps, st) = 
-         l(x, st), st 
+(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, ps, st) =
+         l(x, st), st
 
-(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, st) = 
-         broadcast(l.f, x, Ref(st))
-         # map(x -> l.f(x, st), x)
+# Mark state as non-differentiable to prevent Zygote from trying to differentiate through it
+import ChainRulesCore: ignore_derivatives
+(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, st) =
+         broadcast(l.f, x, Ref(ignore_derivatives(st)))
 
 evaluate(l::NTtransformST, x::NamedTuple, ps, st) = 
          l.f(x, st)
 
-evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) = 
+evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) =
          (l.f(x, st), DiffNT.grad_fd(l.f, x, st))
-
-
-# rrule for NTtransformST evaluation with AbstractVector input
-# This fixes the ProjectTo error when Zygote tries to backprop through
-# states containing complex NamedTuples with non-differentiable fields
-import ChainRulesCore: rrule, NoTangent
-
-function rrule(l::NTtransformST, X::AbstractVector{<:NamedTuple}, st)
-   Y = l(X, st)
-   # Compute derivatives using ForwardDiff through the NamedTuple
-   dY = map(x -> DiffNT.grad_fd(l.f, x, st), X)
-
-   function _pb_NTtransformST(∂Y)
-      if ∂Y isa ChainRulesCore.ZeroTangent
-         return NoTangent(), ChainRulesCore.ZeroTangent(), NoTangent()
-      end
-      # Multiply each cotangent by the Jacobian (for scalar outputs, this is just multiplication)
-      # dY[i] is a NamedTuple of derivatives w.r.t. the fields of X[i]
-      ∂X = map((∂y, dy) -> DiffNT.scale_nt(dy, ∂y), ∂Y, dY)
-      return NoTangent(), ∂X, NoTangent()
-   end
-
-   return Y, _pb_NTtransformST
-end
-
-# Also need rrule for the (l, x, ps, st) signature used by Lux
-function rrule(l::NTtransformST, X::AbstractVector{<:NamedTuple}, ps, st)
-   Y, st_out = l(X, ps, st)
-   # Compute derivatives using ForwardDiff through the NamedTuple
-   dY = map(x -> DiffNT.grad_fd(l.f, x, st), X)
-
-   function _pb_NTtransformST_lux(∂Y_st)
-      ∂Y = ∂Y_st[1]
-      if ∂Y isa ChainRulesCore.ZeroTangent
-         return NoTangent(), ChainRulesCore.ZeroTangent(), NoTangent(), NoTangent()
-      end
-      ∂X = map((∂y, dy) -> DiffNT.scale_nt(dy, ∂y), ∂Y, dY)
-      return NoTangent(), ∂X, NoTangent(), NoTangent()
-   end
-
-   return (Y, st_out), _pb_NTtransformST_lux
-end

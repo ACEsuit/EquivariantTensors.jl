@@ -73,6 +73,8 @@ end
 
 # rrule for _apply_selectlinl with AbstractArray X
 # This enables Zygote differentiation through the SelectLinL layer
+# (Required because the forward pass uses a KernelAbstractions kernel
+# that Zygote cannot automatically differentiate through)
 import ChainRulesCore: rrule, NoTangent, ZeroTangent
 
 # Handle tuple inputs by extracting the first element

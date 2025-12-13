@@ -34,25 +34,18 @@ end
 
 function _ka_pullback(∂𝔹, tensor::SparseACEbasis, Rnl_3, Ylm_3, A, AA,
                       aspec, aaspecs, A2Bmaps)
-   # 𝔹 is a tuple of bases, so ∂𝔹 is a tuple of tangents, which is
-   # managed as a ChainRulesCore.Tangent. (usually thunked) By
-   # extracting them as ∂𝔹[i] we get the tangent for the ith element
-   # of the forward pass.
-   #
-   # Note: When coming through certain AD paths (e.g., Zygote through Lux),
-   # ∂𝔹 might be a single matrix instead of a tuple when there's only one
-   # output basis. We handle both cases here.
+   # The forward pass returns 𝔹 as a tuple of matrices (one per L-channel).
+   # In the backward pass, ∂𝔹 can arrive in different formats depending on
+   # the AD path:
+   #   - Tuple: direct tuple tangent
+   #   - Vector{Matrix}: Zygote sometimes wraps tuple tangents as vectors
+   #   - Matrix: for single-output (L=0 only), Zygote may unwrap the 1-tuple
+   #   - Tangent: ChainRulesCore's wrapper for structured tangents
+   # The _get_∂𝔹 helper normalizes access across these representations.
 
-   # Each 𝔹[i] is of the following form:
-   #      𝔹 = (𝒞 * 𝔸')' = 𝔸 * 𝒞'
-   #      ∂𝔹 : 𝔹 = (∂𝔹 * 𝒞) : 𝔸
-   #  =>  ∇_𝔸 (∂𝔹 : 𝔹) = ∂𝔹 * 𝒞
+   # Each 𝔹[i] is computed as: 𝔹 = (𝒞 * 𝔸')' = 𝔸 * 𝒞'
+   # The pullback is: ∇_𝔸 (∂𝔹 : 𝔹) = ∂𝔹 * 𝒞
 
-   # Handle both tuple and non-tuple inputs for ∂𝔹
-   # - Tuple: standard case, index directly
-   # - Vector of matrices: sometimes Zygote wraps tuple tangents as vectors
-   # - Single matrix: when there's only one output basis, Zygote may unwrap
-   # - Tangent: ChainRulesCore wraps tuple gradients in Tangent type
    _get_∂𝔹(∂𝔹::Tuple, i) = ∂𝔹[i]
    _get_∂𝔹(∂𝔹::AbstractVector{<:AbstractMatrix}, i) = ∂𝔹[i]
    _get_∂𝔹(∂𝔹::AbstractMatrix, i) = (i == 1 ? ∂𝔹 : throw(BoundsError(∂𝔹, i)))
