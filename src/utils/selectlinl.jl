@@ -75,6 +75,21 @@ end
 # This enables Zygote differentiation through the SelectLinL layer
 import ChainRulesCore: rrule, NoTangent, ZeroTangent
 
+# Handle tuple inputs by extracting the first element
+# This happens when the ACE basis returns a 1-tuple (for L=0)
+function rrule(::typeof(_apply_selectlinl), l::SelectLinL, P::Tuple{AbstractMatrix},
+               X::AbstractArray, ps, st)
+   P_mat = P[1]
+   result, pb = rrule(_apply_selectlinl, l, P_mat, X, ps, st)
+   function _pullback_tuple_wrapper(Δ)
+      ∂_apply, ∂l, ∂P_mat, ∂X, ∂ps, ∂st = pb(Δ)
+      # Wrap ∂P back in a tuple to match input structure
+      ∂P = ∂P_mat isa ZeroTangent ? ZeroTangent() : (∂P_mat,)
+      return ∂_apply, ∂l, ∂P, ∂X, ∂ps, ∂st
+   end
+   return result, _pullback_tuple_wrapper
+end
+
 function rrule(::typeof(_apply_selectlinl), l::SelectLinL, P::AbstractMatrix,
                X::AbstractArray, ps, st)
    # Forward pass

@@ -52,9 +52,11 @@ function _ka_pullback(∂𝔹, tensor::SparseACEbasis, Rnl_3, Ylm_3, A, AA,
    # - Tuple: standard case, index directly
    # - Vector of matrices: sometimes Zygote wraps tuple tangents as vectors
    # - Single matrix: when there's only one output basis, Zygote may unwrap
+   # - Tangent: ChainRulesCore wraps tuple gradients in Tangent type
    _get_∂𝔹(∂𝔹::Tuple, i) = ∂𝔹[i]
    _get_∂𝔹(∂𝔹::AbstractVector{<:AbstractMatrix}, i) = ∂𝔹[i]
    _get_∂𝔹(∂𝔹::AbstractMatrix, i) = (i == 1 ? ∂𝔹 : throw(BoundsError(∂𝔹, i)))
+   _get_∂𝔹(∂𝔹::ChainRulesCore.Tangent, i) = ∂𝔹[i]
 
    ∂𝔸 = sum( mul(_get_∂𝔹(∂𝔹, i), A2Bmaps[i], (a, b) -> sum(a .* b)) for i = 1:length(A2Bmaps) )
    ∂A = ka_pullback(∂𝔸, tensor.aabasis, A, aaspecs)
