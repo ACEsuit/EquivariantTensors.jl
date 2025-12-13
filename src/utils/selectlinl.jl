@@ -64,8 +64,68 @@ end
    iB, jB = @index(Global, NTuple)
    i_x = selector(X[iB])
    B[iB, jB] = 0
-   for k = 1:size(P, 2) 
+   for k = 1:size(P, 2)
       B[iB, jB] += W[jB, k, i_x] * P[iB, k]
    end
    nothing
+end
+
+
+# rrule for _apply_selectlinl with AbstractArray X
+# This enables Zygote differentiation through the SelectLinL layer
+import ChainRulesCore: rrule, NoTangent, ZeroTangent
+
+function rrule(::typeof(_apply_selectlinl), l::SelectLinL, P::AbstractMatrix,
+               X::AbstractArray, ps, st)
+   # Forward pass
+   TB = promote_type(eltype(P), eltype(ps.W))
+   B = similar(P, TB, size(P, 1), l.out_dim)
+
+   kernel! = _ka_apply_selectlinl!(KernelAbstractions.get_backend(X))
+   kernel!(B, P, X, ps.W, l.selector; ndrange = size(B))
+
+   function _apply_selectlinl_pullback(∂out)
+      ∂B = ∂out[1]  # gradient w.r.t. B
+      # ∂out[2] is for st, which should be NoTangent
+
+      if ∂B isa ZeroTangent || ∂B === nothing
+         return NoTangent(), NoTangent(), ZeroTangent(), NoTangent(),
+                (W = ZeroTangent(),), NoTangent()
+      end
+
+      # B[i, j] = sum_k W[j, k, selector(X[i])] * P[i, k]
+      # ∂P[i, k] = sum_j ∂B[i, j] * W[j, k, selector(X[i])]
+      # ∂W[j, k, c] = sum_{i: selector(X[i]) == c} ∂B[i, j] * P[i, k]
+
+      nrows, ncols_out = size(B)
+      _, ncols_in = size(P)
+
+      # Compute ∂P
+      ∂P = similar(P)
+      fill!(∂P, zero(eltype(∂P)))
+      for i = 1:nrows
+         i_x = l.selector(X[i])
+         for k = 1:ncols_in
+            for j = 1:ncols_out
+               ∂P[i, k] += ∂B[i, j] * ps.W[j, k, i_x]
+            end
+         end
+      end
+
+      # Compute ∂W
+      ∂W = similar(ps.W)
+      fill!(∂W, zero(eltype(∂W)))
+      for i = 1:nrows
+         i_x = l.selector(X[i])
+         for k = 1:ncols_in
+            for j = 1:ncols_out
+               ∂W[j, k, i_x] += ∂B[i, j] * P[i, k]
+            end
+         end
+      end
+
+      return NoTangent(), NoTangent(), ∂P, NoTangent(), (W = ∂W,), NoTangent()
+   end
+
+   return (B, st), _apply_selectlinl_pullback
 end
