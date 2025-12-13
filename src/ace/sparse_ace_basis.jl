@@ -219,7 +219,32 @@ function rrule(::typeof(evaluate), tensor::SparseACEbasis,
    return (𝔹, st), pb_3d
 end
 
+
+# --------------------------------------------------------
+# 
+#  Jacobian of basis w.r.t. inputs (normally positions) 
+#
+# Assume the input data is organized as follows: 
+#   Rnl : #i x #j x #R  array with #R the length of the radial basis 
+#   Ylm : #i x #j x #Y  array with #Y the length of the spherical basis
+#   dRnl, dYlm : same shape as Rnl, Ylm with 
+#       dRnl[i, j, k] = ∂Rnl[i, j] / ∂X[k]  
+#       dYlm[i, j, k] = ∂Ylm[i, j] / ∂X[k]
+#
+
+function _jacobian_RY(tensor::SparseACEbasis, Rnl, Ylm, dRnl, dYlm)
+   
+
+end
+
+
+
 # -------------- frules for forward-mode AD
+
+#=   
+
+# TODO: I believe these are not needed / simply incorrect
+#       see also commented out older frules below 
 
 import ChainRulesCore: frule
 
@@ -263,6 +288,7 @@ function frule((_, Δtensor, ΔRnl, ΔYlm, Δps, Δst),
    return BB, ∂BB
 end
 
+
 # Helper: pushforward through the A (pooled sparse product) basis
 function _pushforward_abasis!(∂A, abasis, Rnl, Ylm, ΔRnl, ΔYlm)
    for (iA, (n, l)) in enumerate(abasis.spec)
@@ -303,6 +329,7 @@ function _pushforward_aabasis!(∂AA, aabasis, A, ∂A)
    return ∂AA
 end
 
+=#
 
 const NT_NL_SPEC = NamedTuple{(:n, :l), Tuple{Int, Int}}
 
