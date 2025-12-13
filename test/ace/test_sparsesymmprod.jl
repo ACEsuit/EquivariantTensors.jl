@@ -4,7 +4,7 @@ using EquivariantTensors: SparseSymmProd, evaluate
 using ACEbase.Testing: println_slim, print_tf, fdtest, dirfdtest
 using ChainRulesCore: rrule 
 
-ET = EquivariantTensors
+import EquivariantTensors as ET 
 
 isdefined(Main, :__TEST_ACE__) || include("utils_ace.jl")
 
