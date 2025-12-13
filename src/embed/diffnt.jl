@@ -163,23 +163,4 @@ function grad_fd(f, x::NamedTuple, args...)
    return _svec2nt(g, v_nt)  # return as NamedTuple
 end
 
-
-"""
-   scale_nt(g::NamedTuple, s::Number)
-
-Scale each field of the gradient NamedTuple `g` by scalar `s`.
-Used in reverse-mode AD to multiply Jacobian by cotangent.
-"""
-@generated function scale_nt(g::NamedTuple, s::Number)
-   SYMS = fieldnames(g)
-   code = "(; "
-   for sym in SYMS
-      code *= "$sym = g.$sym * s, "
-   end
-   code *= ")"
-   return quote
-      $(Meta.parse(code))
-   end
 end
-
-end 
