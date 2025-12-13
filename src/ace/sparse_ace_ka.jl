@@ -32,19 +32,26 @@ function _ka_evaluate(tensor::SparseACEbasis, Rnl_3, Ylm_3,
 end 
 
 
-function _ka_pullback(∂𝔹, tensor::SparseACEbasis, Rnl_3, Ylm_3, A, AA, 
+function _ka_pullback(∂𝔹, tensor::SparseACEbasis, Rnl_3, Ylm_3, A, AA,
                       aspec, aaspecs, A2Bmaps)
-   # 𝔹 is a tuple of bases, so ∂𝔹 is a tuple of tangents, which is 
-   # managed as a ChainRulesCore.Tangent. (usually thunked) By 
-   # extracting them as ∂𝔹[i] we get the tangent for the ith element 
-   # of the forward pass. 
+   # The forward pass returns 𝔹 as a tuple of matrices (one per L-channel).
+   # In the backward pass, ∂𝔹 can arrive in different formats depending on
+   # the AD path:
+   #   - Tuple: direct tuple tangent
+   #   - Vector{Matrix}: Zygote sometimes wraps tuple tangents as vectors
+   #   - Matrix: for single-output (L=0 only), Zygote may unwrap the 1-tuple
+   #   - Tangent: ChainRulesCore's wrapper for structured tangents
+   # The _get_∂𝔹 helper normalizes access across these representations.
 
-   # Each 𝔹[i] is of the following form:  
-   #      𝔹 = (𝒞 * 𝔸')' = 𝔸 * 𝒞' 
-   #      ∂𝔹 : 𝔹 = (∂𝔹 * 𝒞) : 𝔸
-   #  =>  ∇_𝔸 (∂𝔹 : 𝔹) = ∂𝔹 * 𝒞
+   # Each 𝔹[i] is computed as: 𝔹 = (𝒞 * 𝔸')' = 𝔸 * 𝒞'
+   # The pullback is: ∇_𝔸 (∂𝔹 : 𝔹) = ∂𝔹 * 𝒞
 
-   ∂𝔸 = sum( mul(∂𝔹[i], A2Bmaps[i], (a, b) -> sum(a .* b)) for i = 1:length(A2Bmaps) )
+   _get_∂𝔹(∂𝔹::Tuple, i) = ∂𝔹[i]
+   _get_∂𝔹(∂𝔹::AbstractVector{<:AbstractMatrix}, i) = ∂𝔹[i]
+   _get_∂𝔹(∂𝔹::AbstractMatrix, i) = (i == 1 ? ∂𝔹 : throw(BoundsError(∂𝔹, i)))
+   _get_∂𝔹(∂𝔹::ChainRulesCore.Tangent, i) = ∂𝔹[i]
+
+   ∂𝔸 = sum( mul(_get_∂𝔹(∂𝔹, i), A2Bmaps[i], (a, b) -> sum(a .* b)) for i = 1:length(A2Bmaps) )
    ∂A = ka_pullback(∂𝔸, tensor.aabasis, A, aaspecs)
    ∂Rnl, ∂Ylm = ka_pullback(∂A, tensor.abasis, (Rnl_3, Ylm_3), aspec)
    return ∂Rnl, ∂Ylm

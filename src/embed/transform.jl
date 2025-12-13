@@ -203,30 +203,16 @@ initialstates(rng::AbstractRNG, l::NTtransformST) = deepcopy(l.refstate)
 # this non-standard calling convention assumes that st is not changed 
 (l::NTtransformST)(x::NamedTuple, st) = l.f(x, st)
 
-(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, ps, st) = 
-         l(x, st), st 
+(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, ps, st) =
+         l(x, st), st
 
-(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, st) = 
-         broadcast(l.f, x, Ref(st))
-         # map(x -> l.f(x, st), x)
+# Mark state as non-differentiable to prevent Zygote from trying to differentiate through it
+import ChainRulesCore: ignore_derivatives
+(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, st) =
+         broadcast(l.f, x, Ref(ignore_derivatives(st)))
 
 evaluate(l::NTtransformST, x::NamedTuple, ps, st) = 
          l.f(x, st)
 
-evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) = 
+evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) =
          (l.f(x, st), DiffNT.grad_fd(l.f, x, st))
-
-
-# function rrule(trans::typeof(NTtransformST), X::AbstractVector{<: NamedTuple}, ps, st) 
-#    @assert ps == NamedTuple() "NTtransformST cannot have parameters"
-#    # TODO: rewrite this using a single Dual number evaluation 
-#    Y = trans(X, st)   # map(x -> l.f(x, st), x)
-#    dY = map(x -> DiffNT.grad_fd(trans.f, x, st), X)
-
-#    function _pb_X(∂Y)
-#       ∂X = map( (∂y, dy) -> ∂y * dy, ∂Y, dY )
-#       return NoTangent(), ∂X, NoTangent(), NoTangent()
-#    end
-
-#    return Y, _pb_X 
-# end
