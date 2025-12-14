@@ -268,7 +268,7 @@ end
 
 
 function pushforward!(AA, ∂AA, basis::SparseSymmProd, 
-                      A::AbstractVector, ∂A::AbstractVector)
+                      A, ∂A)
    @assert size(∂A) == size(A)
    @assert size(∂AA) == size(AA)
    T = promote_type(eltype(A), eltype(∂A))
