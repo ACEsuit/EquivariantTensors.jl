@@ -148,6 +148,21 @@ provides the data and the data type.
 end 
 
 
+@generated function __zero(::Type{TX}) where {TX <: NamedTuple}
+   SYMS = fieldnames(TX)
+   TT = fieldtypes(TX)
+   code = "(; "
+   for (sym, T) in zip(SYMS, TT)
+      code *= "$sym = zero($T), "
+   end
+   code *= ")"
+   return quote 
+      $(Meta.parse(code))
+   end
+end
+
+
+
 """
    grad_fd(f, x::NamedTuple, args...)
 
@@ -157,11 +172,19 @@ the gradient values corresponding to the continuous variables in `x`.
 The `args...` are taken as constant paramteters during this differentiation. 
 """
 function grad_fd(f, x::NamedTuple, args...)
-   v_nt = _ctsnt(x)  # extract continuous variables into an SVector 
-   _fvec = _v -> f(_replace(x, _svec2nt(_v, v_nt)), args...)
-   g = ForwardDiff.gradient(_fvec, _nt2svec(v_nt))
-   return _svec2nt(g, v_nt)  # return as NamedTuple
+   x_cts = _ctsnt(x)  # extract continuous variables into an SVector 
+   _fvec = _v -> f(_replace(x, _svec2nt(_v, x_cts)), args...)
+   g = ForwardDiff.gradient(_fvec, _nt2svec(x_cts))
+   return _svec2nt(g, x_cts)  # return as NamedTuple
 end 
 
+function jac_fd(f, x::NamedTuple, ps, st)
+   x_cts = _ctsnt(x)  # extract continuous variables into an SVector 
+   v = _nt2svec(x_cts)
+   TV = typeof(v)
+   _fvec = _v -> f(_replace(x, _svec2nt(_v, x_cts)), ps, st)[1]
+   J = ForwardDiff.jacobian(_fvec, v)
+   return [ _svec2nt(TV(rowJ), x_cts) for rowJ in eachrow(J) ]
+end
 
 end 

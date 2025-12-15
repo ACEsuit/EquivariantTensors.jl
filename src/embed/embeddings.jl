@@ -1,5 +1,10 @@
 #
-# TODO: remove ParallelEmbed, and polish EdgeEmbed instead 
+# TODO: likely remove ParallelEmbed
+#       likely remove EdgeEmbed 
+#       cleanup, polish, improve performance of EdgeEmbed1 
+#                 - rename it to EdgeEmbed??
+#                 - currently doesn't leverage evaluate_ed on P4ML layer 
+#                 - may need switch to DecoratedParticles for that 
 #
 
 using ConcreteStructs 
@@ -111,7 +116,9 @@ function (l::EdgeEmbed)(X::ETGraph, ps, st)
    return Φ3, st
 end
 
-
+#
+# This is clever but it should be where reshape_embedding is defined!
+# 
 function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
    ϕ3 = reshape_embedding(ϕ2, X)
 
@@ -121,4 +128,49 @@ function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
    end
 
    return ϕ3, _pb_ϕ
+end
+
+# function evaluate_ed(l::EdgeEmbed, X::ETGraph, ps, st)
+
+#    Φ2, st = evaluate_ed(l.layer, X.edge_data, ps, st)
+#    Φ3 = map(ϕ2 -> reshape_embedding(ϕ2, X), Φ2)
+
+#    ∂ϕ2 = map( DiffNT.grad_fd, 
+#    dΦ3 = map( (ϕ2, dϕ2) -> rev_reshape_embedding(dϕ2, X), Φ2, Φ2)
+#    return Φ3, dΦ3, st
+# end
+
+
+# -------------------------------------------------------------------
+#
+# attempt 3: wrapping a single edge embedding (instead of several) 
+# into a layer with some additional logic.
+# several of these can just be wrapped into a Parallel layer. 
+# This seems to provide plenty of logic, and simplifies the code 
+#
+
+
+@concrete struct EdgeEmbed1 <: AbstractLuxWrapperLayer{:layer}
+   layer 
+   name
+end
+
+EdgeEmbed1(layer; name = "Edge Embedding") = 
+      EdgeEmbed1(layer, name)
+
+function (l::EdgeEmbed1)(X::ETGraph, ps, st)
+   #    #edges x #features
+   Φ2, st = l.layer(X.edge_data, ps, st)     
+   #    maxneigs x #nodes x #features
+   Φ3 = reshape_embedding(Φ2, X)  
+   return Φ3, st
+end
+
+
+function evaluate_ed(l::EdgeEmbed1, X::ETGraph, ps, st)
+   Φ3, st = l(X, ps, st) 
+   ∂Φ2 = mapreduce( x -> permutedims(DiffNT.jac_fd(l.layer, x, ps, st)), 
+                    vcat, X.edge_data )
+   ∂Φ3 = reshape_embedding(∂Φ2, X)
+   return (Φ3, ∂Φ3), st
 end

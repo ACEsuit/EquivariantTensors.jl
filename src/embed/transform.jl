@@ -216,6 +216,13 @@ evaluate(l::NTtransformST, x::NamedTuple, ps, st) =
 evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) = 
          (l.f(x, st), DiffNT.grad_fd(l.f, x, st))
 
+function evaluate_ed(l::NTtransformST, x::AbstractVector{<: NamedTuple}, ps, st)
+   Y = broadcast(l.f, x, Ref(st))
+   dY = broadcast(DiffNT.grad_fd, Ref(l.f), x, Ref(st))
+   return (Y, dY), st 
+end
+
+
 
 # function rrule(trans::typeof(NTtransformST), X::AbstractVector{<: NamedTuple}, ps, st) 
 #    @assert ps == NamedTuple() "NTtransformST cannot have parameters"
