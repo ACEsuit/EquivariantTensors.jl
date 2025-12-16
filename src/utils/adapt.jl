@@ -16,3 +16,12 @@ float64(x::AbstractFloat) = Float64(x)
 
 float32(nt::NamedTuple) = Functors.fmap(_float32, nt) 
 float64(nt::NamedTuple) = Functors.fmap(_float64, nt)
+
+float32(::Nothing) = nothing 
+
+float32(X::ETGraph) = 
+   ETGraph( X.ii, X.jj, X.first, 
+            float32.(X.node_data), 
+            float32.(X.edge_data), 
+            float32.(X.graph_data),
+            X.maxneigs )

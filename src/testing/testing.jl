@@ -10,13 +10,14 @@ function rand_ball(rcut::T)  where {T}
 end
 
 function rand_graph(nnodes;
-                    nneigrg = 20:40,  
+                    nneigrg = min(nnodes ÷ 2 + 1, 10):min(nnodes, 30), 
                     T = Float32, 
                     rcut = one(T), 
-                    randedge = () -> ( 𝐫 = rand_ball(rcut),),
-                  )
+                    randedge = () -> ( 𝐫 = rand_ball(rcut), ), )
    ii = Int[] 
    jj = Int[]
+   rmax = nnodes^(1/3) * 0.5
+   maxneigs = 0 
    edges = []
    for i in 1:nnodes
       nneig = rand(nneigrg)

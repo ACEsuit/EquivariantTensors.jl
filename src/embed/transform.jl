@@ -133,12 +133,10 @@ Here, `dy` is again a named-tuple with the derivative w.r.t. x.𝐫 stored as
 """
 struct NTtransform{FT} <: AbstractLuxLayer
    f::FT 
-   sym::Symbol 
 end
 
-NTtransform(f; sym = Symbol(""))  = NTtransform(f, Symbol(sym))
-
-Base.show(io::IO, l::NTtransform) = print(io, "NTtransform($(l.sym))")
+# NTtransform(f)  = NTtransform(f)
+# Base.show(io::IO, l::NTtransform) = print(io, "NTtransform($(l.sym))")
 
 initialparameters(rng::AbstractRNG, l::NTtransform) = NamedTuple()
 initialstates(rng::AbstractRNG, l::NTtransform) = NamedTuple()

@@ -187,4 +187,30 @@ function jac_fd(f, x::NamedTuple, ps, st)
    return [ _svec2nt(TV(rowJ), x_cts) for rowJ in eachrow(J) ]
 end
 
+# --------------------------------------- 
+# differentiation w.r.t. DP 
+
+import DecoratedParticles: PState, VState, XState 
+
+
+function grad_fd(f, x::STATE, args...) where {STATE <: XState}
+   x_nt = getfield(x, :x)
+   v_nt = _ctsnt(x_nt)  # extract continuous variables into an SVector 
+   v = _nt2svec(v_nt)
+   _fvec = _v -> f(STATE(_replace(x_nt, _svec2nt(_v, v_nt))), args...)
+   g = ForwardDiff.gradient(_fvec, _nt2svec(v_nt))
+   return VState(_svec2nt(g, v_nt))  # return as NamedTuple
 end 
+
+function jac_fd(f, x::STATE, args...) where {STATE <: XState}
+   x_nt = getfield(x, :x)
+   v_nt = _ctsnt(x_nt)  # extract continuous variables into an SVector 
+   v = _nt2svec(v_nt)
+   _fvec = _v -> f(STATE(_replace(x_nt, _svec2nt(_v, v_nt))), args...)
+   g = ForwardDiff.jacobian(_fvec, _nt2svec(v_nt))
+   return VState(_svec2nt(g, v_nt))  # return as NamedTuple
+end 
+
+
+end 
+
