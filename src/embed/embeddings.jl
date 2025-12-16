@@ -136,5 +136,54 @@ end
 #   (but could be revisited if we want to optimize performance)
 #
 
+using LinearAlgebra: dot 
 
+@concrete struct EdgeEmbedDP <: AbstractLuxContainerLayer{(:trans, :basis)}
+   trans
+   basis
+   name
+end
+
+EdgeEmbedDP(trans, basis; name = "") = 
+         EdgeEmbedDP(trans, basis, name)
+
+Base.show(io::IO, ::MIME"text/plain", l::EdgeEmbedDP) = 
+      print(io, "EdgeEmbedDP($(l.name))")         
+
+
+function (l::EdgeEmbedDP)(X::ETGraph, ps, st)
+   # first gets rid of the state variable in the return 
+   Y = broadcast(first ∘ l.trans, X.edge_data, Ref(ps.trans), Ref(st.trans))
+   Φ2, _ = l.basis(Y, ps.basis, st.basis)
+   Φ3 = reshape_embedding(Φ2, X)
+   return Φ3, st
+end
+
+function evaluate_ed(l::EdgeEmbedDP, X::ETGraph, ps, st)
+   # first gets rid of the state variable in the return 
+   ftrans = _x -> first(l.trans(_x, ps.trans, st.trans))
+   Y = broadcast(ftrans, X.edge_data)
+   Φ2, dΦ2 = evaluate_ed(l.basis, Y, ps.basis, st.basis)
+
+   # pullback through the transform to get ∂Φ2
+   _pb1(x, dφ) = DiffNT.grad_fd(_x -> dot(ftrans(_x), dφ), x)
+   ∂Φ2 = broadcast(_pb1, X.edge_data, dΦ2)
+   
+   Φ3 = reshape_embedding(Φ2, X)
+   ∂Φ3 = reshape_embedding(∂Φ2, X)
+   return (Φ3, ∂Φ3), st
+end
+
+
+
+# function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
+#    ϕ3 = reshape_embedding(ϕ2, X)
+
+#    function _pb_ϕ(∂ϕ3)
+#       ∂ϕ2 = rev_reshape_embedding(∂ϕ3, X)
+#       return NoTangent(), ∂ϕ2, NoTangent()
+#    end
+
+#    return ϕ3, _pb_ϕ
+# end
 

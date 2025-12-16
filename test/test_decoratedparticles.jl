@@ -83,6 +83,8 @@ using BenchmarkTools
 
 using Polynomials4ML
 import Polynomials4ML as P4ML
+using Lux, LuxCore, Random 
+rng = MersenneTwister(1234)
 
 function _pb(trans, X, dP) 
    _pb1(x, dp) = ET.DiffNT.grad_fd(_x -> dot(trans(_x), dp), x) 
@@ -92,22 +94,44 @@ end
 
 basis = ChebBasis(10)
 trans = x -> 1 / (1 + sum(abs2, x.r))
+embed = ET.EdgeEmbedDP(WrappedFunction(trans), basis; name = "Rnl")
+ps, st = LuxCore.setup(rng, embed)
 
-X = [ rand_x() for _ in 1:100 ]
+G = ET.Testing.rand_graph(20; randedge = rand_x)
+X = G.edge_data
+
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
 dY = ET.DiffNT.grad_fd.(Ref(trans), X)
 ∂P1 = dY .* dP 
 ∂P2 = _pb(trans, X, dP)
-all(∂P1 .≈ ∂P2)
+
+(_P3, _∂P3), _ = ET.evaluate_ed(embed, G, ps, st)
+P3 = ET.rev_reshape_embedding(_P3, G)
+∂P3 = ET.rev_reshape_embedding(_∂P3, G)
+
+P ≈ P3
+all(∂P1 .≈ ∂P2 .≈ ∂P3)
 
 ## 
 
 basis = real_solidharmonics(4)
 trans = x -> x.r 
-X = [ rand_x() for _ in 1:100 ]
+embed = ET.EdgeEmbedDP(WrappedFunction(trans), basis; name = "Ylm")
+ps, st = LuxCore.setup(rng, embed)
+
+G = ET.Testing.rand_graph(20; randedge = rand_x)
+X = G.edge_data
+
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
 ∂P1 = map(dr -> VState(q = 0.0, r = dr), dP)
 ∂P2 = _pb(trans, X, dP)
-all(∂P1 .≈ ∂P2)
+
+(_P3, _∂P3), _ = ET.evaluate_ed(embed, G, ps, st)
+P3 = ET.rev_reshape_embedding(_P3, G)
+∂P3 = ET.rev_reshape_embedding(_∂P3, G)
+
+P ≈ P3
+all(∂P1 .≈ ∂P2 .≈ ∂P3)
+
