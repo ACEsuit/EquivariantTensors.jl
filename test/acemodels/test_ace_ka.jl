@@ -169,8 +169,12 @@ println_slim(@test φ ≈ φ_seq ≈ φ_dev1)
 @info("Test Differentiation through KA Model Evaluation")
 
 @info("Zygote.gradient") 
-energy(model, G) = sum(ACEKA.evaluate(model, G, ps, st)[1])
-∇E_zy = Zygote.gradient(G -> energy(model, G), X)[1] 
+energy(model, G, ps, st) = sum(ACEKA.evaluate(model, G, ps, st)[1])
+∇E_zy = Zygote.gradient(G -> energy(model, G, ps, st), X)[1] 
+
+# This requires a fix to P4ML to work properly on the GPU device
+# ∇E_zy_dev = Zygote.gradient(G -> energy(model, G, ps_dev, st_dev), X_dev)[1] 
+
 
 ##
 
