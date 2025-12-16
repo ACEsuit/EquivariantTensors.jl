@@ -137,3 +137,13 @@ function rev_reshape_embedding(P3, X::ETGraph)
 end
 
 
+function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
+   ϕ3 = reshape_embedding(ϕ2, X)
+
+   function _pb_ϕ(∂ϕ3)
+      ∂ϕ2 = rev_reshape_embedding(∂ϕ3, X)
+      return NoTangent(), ∂ϕ2, NoTangent()
+   end
+
+   return ϕ3, _pb_ϕ
+end

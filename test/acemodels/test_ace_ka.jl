@@ -19,29 +19,34 @@ module ACEKA
    import EquivariantTensors as ET 
    import KernelAbstractions as KA
 
-   struct SimpleACE{T, TEM, BB}
-      embed::TEM
+   struct SimpleACE{T, TR, TY, BB}
+      Rnl::TR 
+      Ylm::TY
       symbasis::BB    # symmetric basis 
       params::Vector{T}   # model parameters
    end
 
    initialparameters(rng::AbstractRNG, m::SimpleACE) = 
-            (    embed = initialparameters(rng, m.embed), 
+            (      Rnl = initialparameters(rng, m.Rnl), 
+                   Ylm = initialparameters(rng, m.Ylm), 
               symbasis = initialparameters(rng, m.symbasis), 
                 params = copy(m.params), )
 
    initialstates(rng::AbstractRNG, m::SimpleACE) = 
-            (    embed = initialstates(rng, m.embed), 
+            (      Rnl = initialstates(rng, m.Rnl), 
+                   Ylm = initialstates(rng, m.Ylm), 
               symbasis = initialstates(rng, m.symbasis), )
 
    function evaluate(model::SimpleACE, X::ET.ETGraph, ps, st)
-      (Rn_3, Ylm_3), _ = ET.evaluate(model.embed, X, ps.embed, st.embed)
-      (𝔹,), _ = ET.ka_evaluate(model.symbasis, Rn_3, Ylm_3, ps.symbasis, st.symbasis)
+      Rnl, _ = model.Rnl(X, ps.Rnl, st.Rnl)
+      Ylm, _ = model.Ylm(X, ps.Ylm, st.Ylm)
+      (𝔹,), _ = ET.ka_evaluate(model.symbasis, Rnl, Ylm, ps.symbasis, st.symbasis)
       # 𝔹 = (#nodes, #features); params = (#features, #readouts)
       # in this toy model, #readouts = 1.
       return 𝔹 * ps.params, st 
    end
 
+   #=
    function evaluate_with_grad(model::SimpleACE, X::ET.ETGraph, ps, st)
       backend = KA.get_backend(ps.params)
       (Rnl_3, Ylm_3), _ = ET.evaluate(model.embed, X, ps.embed, st.embed)
@@ -62,30 +67,25 @@ module ACEKA
 
       return φ, ∂X
    end
+   =# 
 end
 
 
 ##
 # generate a model 
-Dtot = 16   # total degree; specifies the trunction of embeddings and correlations
-maxl = 10    # maximum degree of spherical harmonics 
+Dtot = 12   # total degree; specifies the trunction of embeddings and correlations
+maxl = 8    # maximum degree of spherical harmonics 
 ORD = 3     # correlation-order (body-order = ORD + 1)
 
 # generate the embedding layer 
 
-# TODO: replace with newer implementation??
-# rbasis = Chain( WrappedFunction(𝐫 -> 1 ./ (1 .+ norm.(𝐫)) ), 
-#                 P4ML.ChebBasis(Dtot+1) )
-# ybasis = P4ML.real_sphericalharmonics(maxl; T = Float32, static=true)
+rbasis = P4ML.ChebBasis(Dtot+1)
+rtrans = ET.NTtransform(x -> 1 / (1+norm(x.𝐫)^2))
+rembed = ET.EdgeEmbed( ET.EmbedDP(rtrans, rbasis); name = "Rnl" )
 
-rbasis = ET.TransformedBasis( WrappedFunction(𝐫 -> 1 / (1+norm(𝐫))), 
-                              P4ML.ChebBasis(Dtot+1) )
-ybasis = ET.TransformedBasis( WrappedFunction(𝐫 -> 𝐫 / norm(𝐫)), 
-                              P4ML.real_solidharmonics(maxl; T = Float32, static=true) )
-
-embed = ET.ParallelEmbed(; Rnl = rbasis, Ylm = ybasis)
-
-# st = LuxCore.initialstates(MersenneTwister(1234), embed)
+ybasis = P4ML.real_solidharmonics(maxl; static=true)
+ytrans = ET.NTtransform(x -> x.𝐫)
+yembed = ET.EdgeEmbed( ET.EmbedDP(ytrans, ybasis); name = "Ylm" )
 
 mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
                   minn = 0, maxn = Dtot, maxl = maxl, 
@@ -93,12 +93,12 @@ mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD,
                   maxlevel = Dtot)
 𝔹basis = ET.sparse_equivariant_tensor(; 
             L = 0, mb_spec = mb_spec, 
-            Rnl_spec = P4ML.natural_indices(rbasis.basis), 
-            Ylm_spec = P4ML.natural_indices(ybasis.basis), 
+            Rnl_spec = P4ML.natural_indices(rbasis), 
+            Ylm_spec = P4ML.natural_indices(ybasis), 
             basis = real )
 θ = randn(Float32, length(𝔹basis, 0))
 
-model = ACEKA.SimpleACE(embed, 𝔹basis, θ)
+model = ACEKA.SimpleACE(rembed, yembed, 𝔹basis, θ)
 _ps, _st = LuxCore.setup(MersenneTwister(1234), model)
 ps = ET.float32(_ps); st = ET.float32(_st)
 
@@ -107,7 +107,8 @@ ps = ET.float32(_ps); st = ET.float32(_st)
 
 # 1. generate a random input graph 
 nnodes = 100
-X = ET.Testing.rand_graph(nnodes; nneigrg = 10:20)
+_X = ET.Testing.rand_graph(nnodes; nneigrg = 10:20)
+X = ET.float32(_X)
 
 @info("Basic ETGraph tests")
 print_tf(@test ET.nnodes(X) == nnodes)
@@ -122,25 +123,26 @@ ps_dev = dev(ps)
 st_dev = dev(st)
 X_dev = dev(X)
 
-# adapt(MtlArrayAdaptor{storage}(), xs)
-
+@info("Test KA Model Evaluation on CPU and Device")
+φ, _ = ACEKA.evaluate(model, X, ps, st)
 φ_dev, _ = ACEKA.evaluate(model, X_dev, ps_dev, st_dev) 
 φ_dev1 = Array(φ_dev)
-φ, _ = ACEKA.evaluate(model, X, ps, st) 
 
+println_slim(@test φ ≈ φ_dev1)
 
 ## 
 # now we try to make the same prediction with the original CPU ace 
 # implementation, also skipping the graph datastructure entirely. 
 
 function evaluate_env(model::ACEKA.SimpleACE, 𝐑i)
-   xij = [ rbasis.transin(𝐫, NamedTuple(), NamedTuple())[1] for 𝐫 in 𝐑i ]
-   Rnl = P4ML.evaluate(rbasis.basis, xij, NamedTuple(), NamedTuple())
-   𝐫̂ij = [ ybasis.transin(𝐫, NamedTuple(), NamedTuple())[1] for 𝐫 in 𝐑i ]
-   Ylm = P4ML.evaluate(ybasis.basis, 𝐫̂ij, NamedTuple(), NamedTuple())
-   𝔹, = ET.evaluate(𝔹basis, Rnl, Ylm) 
+   rij = [ rtrans(x) for x in 𝐑i ]
+   Rnl = P4ML.evaluate(rbasis, rij)
+   𝐫ij = [ x.𝐫 for x in 𝐑i ]
+   Ylm = P4ML.evaluate(ybasis, 𝐫ij)
+   𝔹, = ET.evaluate(𝔹basis, Rnl, Ylm)   
    return dot(𝔹, θ)
 end
+
 
 @info("Test Old Sequential vs KA Evaluation")
 φ_seq = [ evaluate_env(model, ET.neighbourhood(X, i)[2]) for i in 1:nnodes ]
