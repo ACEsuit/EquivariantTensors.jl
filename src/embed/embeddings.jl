@@ -122,3 +122,19 @@ function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
 
    return ϕ3, _pb_ϕ
 end
+
+
+# -------------------------------------------------------------------
+#
+# Attempt 4: single embedding (can be used inside Parallel)
+#   composed of a transform and a basis evaluation 
+#   the transform MUST be a mapping from an XState to a valid 
+#   input into the basis. 
+#   The point of this decomposition is to allow the derivative 
+#   through the transform to be computed backward, which is 
+#   is very convenient in this setting. 
+#   (but could be revisited if we want to optimize performance)
+#
+
+
+

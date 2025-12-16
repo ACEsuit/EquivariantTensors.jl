@@ -9,6 +9,7 @@ Bumper = "8ce10254-0962-460f-a3d8-1f77fea1446e"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 ConcreteStructs = "2569d6c7-a4a2-43d3-a901-331e8e4be471"
+DecoratedParticles = "023d0394-cb16-4d2d-a5c7-724bed42bbb6"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Functors = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
 GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
@@ -28,14 +29,13 @@ WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
 WithAlloc = "fb1aa66a-603c-4c1d-9bc4-66947c7b08dd"
 
 [weakdeps]
-NeighbourLists = "2fcf5ba9-9ed4-57cf-b73f-ff513e316b9c"
 AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
 AtomsBuilder = "f5cc8831-eeb7-4288-8d9f-d6c1ddb77004"
-
+NeighbourLists = "2fcf5ba9-9ed4-57cf-b73f-ff513e316b9c"
 
 [extensions]
-NeighbourListsExt = "NeighbourLists"
 AtomsBaseExt = "AtomsBase"
+NeighbourListsExt = "NeighbourLists"
 
 [compat]
 ACEbase = "0.4.5"
@@ -47,6 +47,7 @@ CUDA = "5.9.1"
 ChainRulesCore = "1.25.1"
 Combinatorics = "1"
 ConcreteStructs = "0.2.3"
+DecoratedParticles = "0.1.0"
 ForwardDiff = "0.10, 1"
 Functors = "0.5.2"
 GPUArraysCore = "0.2.0"
