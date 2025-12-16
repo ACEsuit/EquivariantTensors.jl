@@ -1,5 +1,6 @@
 
-using LinearAlgebra, Lux, Random, EquivariantTensors, Test, Zygote
+using LinearAlgebra, Lux, Random, EquivariantTensors, Test, StaticArrays,
+      Zygote, ForwardDiff
 using ACEbase.Testing: print_tf, println_slim
 
 import EquivariantTensors as ET 
@@ -46,6 +47,8 @@ module ACEKA
       return 𝔹 * ps.params, st 
    end
 
+   # We may wish to revive this if needed to compute gradients 
+   # more efficiently. To be tested. 
    #=
    function evaluate_with_grad(model::SimpleACE, X::ET.ETGraph, ps, st)
       backend = KA.get_backend(ps.params)
@@ -153,4 +156,51 @@ println_slim(@test φ ≈ φ_seq ≈ φ_dev1)
 # This passes in interactive mode but fails in a CI/test run
 # to be revived asap. 
 # φ, ∂X = ACEKA.evaluate_with_grad(model, X_dev, ps_dev, st_dev)
+
+##
+
+@info("Test Differentiation through KA Model Evaluation")
+
+@info("Zygote.gradient") 
+energy(model, G) = sum(ACEKA.evaluate(model, G, ps, st)[1])
+∇E_zy = Zygote.gradient(G -> energy(model, G), X)[1] 
+
+##
+
+@info("ForwardDiff") 
+
+function grad_fd(model, G) 
+   function replace_edges(X, Rmat)
+      Rsvec = [ SVector{3}(Rmat[:, i]) for i in 1:size(Rmat, 2) ]
+      new_edgedata = [ (; 𝐫 = 𝐫) for 𝐫 in Rsvec ]
+      return ET.ETGraph( X.ii, X.jj, X.first, 
+                  X.node_data, new_edgedata, X.graph_data, 
+                  X.maxneigs )
+   end 
+   function _energy(Rmat)
+      G_new = replace_edges(G, Rmat)
+      return sum(ACEKA.evaluate(model, G_new, ps, st)[1])
+   end
+      
+   Rsvec = [ x.𝐫 for x in G.edge_data ]
+   Rmat = reinterpret(reshape, eltype(Rsvec[1]), Rsvec)
+   ∇E_fd = ForwardDiff.gradient(_energy, Rmat)
+   ∇E_svec = [ SVector{3}(∇E_fd[:, i]) for i in 1:size(∇E_fd, 2) ]
+   ∇E_edges = [ (; 𝐫 = 𝐫) for 𝐫 in ∇E_svec ]
+   return ET.ETGraph( G.ii, G.jj, G.first, 
+               G.node_data, ∇E_edges, G.graph_data, 
+               G.maxneigs )
+end 
+
+∇E_fd = grad_fd(model, X)
+
+##
+
+@info("Confirm FD and Zygote agree")
+∇E_zy_𝐫 = [ x.𝐫 for x in ∇E_zy.edge_data ] 
+∇E_fd_𝐫 = [ x.𝐫 for x in ∇E_fd.edge_data ]
+
+println_slim(@test all(∇E_fd_𝐫 .≈ ∇E_zy_𝐫 ))
+
+##
 
