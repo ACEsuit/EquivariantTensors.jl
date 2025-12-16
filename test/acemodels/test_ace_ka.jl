@@ -38,12 +38,18 @@ module ACEKA
                    Ylm = initialstates(rng, m.Ylm), 
               symbasis = initialstates(rng, m.symbasis), )
 
-   function evaluate(model::SimpleACE, X::ET.ETGraph, ps, st)
+   # 𝔹 = (#nodes, #features); params = (#features, #readouts)
+   # in this toy model, #readouts = 1.
+
+   function eval_basis(model::SimpleACE, X::ET.ETGraph, ps, st) 
       Rnl, _ = model.Rnl(X, ps.Rnl, st.Rnl)
       Ylm, _ = model.Ylm(X, ps.Ylm, st.Ylm)
       (𝔹,), _ = ET.ka_evaluate(model.symbasis, Rnl, Ylm, ps.symbasis, st.symbasis)
-      # 𝔹 = (#nodes, #features); params = (#features, #readouts)
-      # in this toy model, #readouts = 1.
+      return 𝔹
+   end               
+
+   function evaluate(model::SimpleACE, X::ET.ETGraph, ps, st)
+      𝔹 = eval_basis(model, X, ps, st)
       return 𝔹 * ps.params, st 
    end
 
@@ -119,6 +125,7 @@ print_tf(@test ET.maxneigs(X) <= 20)
 print_tf(@test ET.nedges(X) == length(X.ii) == length(X.jj) == X.first[end] - 1)
 print_tf(@test all( all(X.ii[X.first[i]:X.first[i+1]-1] .== i)
                     for i in 1:nnodes ) )
+println()                      
 
 ##
 # 2. Move model and input to the GPU / Device 
@@ -203,4 +210,7 @@ end
 println_slim(@test all(∇E_fd_𝐫 .≈ ∇E_zy_𝐫 ))
 
 ##
+
+@info("Jacobian of basis w.r.t. positions")
+@info("    ... TODO ... ")
 
