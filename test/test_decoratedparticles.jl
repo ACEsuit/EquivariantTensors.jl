@@ -10,7 +10,9 @@ import DecoratedParticles as DP
 
 ##
 
+@info("Tests of DecoratedParticles usage") 
 
+# generate a random DP 
 rand_x() = PState(q = randn(), r = randn(SVector{3, Float64}), z = rand(1:10))
 
 # random expression, but representative in terms of simplicity 
@@ -48,14 +50,20 @@ function grad_fd2(f, x, args...)
    return VState(_svec2nt(g, v_nt))  # return as NamedTuple
 end 
 
-v = VState(x) 
-TV = typeof(v) 
-sv = reinterpret(SVector{4, Float64}, v) 
-reinterpret(TV, sv)
-_f(_sv) = f(x + reinterpret(TV, _sv))
+##
 
+# just playing around - keep this for future reference 
+#   cf. DecoratedParticles.jl Issue #11 
+# x = rand_x()
+# v = VState(x) 
+# TV = typeof(v) 
+# sv = reinterpret(SVector{4, Float64}, v) 
+# reinterpret(TV, sv) => does not work, should check how SVector implements this
+# _f(_sv) = f(x + reinterpret(TV, _sv))
 
 ##
+
+@info("Test diff of scalar fcn w.r.t. a DP")
 
 f = F(@SVector randn(10))
 x = rand_x() 
@@ -66,31 +74,27 @@ g1 = grad_1(f, x)
 g2 = grad_zy(f, x)
 g3 = ET.DiffNT.grad_fd(f, x)
 
-g0 ≈ g1 ≈ g2 ≈ g3
+println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3)
 
 ##
 
-using BenchmarkTools
+# performance of grad_fd is not idea, but may still be sufficient 
+# we will need to see how this behaves in larger tests. 
 
-@btime grad_man($f, $x)
-@btime grad_1($f, $x)
-@btime grad_zy($f, $x)
-@btime ET.DiffNT.grad_fd($f, $x)
+# using BenchmarkTools
+# @btime grad_man($f, $x)    # 3.3ns 
+# @btime grad_1($f, $x)      # 6.5ns
+# @btime grad_zy($f, $x)     # 1.4us 
+# @btime ET.DiffNT.grad_fd($f, $x)   # 8.3ns
 
 ## 
 
-# Differentiate a composition of a transform and a basis 
+@info("Test EdgeEmbedDP - Radial Basis") 
 
 using Polynomials4ML
 import Polynomials4ML as P4ML
 using Lux, LuxCore, Random 
 rng = MersenneTwister(1234)
-
-function _pb(trans, X, dP) 
-   _pb1(x, dp) = ET.DiffNT.grad_fd(_x -> dot(trans(_x), dp), x) 
-   return broadcast(_pb1, X, dP)
-end
-
 
 basis = ChebBasis(10)
 trans = x -> 1 / (1 + sum(abs2, x.r))
@@ -104,16 +108,17 @@ Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
 dY = ET.DiffNT.grad_fd.(Ref(trans), X)
 ∂P1 = dY .* dP 
-∂P2 = _pb(trans, X, dP)
 
 (_P3, _∂P3), _ = ET.evaluate_ed(embed, G, ps, st)
 P3 = ET.rev_reshape_embedding(_P3, G)
 ∂P3 = ET.rev_reshape_embedding(_∂P3, G)
 
 P ≈ P3
-all(∂P1 .≈ ∂P2 .≈ ∂P3)
+all(∂P1 .≈ ∂P3)
 
 ## 
+
+@info("Test EdgeEmbedDP - Solid Harmonics Basis") 
 
 basis = real_solidharmonics(4)
 trans = x -> x.r 
@@ -126,12 +131,10 @@ X = G.edge_data
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
 ∂P1 = map(dr -> VState(q = 0.0, r = dr), dP)
-∂P2 = _pb(trans, X, dP)
 
 (_P3, _∂P3), _ = ET.evaluate_ed(embed, G, ps, st)
 P3 = ET.rev_reshape_embedding(_P3, G)
 ∂P3 = ET.rev_reshape_embedding(_∂P3, G)
 
 P ≈ P3
-all(∂P1 .≈ ∂P2 .≈ ∂P3)
-
+all(∂P1 .≈ ∂P3)

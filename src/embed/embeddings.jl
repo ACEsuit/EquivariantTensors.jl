@@ -136,6 +136,7 @@ end
 #   (but could be revisited if we want to optimize performance)
 #
 
+using Lux: AbstractLuxContainerLayer
 using LinearAlgebra: dot 
 
 @concrete struct EdgeEmbedDP <: AbstractLuxContainerLayer{(:trans, :basis)}
