@@ -81,7 +81,7 @@ end
 
 function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
    # first gets rid of the state variable in the return 
-   ftrans = _x -> first(l.trans.f(_x, ps.trans, st.trans))
+   ftrans = _x -> first(l.trans(_x, ps.trans, st.trans))
    Y = broadcast(ftrans, X,)
    Φ2, dΦ2 = evaluate_ed(l.basis, Y, ps.basis, st.basis)
 

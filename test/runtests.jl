@@ -16,6 +16,7 @@ end
 @testset "Embed" begin 
     @testset "NamedTuples" begin include("embed/test_diffnt.jl"); end
     @testset "Transform" begin include("embed/test_transform.jl"); end
+    @testset "Decorated Particles" begin include("test_decoratedparticles.jl"); end
 end
 
 @testset "ACE Layers" begin 

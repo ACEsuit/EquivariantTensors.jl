@@ -1,19 +1,23 @@
 
 
 using EquivariantTensors, StaticArrays, Test, ForwardDiff, 
-      DecoratedParticles, Zygote, LinearAlgebra
+      DecoratedParticles, Zygote, LinearAlgebra, 
+      Polynomials4ML, Lux, LuxCore, Random 
 
 using ACEbase.Testing: println_slim, print_tf 
 
 import EquivariantTensors as ET
 import DecoratedParticles as DP
+import Polynomials4ML as P4ML
+
+rng = MersenneTwister(1234)
 
 ##
 
 @info("Tests of DecoratedParticles usage") 
 
 # generate a random DP 
-rand_x() = PState(q = randn(), r = randn(SVector{3, Float64}), z = rand(1:10))
+rand_x_dp() = PState(q = randn(), r = randn(SVector{3, Float64}), z = rand(1:10))
 
 # random expression, but representative in terms of simplicity 
 struct F{N, T}; W::SVector{N, T}; end
@@ -40,21 +44,11 @@ function grad_zy(f::F, x)
 end
 
 
-function grad_fd2(f, x, args...)
-   v = VState(x) 
-   x_nt = getfield(x, :x)
-   v_nt = _ctsnt(x_nt)  # extract continuous variables into an SVector 
-   v = _nt2svec(v_nt)
-   _fvec = _v -> f(STATE(_replace(x_nt, _svec2nt(_v, v_nt))), args...)
-   g = ForwardDiff.gradient(_fvec, _nt2svec(v_nt))
-   return VState(_svec2nt(g, v_nt))  # return as NamedTuple
-end 
-
 ##
 
 # just playing around - keep this for future reference 
 #   cf. DecoratedParticles.jl Issue #11 
-# x = rand_x()
+# x = rand_x_dp()
 # v = VState(x) 
 # TV = typeof(v) 
 # sv = reinterpret(SVector{4, Float64}, v) 
@@ -66,7 +60,7 @@ end
 @info("Test diff of scalar fcn w.r.t. a DP")
 
 f = F(@SVector randn(10))
-x = rand_x() 
+x = rand_x_dp() 
 
 f(x)
 g0 = grad_man(f, x)
@@ -78,7 +72,7 @@ println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3)
 
 ##
 
-# performance of grad_fd is not idea, but may still be sufficient 
+# performance of grad_fd is not ideal, but may still be sufficient 
 # we will need to see how this behaves in larger tests. 
 
 # using BenchmarkTools
@@ -89,32 +83,30 @@ println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3)
 
 ## 
 
-@info("Test EdgeEmbedDP - Radial Basis") 
-
-using Polynomials4ML
-import Polynomials4ML as P4ML
-using Lux, LuxCore, Random 
-rng = MersenneTwister(1234)
+@info("Test EmbedDP - Radial Basis") 
 
 basis = ChebBasis(10)
 trans = x -> 1 / (1 + sum(abs2, x.r))
-embed = ET.EdgeEmbedDP(WrappedFunction(trans), basis; name = "Rnl")
+embed = ET.EmbedDP(WrappedFunction(trans), basis; name = "Rnl")
+embed_nt = ET.EmbedDP(ET.NTtransform(trans), basis; name = "Rnl")
 ps, st = LuxCore.setup(rng, embed)
+ps_nt, st_nt = LuxCore.setup(rng, embed_nt)
 
-G = ET.Testing.rand_graph(20; randedge = rand_x)
+G = ET.Testing.rand_graph(20; randedge = rand_x_dp)
 X = G.edge_data
+X_nt = [ getfield(x, :x) for x in X ]
 
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
 dY = ET.DiffNT.grad_fd.(Ref(trans), X)
 ∂P1 = dY .* dP 
 
-(_P3, _∂P3), _ = ET.evaluate_ed(embed, G, ps, st)
-P3 = ET.rev_reshape_embedding(_P3, G)
-∂P3 = ET.rev_reshape_embedding(_∂P3, G)
+(P2, ∂P2), _ = ET.evaluate_ed(embed, X, ps, st)
+(P3, _∂P3), _ = ET.evaluate_ed(embed_nt, X_nt, ps_nt, st_nt)
+∂P3 = VState.(_∂P3) 
 
-P ≈ P3
-all(∂P1 .≈ ∂P3)
+println_slim(@test P ≈ P2 ≈ P3)
+println_slim(@test all(∂P1 .≈ ∂P2 .≈ ∂P3))
 
 ## 
 
@@ -122,19 +114,23 @@ all(∂P1 .≈ ∂P3)
 
 basis = real_solidharmonics(4)
 trans = x -> x.r 
-embed = ET.EdgeEmbedDP(WrappedFunction(trans), basis; name = "Ylm")
+embed = ET.EmbedDP(WrappedFunction(trans), basis; name = "Ylm")
+embed_nt = ET.EmbedDP(ET.NTtransform(trans), basis; name = "Ylm")
 ps, st = LuxCore.setup(rng, embed)
+ps_nt, st_nt = LuxCore.setup(rng, embed_nt)
 
-G = ET.Testing.rand_graph(20; randedge = rand_x)
+G = ET.Testing.rand_graph(20; randedge = rand_x_dp)
 X = G.edge_data
+X_nt = [ getfield(x, :x) for x in X ]
 
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
 ∂P1 = map(dr -> VState(q = 0.0, r = dr), dP)
 
-(_P3, _∂P3), _ = ET.evaluate_ed(embed, G, ps, st)
-P3 = ET.rev_reshape_embedding(_P3, G)
-∂P3 = ET.rev_reshape_embedding(_∂P3, G)
+(P2, ∂P2), _ = ET.evaluate_ed(embed, X, ps, st)
+(P3, _∂P3), _ = ET.evaluate_ed(embed_nt, X_nt, ps_nt, st_nt)
+∂P3 = VState.(_∂P3)
 
-P ≈ P3
-all(∂P1 .≈ ∂P3)
+println_slim(@test P ≈ P2 ≈ P3)
+println_slim(@test all(∂P1 .≈ ∂P2 .≈ ∂P3))
+
