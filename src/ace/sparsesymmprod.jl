@@ -146,7 +146,7 @@ end
 
 import ChainRulesCore: rrule, NoTangent 
 
-function whatalloc(::typeof(pullback!),
+function whatalloc(::typeof(pullback!), 
                    ∂AA, basis::SparseSymmProd, A)
    T∂A = promote_type(eltype(∂AA), eltype(A))
    return (T∂A, size(A)... )
@@ -207,8 +207,8 @@ end
 #  ∇_∂AA, ∇_A = pullback2(∂∇A, ∂AA, basis, A)
 #
 
-function whatalloc(::typeof(pullback2!),
-                   ∂∇A,   # cotangent to be pulled back
+function whatalloc(::typeof(pullback2!), 
+                   ∂∇A,   # cotangent to be pulled back 
                    ∂AA,   # cotangent from pullback(∂AA, basis, A)
                    basis::SparseSymmProd, A)
    T = promote_type(eltype(∂∇A), eltype(∂AA), eltype(A))
@@ -217,9 +217,9 @@ end
 
 
 
-function pullback2!(∇_∂AA, ∇_A,
+function pullback2!(∇_∂AA, ∇_A, 
                     ∂∇A, ∂AA, basis, A)
-   @assert size(∂∇A) == size(A)
+   @assert size(∂∇A) == size(A)                     
    T = promote_type(eltype(∂∇A), eltype(∂AA), eltype(A))
    d = Dual{T}(zero(T), one(T))
    DT = typeof(d)
@@ -247,8 +247,8 @@ end
 
 using ForwardDiff
 
-function whatalloc(::typeof(pushforward!),
-                   basis::SparseSymmProd,
+function whatalloc(::typeof(pushforward!), 
+                   basis::SparseSymmProd, 
                    A::AbstractVector, ΔA::AbstractVector)
    nAA = length(basis)
    TAA = eltype(A)
@@ -256,8 +256,8 @@ function whatalloc(::typeof(pushforward!),
    return (TAA, nAA), (T∂AA, nAA)
 end
 
-function whatalloc(::typeof(pushforward!),
-                   basis::SparseSymmProd,
+function whatalloc(::typeof(pushforward!), 
+                   basis::SparseSymmProd, 
                    A::AbstractMatrix, ΔA::AbstractMatrix)
    nAA = length(basis)
    TAA = eltype(A)
@@ -301,7 +301,7 @@ function rrule(::typeof(evaluate), basis::SparseSymmProd, A)
    return AA, pb
 end
 
-function rrule(::typeof(pullback), ∂AA, basis::SparseSymmProd, A)
+function rrule(::typeof(pullback), ∂AA, basis::SparseSymmProd, A) 
    ∂A = pullback(∂AA, basis, A)
    function pb(∂∂A)
       ∂²∂AA, ∂²A = pullback2(∂∂A, ∂AA, basis, A)

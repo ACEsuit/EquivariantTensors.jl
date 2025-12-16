@@ -74,7 +74,7 @@ function evaluate!(B, tensor::SparseACEbasis{T}, Rnl, Ylm) where {T}
    # evaluate the coupling coefficients
    # B = tensor.A2Bmap * AA
 
-   mul!(B, tensor.A2Bmap, AA)
+   mul!(B, tensor.A2Bmap, AA)   
 
    return B
 end
