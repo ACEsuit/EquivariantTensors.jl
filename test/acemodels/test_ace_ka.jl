@@ -1,6 +1,6 @@
 
 using LinearAlgebra, Lux, Random, EquivariantTensors, Test, StaticArrays,
-      Zygote, ForwardDiff
+      Zygote, ForwardDiff, DecoratedParticles
 using ACEbase.Testing: print_tf, println_slim
 
 import EquivariantTensors as ET 
@@ -70,29 +70,26 @@ module ACEKA
       (Rnl, dRnl), _ = ET.evaluate_ed(model.Rnl, X, ps.Rnl, st.Rnl)
       (Ylm, dYlm), _ = ET.evaluate_ed(model.Ylm, X, ps.Ylm, st.Ylm)
 
-      𝔹, A, 𝔸 = ET._ka_evaluate(model.symbasis, Rnl, Ylm, 
-               st.symbasis.aspec, st.symbasis.aaspecs, st.symbasis.A2Bmaps[1])
+      (𝔹,), A, 𝔸 = ET._ka_evaluate(model.symbasis, Rnl, Ylm, 
+                  st.symbasis.aspec, st.symbasis.aaspecs, st.symbasis.A2Bmaps)
       φ = 𝔹 * ps.params
 
       # let's assume we eventually produce E = ∑φ then ∂E = 1, which 
       # backpropagates to ∂φ = (1,1,1...)
       # ∂E/∂𝔹 = ∂/∂𝔹 { 1ᵀ 𝔹 params } = ∂/∂𝔹 { 𝔹 : 1 ⊗ params}
-      ∂𝔹 = KA.ones(backend, eltype(𝔹), (size(𝔹, 1),)) * ps.params' 
+      ∂𝔹 = fill!(similar(𝔹, (size(𝔹, 1),)), one(eltype(𝔹))) * ps.params' 
 
       # packpropagate through the symmetric basis 
-      ∂Rnl, ∂Ylm = ET.pullback(∂𝔹, model.symbasis, Rnl, Ylm, A)
+      ∂Rnl, ∂Ylm = ET._ka_pullback((∂𝔹,), model.symbasis, Rnl, Ylm, A, 𝔸, 
+                                    st.symbasis.aspec, st.symbasis.aaspecs, st.symbasis.A2Bmaps)
 
-      # (∂Rnl_3, ∂Ylm_3), _ = ET.ka_pullback(∂𝔹, model.symbasis, 
-      #                                      Rnl_3, Ylm_3, A, 𝔸, 
-      #                                      ps.symbasis, st.symbasis) 
+      # this could be made more memory efficient by avoiding the 
+      # many intermediate allocations 
+      _grad_R = ET._pullback_edge_embedding(∂Rnl, VState.(dRnl), X) 
+      _grad_Y = ET._pullback_edge_embedding(∂Ylm, VState.(dYlm), X)
 
-      # still need to wrap this up. 
-      # ∂X, _ = ET.ka_pullback( ∂Rnl_3, ∂Ylm_3, model.embed, 
-      #                         X, ps.embed, st.embed)
-
-      # return φ, ∂X
-      return nothing 
-   end
+      return φ, _grad_R .+ _grad_Y
+   end       
 
 end
 
@@ -182,9 +179,10 @@ println_slim(@test φ ≈ φ_seq ≈ φ_dev1)
 
 ##
 
-# This passes in interactive mode but fails in a CI/test run
-# to be revived asap. 
-# φ, ∂X = ACEKA.evaluate_with_grad(model, X_dev, ps_dev, st_dev)
+# semi-hand-written gradient 
+# this currently doesn't run on GPU yet -> urgent TODO 
+φ, ∂X = ACEKA.evaluate_with_grad(model, X, ps, st)
+
 
 ##
 
@@ -233,8 +231,9 @@ end
 @info("Confirm FD and Zygote agree")
 ∇E_zy_𝐫 = [ x.𝐫 for x in ∇E_zy.edge_data ] 
 ∇E_fd_𝐫 = [ x.𝐫 for x in ∇E_fd.edge_data ]
+∇E_man_𝐫 = [ x.𝐫 for x in ∂X ]
 
-println_slim(@test all(∇E_fd_𝐫 .≈ ∇E_zy_𝐫 ))
+println_slim(@test all(∇E_fd_𝐫 .≈ ∇E_zy_𝐫 .≈ ∇E_man_𝐫 ))
 
 ##
 
@@ -257,5 +256,12 @@ println_slim(@test all(VState.(∇E_zy.edge_data) .≈ ∂𝔹2xθ))
 ##
 
 # This is reasonably efficient, but would be good to reduce the allocations  
-# @time ACEKA.eval_basis(model, X, ps, st)
-# @time ACEKA.jacobian_basis(model, X, ps, st)
+@info("Timings")
+println(" Basis: ")
+@time ACEKA.eval_basis(model, X, ps, st)
+println(" Evaluate with Grad: ")
+@time ACEKA.evaluate_with_grad(model, X, ps, st)
+println(" Zygote Gradient: ")
+@time Zygote.gradient(G -> energy(model, G, ps, st), X)[1] 
+println(" Jacobian Basis: ")
+@time ACEKA.jacobian_basis(model, X, ps, st)

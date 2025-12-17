@@ -105,3 +105,9 @@ end
 #    return ϕ3, _pb_ϕ
 # end
 
+
+function _pullback_edge_embedding(∂Φ3, dΦ3, X::ETGraph)
+   ∂Φ2 = rev_reshape_embedding(∂Φ3, X)
+   dΦ2 = rev_reshape_embedding(dΦ3, X)
+   return dropdims( sum(∂Φ2 .* dΦ2, dims = 2), dims = 2) 
+end
