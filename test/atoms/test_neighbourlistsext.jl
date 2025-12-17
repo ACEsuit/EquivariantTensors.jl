@@ -1,6 +1,6 @@
 
-using Pkg; Pkg.activate(@__DIR__() * "/../..")
-using TestEnv; TestEnv.activate() 
+# using Pkg; Pkg.activate(@__DIR__() * "/../..")
+# using TestEnv; TestEnv.activate() 
 
 ##
 
