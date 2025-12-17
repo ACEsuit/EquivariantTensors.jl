@@ -257,15 +257,15 @@ println_slim(@test all(VState.(∇E_zy.edge_data) .≈ ∂𝔹2xθ))
 
 ##
 
-# Reasonably efficient, but would be good to reduce the allocations  
-@info("Timings")
-println(" Basis: ")
-@time ACEKA.eval_basis(model, X, ps, st)
-println(" Model: ")
-@time ACEKA.evaluate(model, X, ps, st)
-println(" Evaluate with Grad: ")
-@time ACEKA.evaluate_with_grad(model, X, ps, st)
-println(" Zygote Gradient: ")
-@time _zygrad(X)
-println(" Jacobian Basis: ")
-@time ACEKA.jacobian_basis(model, X, ps, st)
+# # Reasonably efficient, but would be good to reduce the allocations  
+# @info("Timings")
+# println(" Basis: ")
+# @time ACEKA.eval_basis(model, X, ps, st)
+# println(" Model: ")
+# @time ACEKA.evaluate(model, X, ps, st)
+# println(" Evaluate with Grad: ")
+# @time ACEKA.evaluate_with_grad(model, X, ps, st)
+# println(" Zygote Gradient: ")
+# @time _zygrad(X)
+# println(" Jacobian Basis: ")
+# @time ACEKA.jacobian_basis(model, X, ps, st)
