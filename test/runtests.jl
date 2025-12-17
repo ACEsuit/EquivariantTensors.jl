@@ -43,7 +43,7 @@ end
 end 
 
 @testset "Atoms" begin 
-    @testset "NeighbourListsExt" begin include("test_neighbourlistsext.jl"); end
+    @testset "NeighbourListsExt" begin include("atoms/test_neighbourlistsext.jl"); end
 end 
 
 end

@@ -138,18 +138,21 @@ end
 # NTtransform(f)  = NTtransform(f)
 # Base.show(io::IO, l::NTtransform) = print(io, "NTtransform($(l.sym))")
 
+using DecoratedParticles: XState 
+const NTorDP = Union{NamedTuple, XState}
+
 initialparameters(rng::AbstractRNG, l::NTtransform) = NamedTuple()
 initialstates(rng::AbstractRNG, l::NTtransform) = NamedTuple()
 
-(l::NTtransform)(x::NamedTuple, ps, st) = l.f(x), st 
-(l::NTtransform)(x::NamedTuple) = l.f(x)
+(l::NTtransform)(x::NTorDP, ps, st) = l.f(x), st 
+(l::NTtransform)(x::NTorDP) = l.f(x)
 
-(l::NTtransform)(x::AbstractVector{<: NamedTuple}, ps, st) = map(l.f, x), st 
-(l::NTtransform)(x::AbstractVector{<: NamedTuple}) = map(l.f, x) 
+(l::NTtransform)(x::AbstractVector{<: NTorDP}, ps, st) = map(l.f, x), st 
+(l::NTtransform)(x::AbstractVector{<: NTorDP}) = map(l.f, x) 
 
-evaluate(l::NTtransform, x::NamedTuple, ps, st) = l.f(x)
+evaluate(l::NTtransform, x::NTorDP, ps, st) = l.f(x)
 
-evaluate_ed(l::NTtransform, x::NamedTuple, ps, st) = 
+evaluate_ed(l::NTtransform, x::NTorDP, ps, st) = 
       (l.f(x), DiffNT.grad_fd(l.f, x))
 
 

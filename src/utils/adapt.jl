@@ -2,6 +2,7 @@
 
 import Functors  
 using StaticArrays
+using DecoratedParticles: XState
 
 _floatT(T, A::Any) = A 
 _floatT(T, A::AbstractFloat) = T(A) 
@@ -16,6 +17,9 @@ float64(x::AbstractFloat) = Float64(x)
 
 float32(nt::NamedTuple) = Functors.fmap(_float32, nt) 
 float64(nt::NamedTuple) = Functors.fmap(_float64, nt)
+
+float32(x::T) where {T <: XState} = T( float32(getfield(x, :x)) )
+float64(x::T) where {T <: XState} = T( float64(getfield(x, :x)) )
 
 float32(::Nothing) = nothing 
 
