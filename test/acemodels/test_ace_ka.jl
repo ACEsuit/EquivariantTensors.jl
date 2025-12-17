@@ -190,7 +190,9 @@ println_slim(@test φ ≈ φ_seq ≈ φ_dev1)
 
 @info("Zygote.gradient") 
 energy(model, G, ps, st) = sum(ACEKA.evaluate(model, G, ps, st)[1])
-∇E_zy = Zygote.gradient(G -> energy(model, G, ps, st), X)[1] 
+_zygrad(X) = Zygote.gradient(G -> energy(model, G, ps, st), X)[1]
+
+∇E_zy = _zygrad(X) 
 
 # This requires a fix to P4ML to work properly on the GPU device
 # ∇E_zy_dev = Zygote.gradient(G -> energy(model, G, ps_dev, st_dev), X_dev)[1] 
@@ -255,13 +257,15 @@ println_slim(@test all(VState.(∇E_zy.edge_data) .≈ ∂𝔹2xθ))
 
 ##
 
-# This is reasonably efficient, but would be good to reduce the allocations  
+# Reasonably efficient, but would be good to reduce the allocations  
 @info("Timings")
 println(" Basis: ")
 @time ACEKA.eval_basis(model, X, ps, st)
+println(" Model: ")
+@time ACEKA.evaluate(model, X, ps, st)
 println(" Evaluate with Grad: ")
 @time ACEKA.evaluate_with_grad(model, X, ps, st)
 println(" Zygote Gradient: ")
-@time Zygote.gradient(G -> energy(model, G, ps, st), X)[1] 
+@time _zygrad(X)
 println(" Jacobian Basis: ")
 @time ACEKA.jacobian_basis(model, X, ps, st)
