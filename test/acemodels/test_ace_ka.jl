@@ -55,10 +55,8 @@ module ACEKA
    end
 
    function jacobian_basis(model::SimpleACE, X::ET.ETGraph, ps, st) 
-      (R, _∂R), _ = ET.evaluate_ed(model.Rnl, X, ps.Rnl, st.Rnl)
-      (Y, _∂Y), _ = ET.evaluate_ed(model.Ylm, X, ps.Ylm, st.Ylm)
-      ∂R = VState.( _∂R )
-      ∂Y = VState.( _∂Y )
+      (R, ∂R), _ = ET.evaluate_ed(model.Rnl, X, ps.Rnl, st.Rnl)
+      (Y, ∂Y), _ = ET.evaluate_ed(model.Ylm, X, ps.Ylm, st.Ylm)
       𝔹, ∂𝔹 = ET._jacobian_X(model.symbasis, R, Y, ∂R, ∂Y)
       return 𝔹, ∂𝔹
    end
@@ -85,8 +83,8 @@ module ACEKA
 
       # this could be made more memory efficient by avoiding the 
       # many intermediate allocations 
-      _grad_R = ET._pullback_edge_embedding(∂Rnl, VState.(dRnl), X) 
-      _grad_Y = ET._pullback_edge_embedding(∂Ylm, VState.(dYlm), X)
+      _grad_R = ET._pullback_edge_embedding(∂Rnl, dRnl, X) 
+      _grad_Y = ET._pullback_edge_embedding(∂Ylm, dYlm, X)
 
       return φ, _grad_R .+ _grad_Y
    end       
@@ -253,7 +251,7 @@ println_slim(@test all(∇E_fd_𝐫 .≈ ∇E_zy_𝐫 .≈ ∇E_man_𝐫 ))
 ∂𝔹2xθ = ∂𝔹2 * θ
 
 println_slim(@test 𝔹3[1] ≈ ACEKA.eval_basis(model, X, ps, st))
-println_slim(@test all(VState.(∇E_zy.edge_data) .≈ ∂𝔹2xθ)) 
+println_slim(@test all(∇E_zy.edge_data .≈ ∂𝔹2xθ)) 
 
 ##
 

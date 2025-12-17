@@ -42,4 +42,8 @@ end
     # @testset "ACE KA new version" begin include("acemodels/test_ace_ka2.jl"); end
 end 
 
+@testset "Atoms" begin 
+    @testset "NeighbourListsExt" begin include("atoms/test_neighbourlistsext.jl"); end
+end 
+
 end

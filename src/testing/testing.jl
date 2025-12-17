@@ -2,6 +2,7 @@ module Testing
 
 import EquivariantTensors as ET
 using StaticArrays, Random, LinearAlgebra
+using DecoratedParticles: PState 
 
 function rand_ball(rcut::T)  where {T} 
    u = randn(SVector{3, T})
@@ -13,7 +14,7 @@ function rand_graph(nnodes;
                     nneigrg = min(nnodes ÷ 2 + 1, 10):min(nnodes, 30), 
                     T = Float32, 
                     rcut = one(T), 
-                    randedge = () -> ( 𝐫 = rand_ball(rcut), ), )
+                    randedge = () -> PState( 𝐫 = rand_ball(rcut), ), )
    ii = Int[] 
    jj = Int[]
    rmax = nnodes^(1/3) * 0.5
