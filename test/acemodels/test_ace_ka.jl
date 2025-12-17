@@ -14,6 +14,7 @@ include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 module ACEKA
 
    using LinearAlgebra, Random, Zygote  
+   using DecoratedParticles: VState
    import LuxCore: initialparameters, initialstates
    import ChainRulesCore: rrule
 
@@ -52,6 +53,16 @@ module ACEKA
       𝔹 = eval_basis(model, X, ps, st)
       return 𝔹 * ps.params, st 
    end
+
+   function jacobian_basis(model::SimpleACE, X::ET.ETGraph, ps, st) 
+      (R, _∂R), _ = ET.evaluate_ed(model.Rnl, X, ps.Rnl, st.Rnl)
+      (Y, _∂Y), _ = ET.evaluate_ed(model.Ylm, X, ps.Ylm, st.Ylm)
+      ∂R = VState.( _∂R )
+      ∂Y = VState.( _∂Y )
+      𝔹, ∂𝔹 = ET._jacobian_X(model.symbasis, R, Y, ∂R, ∂Y)
+      return 𝔹, ∂𝔹
+   end
+
 
    # We may wish to revive this if needed to compute gradients 
    # more efficiently. To be tested. 
@@ -144,12 +155,17 @@ println_slim(@test φ ≈ φ_dev1)
 # now we try to make the same prediction with the original CPU ace 
 # implementation, also skipping the graph datastructure entirely. 
 
-function evaluate_env(model::ACEKA.SimpleACE, 𝐑i)
+function _basis_env(model::ACEKA.SimpleACE, 𝐑i)
    rij = [ rtrans(x) for x in 𝐑i ]
    Rnl = P4ML.evaluate(rbasis, rij)
    𝐫ij = [ x.𝐫 for x in 𝐑i ]
    Ylm = P4ML.evaluate(ybasis, 𝐫ij)
    𝔹, = ET.evaluate(𝔹basis, Rnl, Ylm)   
+   return 𝔹
+end
+
+function evaluate_env(model::ACEKA.SimpleACE, 𝐑i)
+   𝔹 = _basis_env(model, 𝐑i)
    return dot(𝔹, θ)
 end
 
@@ -180,14 +196,15 @@ energy(model, G, ps, st) = sum(ACEKA.evaluate(model, G, ps, st)[1])
 
 @info("ForwardDiff") 
 
+function replace_edges(X, Rmat)
+   Rsvec = [ SVector{3}(Rmat[:, i]) for i in 1:size(Rmat, 2) ]
+   new_edgedata = [ (; 𝐫 = 𝐫) for 𝐫 in Rsvec ]
+   return ET.ETGraph( X.ii, X.jj, X.first, 
+               X.node_data, new_edgedata, X.graph_data, 
+               X.maxneigs )
+end 
+
 function grad_fd(model, G) 
-   function replace_edges(X, Rmat)
-      Rsvec = [ SVector{3}(Rmat[:, i]) for i in 1:size(Rmat, 2) ]
-      new_edgedata = [ (; 𝐫 = 𝐫) for 𝐫 in Rsvec ]
-      return ET.ETGraph( X.ii, X.jj, X.first, 
-                  X.node_data, new_edgedata, X.graph_data, 
-                  X.maxneigs )
-   end 
    function _energy(Rmat)
       G_new = replace_edges(G, Rmat)
       return sum(ACEKA.evaluate(model, G_new, ps, st)[1])
@@ -244,6 +261,15 @@ AA, ∂AA = ET._jacobian_X(aabasis, A, ∂A)
 ∂𝔹_mat = permutedims( 𝒞 * permutedims(∂AA_mat) )
 ∂𝔹 = reshape(∂𝔹_mat, :, size(𝔹)...)
 
-𝔹1, ∂𝔹1 = ET._jacobian_X(model.symbasis, R, Y, ∂R, ∂Y)
+𝔹1, ∂𝔹1 = ACEKA.jacobian_basis(model, X, ps, st)
 println_slim(@test 𝔹 ≈ 𝔹1[1])
 println_slim(@test all(∂𝔹 .≈ ∂𝔹1[1]))
+
+
+@info("Check correctness of jacobian against gradient")
+# to test the jacobian, we check whether it gives the 
+# same as the gradient after contraction with the parameters 
+# first we transform it into edge format 
+∂𝔹2 = ET.rev_reshape_embedding(∂𝔹, X)
+∂𝔹2xθ = ∂𝔹2 * θ
+println_slim(@test all(VState.(∇E_zy.edge_data) .≈ ∂𝔹2xθ)) 
