@@ -19,30 +19,35 @@ rng = MersenneTwister(1234)
 # generate a random DP 
 rand_x_dp() = PState(q = randn(), r = randn(SVector{3, Float64}), z = rand(1:10))
 
-# random expression, but representative in terms of simplicity 
-struct F{N, T}; W::SVector{N, T}; end
-evaluate(f::F, x) = sum(x.r .* x.r) * x.q / (1 + f.W[x.z]^2)   
-(f::F)(x::PState) = evaluate(f, x)
+module TestDP 
+   using StaticArrays, ForwardDiff, Zygote
+   import DecoratedParticles: PState, VState
+   import EquivariantTensors as ET
 
-# manual gradient 
-function grad_man(f::F, x) 
-   r2 = sum(x.r .* x.r)
-   w = 1 / (1 + f.W[x.z]^2)
-   return VState(q = r2 * w, r = 2 * x.r * x.q * w, ) 
-end
+   # random expression, but representative in terms of simplicity 
+   struct F{N, T}; W::SVector{N, T}; end
+   evaluate(f::F, x) = sum(x.r .* x.r) * x.q / (1 + f.W[x.z]^2)   
+   (f::F)(x::PState) = evaluate(f, x)
 
-# gradient via ForwardDiff                       
-function grad_1(f::F, x) 
-   ∂q = ForwardDiff.derivative(q -> evaluate(f, PState(q=q,   r=x.r, z=x.z)), x.q)
-   ∂r = ForwardDiff.gradient(r -> evaluate(f, PState(q=x.q, r=r,   z=x.z)), x.r)
-   return VState(q = ∂q, r = ∂r)
-end
+   # manual gradient 
+   function grad_man(f::F, x) 
+      r2 = sum(x.r .* x.r)
+      w = 1 / (1 + f.W[x.z]^2)
+      return VState(q = r2 * w, r = 2 * x.r * x.q * w, ) 
+   end
 
-function grad_zy(f::F, x) 
-   g = Zygote.gradient(evaluate, f, x)
-   return g[2]
-end
+   # gradient via ForwardDiff                       
+   function grad_1(f::F, x) 
+      ∂q = ForwardDiff.derivative(q -> evaluate(f, PState(q=q,   r=x.r, z=x.z)), x.q)
+      ∂r = ForwardDiff.gradient(r -> evaluate(f, PState(q=x.q, r=r,   z=x.z)), x.r)
+      return VState(q = ∂q, r = ∂r)
+   end
 
+   function grad_zy(f::F, x) 
+      g = Zygote.gradient(evaluate, f, x)
+      return g[2]
+   end
+end 
 
 ##
 
@@ -59,13 +64,13 @@ end
 
 @info("Test diff of scalar fcn w.r.t. a DP")
 
-f = F(@SVector randn(10))
+f = TestDP.F(@SVector randn(10))
 x = rand_x_dp() 
 
 f(x)
-g0 = grad_man(f, x)
-g1 = grad_1(f, x)
-g2 = grad_zy(f, x)
+g0 = TestDP.grad_man(f, x)
+g1 = TestDP.grad_1(f, x)
+g2 = TestDP.grad_zy(f, x)
 g3 = ET.DiffNT.grad_fd(f, x)
 
 println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3)

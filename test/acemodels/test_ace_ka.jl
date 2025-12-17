@@ -248,10 +248,10 @@ println_slim(@test all(∇E_fd_𝐫 .≈ ∇E_zy_𝐫 ))
 𝔹3, ∂𝔹3 = ACEKA.jacobian_basis(model, X, ps, st)
 
 # convert to 2-dimensional tensor (compat with ∇E_zy)
-∂𝔹2 = ET.rev_reshape_embedding(∂𝔹, X)
+∂𝔹2 = ET.rev_reshape_embedding(∂𝔹3[1], X)
 ∂𝔹2xθ = ∂𝔹2 * θ
 
-println_slim(@test 𝔹 ≈ ACEKA.eval_basis(model, X, ps, st))
+println_slim(@test 𝔹3[1] ≈ ACEKA.eval_basis(model, X, ps, st))
 println_slim(@test all(VState.(∇E_zy.edge_data) .≈ ∂𝔹2xθ)) 
 
 ##
