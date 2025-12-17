@@ -1,3 +1,7 @@
+# TODO: unclear whether many of these tests are really needed 
+#       they are already included in the individual layer tests 
+#       the frules might be the only ones to keep.
+#
 
 # Tests for ForwardDiff compatibility of ACE basis functions
 # This verifies that ForwardDiff.jacobian works through the ACE pipeline

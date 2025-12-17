@@ -1,6 +1,3 @@
-#
-# TODO: rethink EdgeEmbed and variants
-#
 
 using ConcreteStructs 
 using Lux: AbstractLuxWrapperLayer, AbstractLuxContainerLayer

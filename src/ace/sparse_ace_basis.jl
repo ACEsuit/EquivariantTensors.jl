@@ -99,12 +99,8 @@ end
 =#
 
 function evaluate(tensor::SparseACEbasis, Rnl, Ylm, ps, st)
-   TA = promote_type(eltype(Rnl), eltype(Ylm))
    A = ka_evaluate(tensor.abasis, (Rnl, Ylm))
-
-   # evaluate the AA basis
    AA = ka_evaluate(tensor.aabasis, A)
-
    # evaluate the coupling coefficients
    BB = tensor.A2Bmaps .* Ref(AA)
    return BB
@@ -219,6 +215,46 @@ function rrule(::typeof(evaluate), tensor::SparseACEbasis,
    return (𝔹, st), pb_3d
 end
 
+
+# --------------------------------------------------------
+# 
+#  Jacobian of basis w.r.t. inputs (normally positions) 
+#
+# Assume the input data is organized as follows: 
+#   Rnl : #j x #i x #R  array with #R the length of the radial basis 
+#   Ylm : #j x #i x #Y  array with #Y the length of the spherical basis
+#   dRnl, dYlm : same shape as Rnl, Ylm with 
+#       dRnl[j, i, k] = ∂Rnl[i, j] / ∂X[i, j]  
+#       dYlm[j, i, k] = ∂Ylm[i, j] / ∂X[i, j]
+#
+
+function _jacobian_X(tensor::SparseACEbasis, 
+                     Rnl, Ylm, 
+                     dRnl, dYlm)
+
+   A, ∂A = _jacobian_X(tensor.abasis, (Rnl, Ylm), (dRnl, dYlm))
+   AA, ∂AA = _jacobian_X(tensor.aabasis, A, ∂A)
+   
+   # BB = tensor.A2Bmap * AA  if vector (single input)
+   #     or AA * A2Bmap'  if matrix (batch)
+   # BB = #nodes x #features 
+   # ∂BB = maxneigs x #nodes x #features
+   # for now assume only one basis ... 
+   𝔹 = permutedims.( tensor.A2Bmaps .* Ref(permutedims(AA)) )
+
+   # convert 3-tensor to matrix, apply A2Bmaps, then back to 3-tensor
+   # this should be merged into a single kernel for efficiency 
+   ∂AA_mat = reshape(∂AA, :, size(∂AA, 3))
+   ∂𝔹_mat = permutedims.( tensor.A2Bmaps .* Ref(permutedims(∂AA_mat)) )
+
+   @assert length(tensor.A2Bmaps) == 1 "Jacobian currently only supports single basis"
+   ∂𝔹 = ( reshape(∂𝔹_mat[1], size(∂AA, 1), :, size(∂𝔹_mat[1], 2)), )
+
+   return 𝔹, ∂𝔹
+end
+
+
+# --------------------------------------------------------
 
 
 const NT_NL_SPEC = NamedTuple{(:n, :l), Tuple{Int, Int}}
