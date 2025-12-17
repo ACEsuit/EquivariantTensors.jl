@@ -64,30 +64,36 @@ module ACEKA
    end
 
 
-   # We may wish to revive this if needed to compute gradients 
-   # more efficiently. To be tested. 
-   #=
+   # Semi-manual gradients are still much more efficient 
+   #
    function evaluate_with_grad(model::SimpleACE, X::ET.ETGraph, ps, st)
-      backend = KA.get_backend(ps.params)
-      (Rnl_3, Ylm_3), _ = ET.evaluate(model.embed, X, ps.embed, st.embed)
-      𝔹, A, 𝔸 = ET._ka_evaluate(model.symbasis, Rnl_3, Ylm_3, 
-               st.symbasis.aspec, st.symbasis.aaspecs, st.symbasis.A2Bmaps[1]) 
+      (Rnl, dRnl), _ = ET.evaluate_ed(model.Rnl, X, ps.Rnl, st.Rnl)
+      (Ylm, dYlm), _ = ET.evaluate_ed(model.Ylm, X, ps.Ylm, st.Ylm)
+
+      𝔹, A, 𝔸 = ET._ka_evaluate(model.symbasis, Rnl, Ylm, 
+               st.symbasis.aspec, st.symbasis.aaspecs, st.symbasis.A2Bmaps[1])
       φ = 𝔹 * ps.params
+
       # let's assume we eventually produce E = ∑φ then ∂E = 1, which 
       # backpropagates to ∂φ = (1,1,1...)
       # ∂E/∂𝔹 = ∂/∂𝔹 { 1ᵀ 𝔹 params } = ∂/∂𝔹 { 𝔹 : 1 ⊗ params}
       ∂𝔹 = KA.ones(backend, eltype(𝔹), (size(𝔹, 1),)) * ps.params' 
 
       # packpropagate through the symmetric basis 
-      (∂Rnl_3, ∂Ylm_3), _ = ET.ka_pullback(∂𝔹, model.symbasis, 
-                                           Rnl_3, Ylm_3, A, 𝔸, 
-                                           ps.symbasis, st.symbasis) 
-      ∂X, _ = ET.ka_pullback( ∂Rnl_3, ∂Ylm_3, model.embed, 
-                              X, ps.embed, st.embed)
+      ∂Rnl, ∂Ylm = ET.pullback(∂𝔹, model.symbasis, Rnl, Ylm, A)
 
-      return φ, ∂X
+      # (∂Rnl_3, ∂Ylm_3), _ = ET.ka_pullback(∂𝔹, model.symbasis, 
+      #                                      Rnl_3, Ylm_3, A, 𝔸, 
+      #                                      ps.symbasis, st.symbasis) 
+
+      # still need to wrap this up. 
+      # ∂X, _ = ET.ka_pullback( ∂Rnl_3, ∂Ylm_3, model.embed, 
+      #                         X, ps.embed, st.embed)
+
+      # return φ, ∂X
+      return nothing 
    end
-   =# 
+
 end
 
 
@@ -247,3 +253,9 @@ println_slim(@test all(∇E_fd_𝐫 .≈ ∇E_zy_𝐫 ))
 
 println_slim(@test 𝔹 ≈ ACEKA.eval_basis(model, X, ps, st))
 println_slim(@test all(VState.(∇E_zy.edge_data) .≈ ∂𝔹2xθ)) 
+
+##
+
+# This is reasonably efficient, but would be good to reduce the allocations  
+# @time ACEKA.eval_basis(model, X, ps, st)
+# @time ACEKA.jacobian_basis(model, X, ps, st)
