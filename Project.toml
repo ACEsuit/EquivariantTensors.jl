@@ -80,6 +80,7 @@ SpheriCart = "5caf2b29-02d9-47a3-9434-5931c85ba645"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [targets]
-test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", "Printf", "Zygote", "Optimisers", "CUDA", "Metal"]
+test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", "Printf", "Zygote", "Optimisers", "CUDA", "Metal", "AtomsBase", "AtomsBuilder", "NeighbourLists", "Unitful"]
