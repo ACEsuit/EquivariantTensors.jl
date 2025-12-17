@@ -239,15 +239,18 @@ function _jacobian_X(tensor::SparseACEbasis,
    #     or AA * A2Bmap'  if matrix (batch)
    # BB = #nodes x #features 
    # ∂BB = maxneigs x #nodes x #features
-   BB = permutedims.( mul.(A2Bmaps, Ref(transpose(AA))) )
+   # for now assume only one basis ... 
+   𝔹 = permutedims.( tensor.A2Bmaps .* Ref(permutedims(AA)) )
 
    # convert 3-tensor to matrix, apply A2Bmaps, then back to 3-tensor
    # this should be merged into a single kernel for efficiency 
    ∂AA_mat = reshape(∂AA, :, size(∂AA, 3))
-   ∂BB_mat = permutedims.( mul.(A2Bmaps, Ref(transpose(AA))) )
-   ∂BB = reshape(∂BB_mat, size(∂AA, 1), :, size(∂BB_mat, 3))
+   ∂𝔹_mat = permutedims.( tensor.A2Bmaps .* Ref(permutedims(∂AA_mat)) )
 
-   return BB, ∂BB
+   @assert length(tensor.A2Bmaps) == 1 "Jacobian currently only supports single basis"
+   ∂𝔹 = ( reshape(∂𝔹_mat[1], size(∂AA, 1), :, size(∂𝔹_mat[1], 2)), )
+
+   return 𝔹, ∂𝔹
 end
 
 

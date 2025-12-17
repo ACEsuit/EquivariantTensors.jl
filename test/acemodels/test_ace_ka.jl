@@ -115,8 +115,8 @@ ps = ET.float32(_ps); st = ET.float32(_st)
 # test evaluation 
 
 # 1. generate a random input graph 
-nnodes = 100
-_X = ET.Testing.rand_graph(nnodes; nneigrg = 10:20)
+nnodes = 30
+_X = ET.Testing.rand_graph(nnodes; nneigrg = 5:10)
 X = ET.float32(_X)
 
 @info("Basic ETGraph tests")
@@ -216,5 +216,34 @@ println_slim(@test all(∇E_fd_𝐫 .≈ ∇E_zy_𝐫 ))
 ##
 
 @info("Jacobian of basis w.r.t. positions")
-@info("    ... TODO ... ")
+@info("For this we convert everything from NT to DP")
+using DecoratedParticles: VState
 
+# STAGE 1: differentiate embeddings 
+(R, _∂R), _ = ET.evaluate_ed(rembed, X, ps.Rnl, st.Rnl)
+(Y, _∂Y), _ = ET.evaluate_ed(yembed, X, ps.Ylm, st.Ylm)
+∂R = VState.( _∂R )
+∂Y = VState.( _∂Y )
+
+##
+# STAGE 2: differentiate pooling 
+abasis = model.symbasis.abasis
+A, ∂A = ET._jacobian_X(abasis, (R, Y), (∂R, ∂Y))
+
+## 
+# STAGE 3: diff through many-body correlations 
+aabasis = model.symbasis.aabasis
+AA, ∂AA = ET._jacobian_X(aabasis, A, ∂A)
+
+## 
+# STAGE 4: diff through symmetrization 
+𝒞 = model.symbasis.A2Bmaps[1]
+∂AA_mat = reshape(∂AA, :, size(∂AA, 3))
+
+𝔹 = permutedims(𝒞 * permutedims(AA))  #  nnodes x nfeatures
+∂𝔹_mat = permutedims( 𝒞 * permutedims(∂AA_mat) )
+∂𝔹 = reshape(∂𝔹_mat, :, size(𝔹)...)
+
+𝔹1, ∂𝔹1 = ET._jacobian_X(model.symbasis, R, Y, ∂R, ∂Y)
+println_slim(@test 𝔹 ≈ 𝔹1[1])
+println_slim(@test all(∂𝔹 .≈ ∂𝔹1[1]))

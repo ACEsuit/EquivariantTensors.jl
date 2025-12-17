@@ -572,6 +572,8 @@ function _jacobian_X(basis::PooledSparseProduct{2},
          A[i, iA] = a
       end
    end
+
+   return A, ∂A
 end
 
 

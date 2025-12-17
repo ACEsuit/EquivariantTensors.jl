@@ -311,9 +311,11 @@ function _jacobian_X(basis::SparseSymmProd,
                      A::AbstractMatrix, ∂A::AbstractArray{T∂A, 3}) where {T∂A} 
    nnodes, nA = size(A)
    maxneigs = size(∂A, 1)
+   @assert size(∂A) == (maxneigs, nnodes, nA)
+
    nAA = length(basis)
-   TAA = typeof(A) 
-   T∂AA = promote_type(TAA, eltype(∂A))
+   TAA = eltype(A) 
+   T∂AA = T∂A 
    AA = similar(A, TAA, (nnodes, nAA))
    ∂AA = similar(A, T∂AA, (maxneigs, nnodes, nAA))
 
@@ -332,7 +334,7 @@ end
 
    quote
       fill!(AA, zero(TA))
-      fill!(∂A, zero(T∂A))
+      fill!(∂AA, zero(T∂A))
       @nexprs $ORD N -> _jacobian_X_N!(
                               AA, ∂AA, 
                               basis.ranges[N], 
