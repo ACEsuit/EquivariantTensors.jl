@@ -100,6 +100,33 @@ by `svector_type(x)`, i.e. flattening the data stored in `x` into a single vecto
 """
 _nt2svec(x::NamedTuple) = reinterpret(svector_type(x), x) 
 
+
+# 
+# Start of a simpler implementation of _svec2nt 
+# it causes all sorts of hell with the scope of typenames and in particular 
+# tags from ForwardDiff. Maybe we can return to this later...
+#
+# import EquivariantTensor
+#
+# @generated function _replace_T(::Type{T}, x::NT) where {T, NT <: NamedTuple}
+#    _sub(T, Told::Type{T1}) where {T1 <: Number} = T 
+#    _sub(T, Told::Type{SVector{N, T1}}) where {N, T1 <: Number} = SVector{N, T}
+#    SYMS = fieldnames(x)
+#    TT = _sub.(T, fieldtypes(x)) 
+#    code = "@NamedTuple{" * prod("$(sym)::$(tt), " 
+#             for (sym, tt) in zip(SYMS, TT)) * "}"
+#    return quote 
+#       $(Meta.parse(code))
+#    end                
+# end 
+
+# function _svec2nt(v::SVector{N, T}, x::NamedTuple) where {N, T} 
+#    NTNEW = _replace_T(T, x) 
+#    return reinterpret(NTNEW, Tuple(v))
+# end 
+
+
+
 """
    _svec2nt(v::SVector, x::NamedTuple)
 
@@ -148,20 +175,8 @@ provides the data and the data type.
 end 
 
 
-@generated function __zero(::Type{TX}) where {TX <: NamedTuple}
-   SYMS = fieldnames(TX)
-   TT = fieldtypes(TX)
-   code = "(; "
-   for (sym, T) in zip(SYMS, TT)
-      code *= "$sym = zero($T), "
-   end
-   code *= ")"
-   return quote 
-      $(Meta.parse(code))
-   end
-end
-
-
+__zero(::Type{TX}) where {TX <: NamedTuple} = 
+      reinterpret(TX, ntuple(_ -> Int8(0), sizeof(TX)))
 
 """
    grad_fd(f, x::NamedTuple, args...)

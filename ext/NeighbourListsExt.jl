@@ -20,14 +20,14 @@ function ET.Atoms.nlist2graph(nlist::NeighbourLists.PairList, sys::AbstractSyste
    R_ij = [ NeighbourLists._getR(nlist, n) for n = 1:length(ii) ] 
    S_i = [ NeighbourLists.AtomsBase.species(sys, i) for i in ii ] 
    S_j = [ NeighbourLists.AtomsBase.species(sys, j) for j in jj ]
-   X_ij = [ PState(𝐫 = 𝐫, s0 = si, s1 = sj, 𝐒 = shift) 
+   X_ij = [ PState(𝐫 = 𝐫, z0 = si, z1 = sj, 𝐒 = shift) 
             for (𝐫, si, sj, shift) in zip(R_ij, S_i, S_j, nlist.S) ]
 
    # for node data we use _only_ the atomic species for now so that we 
    # don't even give the option of using position information directly. 
    # ... until we sort out how to best handle this in ET. 
    X_i = [ PState(𝐫 = NeighbourLists.AtomsBase.position(sys, i), 
-                  s = NeighbourLists.AtomsBase.species(sys, i))
+                  z = NeighbourLists.AtomsBase.species(sys, i))
            for i = 1:length(sys) ]
 
    sys_data = ( pbc = NeighbourLists.AtomsBase.periodicity(sys), 
