@@ -27,5 +27,5 @@ float32(X::ETGraph) =
    ETGraph( X.ii, X.jj, X.first, 
             float32.(X.node_data), 
             float32.(X.edge_data), 
-            float32.(X.graph_data),
+            float32(X.graph_data),
             X.maxneigs )

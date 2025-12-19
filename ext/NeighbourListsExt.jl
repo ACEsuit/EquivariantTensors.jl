@@ -26,12 +26,16 @@ function ET.Atoms.nlist2graph(nlist::NeighbourLists.PairList, sys::AbstractSyste
    # for node data we use _only_ the atomic species for now so that we 
    # don't even give the option of using position information directly. 
    # ... until we sort out how to best handle this in ET. 
-   X_i = [ PState(𝐫 = NeighbourLists.AtomsBase.position(sys, i), 
+   X_i = [ PState(𝐫 = NeighbourLists.Unitful.ustrip(NeighbourLists.AtomsBase.position(sys, i)), 
                   z = NeighbourLists.AtomsBase.species(sys, i))
            for i = 1:length(sys) ]
 
+   cell_vecs_u = NeighbourLists.AtomsBase.cell_vectors(sys)
+   cell_vecs = ntuple( i -> NeighbourLists.Unitful.ustrip.(cell_vecs_u[i]), 
+                       length(cell_vecs_u) )
+
    sys_data = ( pbc = NeighbourLists.AtomsBase.periodicity(sys), 
-               cell = NeighbourLists.AtomsBase.cell_vectors(sys)
+               cell = cell_vecs
               )          
 
    G = ET.ETGraph(ii, jj; 

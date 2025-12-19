@@ -25,21 +25,21 @@ function LuxCore.initialparameters(rng::AbstractRNG, l::SelectLinL)
 end
 
 (l::SelectLinL)( P_X, ps, st) = 
-      _apply_selectlinl(l, P_X[1], P_X[2], ps, st)
+      _apply_selectlinl(l, P_X[1], P_X[2], ps.W), st 
 
 # TODO: this case distinction is a hack; it would be better to 
 #       use types one cannot iterate over. Something to look into. 
 #       and an argument to move to DecoratedParticles.jl
 
 function _apply_selectlinl(l, P, x::Union{NamedTuple, Number, StaticArray},
-                           ps, st)
-   B = (@view ps.W[:, :, l.selector(x)]) * P
-   return B, st 
+                           W)
+   B = (@view W[:, :, l.selector(x)]) * P
+   return B
 end
 
 
-function _apply_selectlinl(l, P, X::AbstractArray, ps, st)
-   TB = promote_type(eltype(P), eltype(ps.W))
+function _apply_selectlinl(l, P, X::AbstractArray, W)
+   TB = promote_type(eltype(P), eltype(W))
    B = similar(P, TB, size(P, 1), l.out_dim)
    
    # Morally this should work, but it doesn't like the views it seems?!
@@ -53,9 +53,9 @@ function _apply_selectlinl(l, P, X::AbstractArray, ps, st)
    # that way we don't have to write a custom rrule. 
 
    kernel! = _ka_apply_selectlinl!(KernelAbstractions.get_backend(X))
-   kernel!(B, P, X, ps.W, l.selector; ndrange = size(B))
+   kernel!(B, P, X, W, l.selector; ndrange = size(B))
 
-   return B, st 
+   return B
 end
 
 
@@ -68,4 +68,90 @@ end
       B[iB, jB] += W[jB, k, i_x] * P[iB, k]
    end
    nothing
+end
+
+
+# ------------------------------------------------------------
+#  pullback and rrule 
+#
+# TODO: write tests for this 
+#       these are likely wrong when multi-threaded or with GPU 
+#       since they write asynchronously to ∂W; need reordering of 
+#       operations or atomic adds
+
+function _pullback_selectlinl(∂B, l, P, X::AbstractArray, W) 
+   TB = promote_type(eltype(∂B), eltype(W))
+   ∂P = similar(P, TB, size(P))
+   ∂W = similar(W, TB, size(W))
+   fill!(∂P, zero(TB))
+   fill!(∂W, zero(TB))
+
+   kernel! = _ka_pullback_selectlinl!(KernelAbstractions.get_backend(X))
+   kernel!(∂P, ∂W, ∂B, P, X, W, l.selector; ndrange = size(∂B))
+
+   return ∂P, ∂W
+end
+
+@kernel function _ka_pullback_selectlinl!(∂P, ∂W, ∂B, P, X, W, selector)
+   iB, jB = @index(Global, NTuple)
+   i_x = selector(X[iB])
+
+   for k = 1:size(P, 2) 
+      ∂P[iB, k] += W[jB, k, i_x] * ∂B[iB, jB]
+      ∂W[jB, k, i_x] += P[iB, k] * ∂B[iB, jB]
+   end
+   nothing
+end
+
+import ChainRulesCore: rrule, NoTangent, unthunk
+
+function rrule(::typeof(_apply_selectlinl), l, 
+               P::AbstractMatrix, X::AbstractArray, W::AbstractArray)
+
+   B = _apply_selectlinl(l, P, X, W)
+
+   function _pb_selectlinl(∂B)
+      ∂P, ∂W = _pullback_selectlinl(unthunk(∂B), l, P, X, W)
+      return NoTangent(), NoTangent(), ∂P, NoTangent(), ∂W
+   end
+
+   return B, _pb_selectlinl
+end
+
+function rrule(::typeof(_apply_selectlinl), l::SelectLinL, P::Tuple{AbstractMatrix},
+               X::AbstractArray, W::AbstractArray)
+   P_mat = P[1]
+   result, pb = rrule(_apply_selectlinl, l, P_mat, X, W)
+   function _pullback_tuple_wrapper(Δ)
+      _, _, ∂P_mat, _, ∂W = pb(Δ)
+      # Wrap ∂P back in a tuple to match input structure
+      ∂P = (∂P_mat,)
+      return NoTangent(), NoTangent(), ∂P, NoTangent(), ∂W
+   end
+   return result, _pullback_tuple_wrapper
+end
+
+
+# ------------------------------------------------------------
+# for integration with evaluate_ed we need the following: 
+
+# Prototype just to get things up and running. Obviously this needs to 
+# be put into KernelAbstractions. 
+#
+function pfwd_ed(l::SelectLinL, P_dP_X, ps, st)
+   P, dP, X = P_dP_X
+
+   TB = promote_type(eltype(P), eltype(ps.W))
+   dTB = promote_type(eltype(dP), eltype(ps.W))
+   B = similar(P, TB, size(P, 1), l.out_dim)
+   dB = similar(dP, dTB, size(dP, 1), l.out_dim)
+
+   for i = 1:size(P, 1)
+      xi = X[i]
+      Wi = @view ps.W[:, :, l.selector(xi)]
+      B[i, :] = Wi * P[i, :]
+      dB[i, :] = Wi * dP[i, :]
+   end
+
+   return (B, dB), st 
 end

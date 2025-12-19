@@ -17,6 +17,9 @@ import Lux
 Wraps a layer that embeds an edge state into Vector to manage the 
 reformatting of the embedding from a list of embedded states into 
 a 3-dimensionsonal tensor that is aware of the graph structure.
+
+Also implements an evaluate_ed wrapper, which is useful for 
+computing jacobians. 
 """
 @concrete struct EdgeEmbed <: AbstractLuxWrapperLayer{:layer}
    layer
@@ -40,6 +43,15 @@ end
 
 # NOTE: this should not need an rrule because l.layer should have an rrule 
 #       and reshape_embedding already has an rrule defined. 
+#       but for some manual test implementations the following is still 
+#       useful. 
+
+function _pullback_edge_embedding(∂Φ3, dΦ3, X::ETGraph)
+   ∂Φ2 = rev_reshape_embedding(∂Φ3, X)
+   dΦ2 = rev_reshape_embedding(dΦ3, X)
+   return dropdims( sum(∂Φ2 .* dΦ2, dims = 2), dims = 2) 
+end
+
 
 
 # -------------------------------------------------------------------
@@ -56,58 +68,80 @@ This is basically a 2-stage Chain, but with additional logic, specifically
 the implementation of evaluate_ed allowing differentiation through 
 and XState or NamedTuple input. 
 """
-@concrete struct EmbedDP <: AbstractLuxContainerLayer{(:trans, :basis)}
+@concrete struct EmbedDP <: AbstractLuxContainerLayer{(:trans, :basis, :post)}
    trans
    basis
+   post 
    name
 end
 
-EmbedDP(trans, basis; name = "") = 
-         EmbedDP(trans, basis, name)
+EmbedDP(trans, basis, post = IDpost(); name = "") = 
+         EmbedDP(trans, basis, post, name)
 
 Base.show(io::IO, ::MIME"text/plain", l::EmbedDP) = 
       print(io, "EmbedDP($(l.name))")         
 
 
-function (l::EmbedDP)(X::AbstractArray, ps, st)
+(l::EmbedDP)(X::AbstractArray, ps, st) = _apply_embeddp(l, X, ps, st), st 
+
+function _apply_embeddp(l::EmbedDP, X::AbstractArray, ps, st)   
    # first gets rid of the state variable in the return 
    Y = broadcast(first ∘ l.trans, X, Ref(ps.trans), Ref(st.trans))
-   Φ2, _ = l.basis(Y, ps.basis, st.basis)
-   return Φ2, st
+   P2, _ = l.basis(Y, ps.basis, st.basis)
+   # opportunity for another transformation that depends also on X 
+   # if post == IDpost then this is a no-op
+   post_P2, _ = l.post((P2, X), ps.post, st.post)
+   return post_P2
 end
 
 function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
    # first gets rid of the state variable in the return 
    ftrans = _x -> first(l.trans(_x, ps.trans, st.trans))
-   Y = broadcast(ftrans, X,)
-   Φ2, dΦ2 = evaluate_ed(l.basis, Y, ps.basis, st.basis)
+   Y = broadcast(ftrans, X)
+   P2, dP2 = evaluate_ed(l.basis, Y, ps.basis, st.basis)
 
-   # pullback through the transform to get ∂Φ2
-   _pb1(x, dφ) = DiffNT.grad_fd(_x -> dot(ftrans(_x), dφ), x)
-   ∂Φ2 = broadcast(_pb1, X, dΦ2)
+   # pushforward the P' through the post-transform layer 
+   # if post == IDpost then this is a no-op
+   (pP2, d_pP2), _ = pfwd_ed(l.post, (P2, dP2, X), ps.post, st.post)
+
+   # pullback through the transform to get ∂P2
+   _pb1(x, dp) = DiffNT.grad_fd(_x -> dot(ftrans(_x), dp), x)
+   ∂_pP2 = broadcast(_pb1, X, d_pP2)
    
-   return (Φ2, ∂Φ2), st
+   return (pP2, ∂_pP2), st
 end
 
 
-# TODO: 
-#   definitely still need to implement the rrule for this layer 
-#   it can utilize evaluate_ed for efficient pullback. 
+# EmbedDP is using low-dimensional input, high-dimensional output 
+# hence forward-mode differentiation is preferred. This is provided 
+# by the following rrule. 
+#
+# TODO: write tests for this 
+#
+function rrule(::typeof(_apply_embeddp), 
+               l::EmbedDP, X::AbstractArray, ps, st)
 
-# function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
-#    ϕ3 = reshape_embedding(ϕ2, X)
+   (P, dP), st = evaluate_ed(l, X, ps, st)
 
-#    function _pb_ϕ(∂ϕ3)
-#       ∂ϕ2 = rev_reshape_embedding(∂ϕ3, X)
-#       return NoTangent(), ∂ϕ2, NoTangent()
-#    end
+   function _pb_embeddp(_∂P)
+      ∂P = unthunk(_∂P)
+      ∂X = dropdims( sum(∂P .* dP, dims = 2), dims = 2) 
+      return NoTangent(), NoTangent(), ∂X, NoTangent(), NoTangent()
+   end
 
-#    return ϕ3, _pb_ϕ
-# end
-
-
-function _pullback_edge_embedding(∂Φ3, dΦ3, X::ETGraph)
-   ∂Φ2 = rev_reshape_embedding(∂Φ3, X)
-   dΦ2 = rev_reshape_embedding(dΦ3, X)
-   return dropdims( sum(∂Φ2 .* dΦ2, dims = 2), dims = 2) 
+   return P, _pb_embeddp
 end
+
+
+
+
+# -------------------------------------------------------------------
+
+struct IDpost <: AbstractLuxLayer
+end 
+
+(l::IDpost)(P_X, ps, st) = P_X[1], st 
+
+pfwd_ed(l::IDpost, P_dP_X, ps, st) = (P_dP_X[1], P_dP_X[2]), st
+
+

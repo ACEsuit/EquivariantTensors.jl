@@ -187,37 +187,32 @@ NOT PART OF THE OFFICIAL API YET! CAN CHANGE WITHOUT NOTICE!
 struct NTtransformST{FT, ST} <: AbstractLuxLayer
    f::FT 
    refstate::ST
-   sym::Symbol 
 end
 
-NTtransformST(f, refstate = NamedTuple(); 
-              sym = Symbol(""))  = 
-      NTtransformST(f, refstate, Symbol(sym))
-
-Base.show(io::IO, l::NTtransformST) = print(io, "NTtransformST($(l.sym))")
+Base.show(io::IO, l::NTtransformST) = print(io, "NTtransformST()")
 
 initialparameters(rng::AbstractRNG, l::NTtransformST) = NamedTuple()
 initialstates(rng::AbstractRNG, l::NTtransformST) = deepcopy(l.refstate)
 
-(l::NTtransformST)(x::NamedTuple, ps, st) = l.f(x, st), st 
+(l::NTtransformST)(x::NTorDP, ps, st) = l.f(x, st), st 
 
 # this non-standard calling convention assumes that st is not changed 
-(l::NTtransformST)(x::NamedTuple, st) = l.f(x, st)
+(l::NTtransformST)(x::NTorDP, st) = l.f(x, st)
 
-(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, ps, st) = 
+(l::NTtransformST)(x::AbstractVector{<: NTorDP}, ps, st) = 
          l(x, st), st 
 
-(l::NTtransformST)(x::AbstractVector{<: NamedTuple}, st) = 
+(l::NTtransformST)(x::AbstractVector{<: NTorDP}, st) = 
          broadcast(l.f, x, Ref(st))
          # map(x -> l.f(x, st), x)
 
-evaluate(l::NTtransformST, x::NamedTuple, ps, st) = 
+evaluate(l::NTtransformST, x::NTorDP, ps, st) = 
          l.f(x, st)
 
-evaluate_ed(l::NTtransformST, x::NamedTuple, ps, st) = 
+evaluate_ed(l::NTtransformST, x::NTorDP, ps, st) = 
          (l.f(x, st), DiffNT.grad_fd(l.f, x, st))
 
-function evaluate_ed(l::NTtransformST, x::AbstractVector{<: NamedTuple}, ps, st)
+function evaluate_ed(l::NTtransformST, x::AbstractVector{<: NTorDP}, ps, st)
    Y = broadcast(l.f, x, Ref(st))
    dY = broadcast(DiffNT.grad_fd, Ref(l.f), x, Ref(st))
    return (Y, dY), st 
