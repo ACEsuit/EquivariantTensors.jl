@@ -87,18 +87,24 @@ function _pullback_selectlinl(∂B, l, P, X::AbstractArray, W)
    fill!(∂W, zero(TB))
 
    kernel! = _ka_pullback_selectlinl!(KernelAbstractions.get_backend(X))
-   kernel!(∂P, ∂W, ∂B, P, X, W, l.selector; ndrange = size(∂B))
+
+   # P : nbatch x nfeat 
+   # W : nout x nfeat(in) x ncategories 
+   kernel!(∂P, ∂W, ∂B, P, X, W, l.selector; ndrange = size(P))
 
    return ∂P, ∂W
 end
 
 @kernel function _ka_pullback_selectlinl!(∂P, ∂W, ∂B, P, X, W, selector)
-   iB, jB = @index(Global, NTuple)
-   i_x = selector(X[iB])
+   # iX indexes into the "batch" and iP into the P features 
+   iX, iP = @index(Global, NTuple)
+   # i_x selects the category of the input X[iX] 
+   i_x = selector(X[iX])
 
-   for k = 1:size(P, 2) 
-      ∂P[iB, k] += W[jB, k, i_x] * ∂B[iB, jB]
-      ∂W[jB, k, i_x] += P[iB, k] * ∂B[iB, jB]
+   for iout = 1:size(W, 1)
+      # B[iX, iout] = ∑_k W[iout, k, i_x] * P[iX, k]    // k ≡ iP 
+      ∂P[iX, iP] += W[iout, iP, i_x] * ∂B[iX, iout]
+      ∂W[iout, iP, i_x] += P[iX, iP] * ∂B[iX, iout]
    end
    nothing
 end
