@@ -218,6 +218,19 @@ function evaluate_ed(l::NTtransformST, x::AbstractVector{<: NTorDP}, ps, st)
    return (Y, dY), st 
 end
 
+# # X : list of inputs of length nX 
+# # dP : list of differentiated bases of shape nX * nfeat
+# #
+# function __pb_diffdpnt(trans, X::AbstractVector{TX}, dP::AbstractMatrix, 
+#                        ps, st) where {TX <: XState}
+#    T∂P = vstate_stype(TX)
+#    # allocate output array same size as dP 
+#    ∂P = similar(dP, T∂P, size(dP))
+#    # now we might be able to broadcast directly?
+#    ftrans = x -> begin y, _ = trans(x, ps, st); return y; end 
+#    pb_ftrans = (x, dp) -> DiffNT.grad_fd( _x -> dot(ftrans(_x), dp), x )   
+#    broadcast!( (x, dp) -> DiffNT.grad_fd( _x -> ))
+# end
 
 
 # function rrule(trans::typeof(NTtransformST), X::AbstractVector{<: NamedTuple}, ps, st) 

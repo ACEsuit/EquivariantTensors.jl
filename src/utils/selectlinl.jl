@@ -147,17 +147,43 @@ end
 function pfwd_ed(l::SelectLinL, P_dP_X, ps, st)
    P, dP, X = P_dP_X
 
+   nX = length(X)
+   @assert size(P, 1) == size(dP, 1) == nX  
+   @assert size(P, 2) == size(dP, 2)
+
    TB = promote_type(eltype(P), eltype(ps.W))
    dTB = promote_type(eltype(dP), eltype(ps.W))
-   B = similar(P, TB, size(P, 1), l.out_dim)
-   dB = similar(dP, dTB, size(dP, 1), l.out_dim)
+   B = similar(P, TB, nX, l.out_dim)
+   dB = similar(dP, dTB, nX, l.out_dim)
 
-   for i = 1:size(P, 1)
-      xi = X[i]
-      Wi = @view ps.W[:, :, l.selector(xi)]
-      B[i, :] = Wi * P[i, :]
-      dB[i, :] = Wi * dP[i, :]
-   end
+   # for i = 1:size(P, 1)
+   #    xi = X[i]
+   #    Wi = @view ps.W[:, :, l.selector(xi)]
+   #    B[i, :] = Wi * P[i, :]
+   #    dB[i, :] = Wi * dP[i, :]
+   # end
+
+   kernel! = _ka_pfwd_ed!(KernelAbstractions.get_backend(X))
+   kernel!(B, dB, P, dP, X, ps.W, l.selector; 
+           ndrange = (nX, l.out_dim))
 
    return (B, dB), st 
+end
+
+# kernelabstractions version of pfwd_ed 
+# NOT: this can be merged with the standard forwardpass 
+#      provided that it is treated with tuples... 
+#
+@kernel function _ka_pfwd_ed!(B, dB, P, dP, X, W, selector)
+   iX, iout = @index(Global, NTuple)
+   xi = X[iX]
+   i_x = selector(xi)
+   # B[iX, iout] = ∑_k W[iout, k, selector(xi)] * P[iX, k]
+   B[iX, iout] = 0
+   dB[iX, iout] = 0
+   for k = 1:size(P, 2)
+      B[iX, iout] += W[iout, k, i_x] * P[iX, k]
+      dB[iX, iout] += W[iout, k, i_x] * dP[iX, k]
+   end
+   nothing
 end

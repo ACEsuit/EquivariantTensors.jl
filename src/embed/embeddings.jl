@@ -23,10 +23,7 @@ computing jacobians.
 """
 @concrete struct EdgeEmbed <: AbstractLuxWrapperLayer{:layer}
    layer
-   name
 end
-
-EdgeEmbed(layer; name = "Edge Embedding") = EdgeEmbed(layer, name)
 
 function (l::EdgeEmbed)(X::ETGraph, ps, st)
    Φ2, st = l.layer(X.edge_data, ps, st)
@@ -72,21 +69,20 @@ and XState or NamedTuple input.
    trans
    basis
    post 
-   name
 end
 
-EmbedDP(trans, basis, post = IDpost(); name = "") = 
-         EmbedDP(trans, basis, post, name)
+EmbedDP(trans, basis) = EmbedDP(trans, basis, IDpost())
 
-Base.show(io::IO, ::MIME"text/plain", l::EmbedDP) = 
-      print(io, "EmbedDP($(l.name))")         
+# Base.show(io::IO, ::MIME"text/plain", l::EmbedDP) = 
+#       print(io, "EmbedDP($(l.name))")         
 
 
 (l::EmbedDP)(X::AbstractArray, ps, st) = _apply_embeddp(l, X, ps, st), st 
 
 function _apply_embeddp(l::EmbedDP, X::AbstractArray, ps, st)   
    # first gets rid of the state variable in the return 
-   Y = broadcast(first ∘ l.trans, X, Ref(ps.trans), Ref(st.trans))
+   # NOTE: here we assume that the transform implicitly broadcasts
+   Y, _ = l.trans(X, ps.trans, st.trans)
    P2, _ = l.basis(Y, ps.basis, st.basis)
    # opportunity for another transformation that depends also on X 
    # if post == IDpost then this is a no-op
@@ -94,10 +90,17 @@ function _apply_embeddp(l::EmbedDP, X::AbstractArray, ps, st)
    return post_P2
 end
 
+#
+# TODO: to make this GPU compatible the pullback 
+#       needs to be broadcast implicitly, otherwise 
+#       we have some hellishly weird type issues 
+#       in the GPU kernels... 
+#
+import DecoratedParticles: vstate_type 
+
 function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
    # first gets rid of the state variable in the return 
-   ftrans = _x -> first(l.trans(_x, ps.trans, st.trans))
-   Y = broadcast(ftrans, X)
+   Y, _ = l.trans(X, ps.trans, st.trans)
    P2, dP2 = evaluate_ed(l.basis, Y, ps.basis, st.basis)
 
    # pushforward the P' through the post-transform layer 
@@ -105,8 +108,11 @@ function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
    (pP2, d_pP2), _ = pfwd_ed(l.post, (P2, dP2, X), ps.post, st.post)
 
    # pullback through the transform to get ∂P2
-   _pb1(x, dp) = DiffNT.grad_fd(_x -> dot(ftrans(_x), dp), x)
-   ∂_pP2 = broadcast(_pb1, X, d_pP2)
+   ftrans = x -> begin y, _ = l.trans(x, ps.trans, st.trans); return y; end
+   pb1 = (x, dp) -> DiffNT.grad_fd(_x -> dot(ftrans(_x), dp), x)
+   T∂P = vstate_type(eltype(X))
+   ∂_pP2 = similar(d_pP2, T∂P, size(d_pP2))
+   broadcast!(pb1, ∂_pP2, X, d_pP2)
    
    return (pP2, ∂_pP2), st
 end
