@@ -39,16 +39,14 @@ function evaluate_ed(l::EdgeEmbed, X::ETGraph, ps, st)
 end
 
 # NOTE: this should not need an rrule because l.layer should have an rrule 
-#       and reshape_embedding already has an rrule defined. 
-#       but for some manual test implementations the following is still 
-#       useful. 
+#       and reshape_embedding already has an rrule defined.
+#       for some manual test implementations the following is still useful. 
 
 function _pullback_edge_embedding(∂Φ3, dΦ3, X::ETGraph)
    ∂Φ2 = rev_reshape_embedding(∂Φ3, X)
    dΦ2 = rev_reshape_embedding(dΦ3, X)
    return dropdims( sum(∂Φ2 .* dΦ2, dims = 2), dims = 2) 
 end
-
 
 
 # -------------------------------------------------------------------
@@ -99,7 +97,6 @@ end
 import DecoratedParticles: vstate_type 
 
 function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
-   # first gets rid of the state variable in the return 
    Y, _ = l.trans(X, ps.trans, st.trans)
    P2, dP2 = evaluate_ed(l.basis, Y, ps.basis, st.basis)
 
@@ -108,11 +105,9 @@ function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
    (pP2, d_pP2), _ = pfwd_ed(l.post, (P2, dP2, X), ps.post, st.post)
 
    # pullback through the transform to get ∂P2
-   ftrans = x -> begin y, _ = l.trans(x, ps.trans, st.trans); return y; end
-   pb1 = (x, dp) -> DiffNT.grad_fd(_x -> dot(ftrans(_x), dp), x)
-   T∂P = vstate_type(eltype(X))
-   ∂_pP2 = similar(d_pP2, T∂P, size(d_pP2))
-   broadcast!(pb1, ∂_pP2, X, d_pP2)
+   # this is kind of a temporary hack and we need to understand why 
+   # there is no simple generic solution ... 
+   ∂_pP2 = _pb_ed(l.trans, d_pP2, X, ps.trans, st.trans)
    
    return (pP2, ∂_pP2), st
 end

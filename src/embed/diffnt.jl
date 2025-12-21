@@ -98,7 +98,30 @@ end
 Converts a `NamedTuple` `x` into a `SVector` of the type generated 
 by `svector_type(x)`, i.e. flattening the data stored in `x` into a single vector.
 """
-_nt2svec(x::NamedTuple) = reinterpret(svector_type(x), x) 
+@generated function _nt2svec(x::TX)  where {TX <: NamedTuple}
+   SYMS = fieldnames(x)
+   TT = fieldtypes(x)
+
+   idx = 1 
+   code = "SA["
+   for (T, sym) in zip(TT, SYMS)
+      for i = 1:length(T)      
+         code *= "x.$sym[$i], "
+      end 
+   end 
+   code *= "]"
+   return quote 
+      $(Meta.parse(code))
+   end
+end
+
+# NOTE: 
+#   it is very odd - this should work fine with reinterpret: 
+#      _nt2svec(x::NamedTuple) = reinterpret(svector_type(x), x) 
+#   but that is causing problems with Kernelabstractions.  
+#   The manual implementation above seems to work fine. 
+
+
 
 
 # 
@@ -193,20 +216,23 @@ function grad_fd(f, x::NamedTuple, args...)
    return _svec2nt(g, x_cts)  # return as NamedTuple
 end 
 
-function jac_fd(f, x::NamedTuple, ps, st)
-   x_cts = _ctsnt(x)  # extract continuous variables into an SVector 
-   v = _nt2svec(x_cts)
-   TV = typeof(v)
-   _fvec = _v -> f(_replace(x, _svec2nt(_v, x_cts)), ps, st)[1]
-   J = ForwardDiff.jacobian(_fvec, v)
-   return [ _svec2nt(TV(rowJ), x_cts) for rowJ in eachrow(J) ]
-end
+# function jac_fd(f, x::NamedTuple, ps, st)
+#    x_cts = _ctsnt(x)  # extract continuous variables into an SVector 
+#    v = _nt2svec(x_cts)
+#    TV = typeof(v)
+#    _fvec = _v -> f(_replace(x, _svec2nt(_v, x_cts)), ps, st)[1]
+#    J = ForwardDiff.jacobian(_fvec, v)
+#    return [ _svec2nt(TV(rowJ), x_cts) for rowJ in eachrow(J) ]
+# end
 
 # --------------------------------------- 
 # differentiation w.r.t. DP 
 
 import DecoratedParticles: PState, VState, XState 
 
+_svec2nt(v::SVector, x::VState) = VState( _svec2nt(v, getfield(x, :x)) )
+
+_nt2svec(x::VState) = _nt2svec( getfield(x, :x) )
 
 function grad_fd(f, x::STATE, args...) where {STATE <: XState}
    x_nt = getfield(x, :x)
@@ -217,14 +243,14 @@ function grad_fd(f, x::STATE, args...) where {STATE <: XState}
    return VState(_svec2nt(g, v_nt))  # return as NamedTuple
 end 
 
-function jac_fd(f, x::STATE, args...) where {STATE <: XState}
-   x_nt = getfield(x, :x)
-   v_nt = _ctsnt(x_nt)  # extract continuous variables into an SVector 
-   v = _nt2svec(v_nt)
-   _fvec = _v -> f(STATE(_replace(x_nt, _svec2nt(_v, v_nt))), args...)
-   g = ForwardDiff.jacobian(_fvec, _nt2svec(v_nt))
-   return VState(_svec2nt(g, v_nt))  # return as NamedTuple
-end 
+# function jac_fd(f, x::STATE, args...) where {STATE <: XState}
+#    x_nt = getfield(x, :x)
+#    v_nt = _ctsnt(x_nt)  # extract continuous variables into an SVector 
+#    v = _nt2svec(v_nt)
+#    _fvec = _v -> f(STATE(_replace(x_nt, _svec2nt(_v, v_nt))), args...)
+#    g = ForwardDiff.jacobian(_fvec, _nt2svec(v_nt))
+#    return VState(_svec2nt(g, v_nt))  # return as NamedTuple
+# end 
 
 
 end 

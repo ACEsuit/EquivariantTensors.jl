@@ -180,13 +180,13 @@ using ChainRulesCore: unthunk
 function rrule(::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
 
    # evaluate the A basis
-   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
-   A = zeros(TA, length(tensor.abasis))    # use Bumper here
-   evaluate!(A, tensor.abasis, (Rnl, Ylm))
+   # TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
+   # A = zeros(TA, length(tensor.abasis))    # use Bumper here
+   A = evaluate(tensor.abasis, (Rnl, Ylm))
 
    # evaluate the AA basis
-   AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
-   evaluate!(AA, tensor.aabasis, A)
+   # AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
+   AA = evaluate(tensor.aabasis, A)
 
    # evaluate the coupling coefficients
    BB = tensor.A2Bmaps .* Ref(AA)

@@ -204,7 +204,6 @@ initialstates(rng::AbstractRNG, l::NTtransformST) = deepcopy(l.refstate)
 
 (l::NTtransformST)(x::AbstractVector{<: NTorDP}, st) = 
          broadcast(l.f, x, Ref(st))
-         # map(x -> l.f(x, st), x)
 
 evaluate(l::NTtransformST, x::NTorDP, ps, st) = 
          l.f(x, st)
@@ -218,19 +217,22 @@ function evaluate_ed(l::NTtransformST, x::AbstractVector{<: NTorDP}, ps, st)
    return (Y, dY), st 
 end
 
-# # X : list of inputs of length nX 
-# # dP : list of differentiated bases of shape nX * nfeat
-# #
-# function __pb_diffdpnt(trans, X::AbstractVector{TX}, dP::AbstractMatrix, 
-#                        ps, st) where {TX <: XState}
-#    T∂P = vstate_stype(TX)
-#    # allocate output array same size as dP 
-#    ∂P = similar(dP, T∂P, size(dP))
-#    # now we might be able to broadcast directly?
-#    ftrans = x -> begin y, _ = trans(x, ps, st); return y; end 
-#    pb_ftrans = (x, dp) -> DiffNT.grad_fd( _x -> dot(ftrans(_x), dp), x )   
-#    broadcast!( (x, dp) -> DiffNT.grad_fd( _x -> ))
-# end
+
+function _pb_ed(l::NTtransformST, Δ::AbstractArray, 
+                 X::AbstractVector{<: NTorDP}, ps, st)
+   pb1(x, d) = DiffNT.grad_fd(_x -> dot(l.f(_x, st), d), x)
+   # pb1(x, d) = d * DiffNT.grad_fd(l.f, x, st)
+   return pb1.(X, Δ)
+end 
+
+# WORKAROUND FOR THE RADIAL AGNESI EMBEDDING WITH 
+# PARAMETERS STORED INSIDE THE TYPE NOT JUST THE STATE 
+function _pb_ed(l::NTtransformST, Δ::AbstractArray{TY}, 
+                 X::AbstractVector{<: NTorDP}, ps, st
+                 ) where {TY <: Number} 
+   (Y, dY), _ = evaluate_ed(l, X, ps, st)
+   return dY .* Δ                 
+end 
 
 
 # function rrule(trans::typeof(NTtransformST), X::AbstractVector{<: NamedTuple}, ps, st) 
