@@ -8,6 +8,14 @@
 #    return ka_evaluate!(A, basis, BB)
 # end
 
+
+# DISPATCH VIA GPU ARRAYS TO THIS I THINK?? 
+# function evaluate(basis::PooledSparseProduct, 
+#                      BB::TupMat)
+#    A = similar(BB[1], (length(spec),))                     
+#    return evaluate!(A, basis, BB, spec, nX)
+# end
+
 function ka_evaluate(basis::PooledSparseProduct{NB}, 
                      BB::TupMat, 
                      spec = basis.spec, 
@@ -153,3 +161,23 @@ end
    end
    nothing 
 end 
+
+
+
+function rrule(::typeof(ka_evaluate), 
+               basis::PooledSparseProduct{NB}, 
+               BB::TupTen3, 
+               spec = basis.spec, 
+               nX = size(BB[1], 2), nneig = size(BB[1], 1)
+               ) where {NB}
+
+   A = ka_evaluate(basis, BB, spec, nX, nneig)
+
+   function _pb_ka_evaluate(_Δ)
+      Δ = unthunk(_Δ)
+      ∂BB = ka_pullback(Δ, basis, BB, spec, nX, nneig)
+      return NoTangent(), NoTangent(), ∂BB, NoTangent(), NoTangent(), NoTangent()
+   end
+
+   return A, _pb_ka_evaluate
+end

@@ -59,9 +59,9 @@ Embed a particle state into a vector. This is done by first applying a
 transform to the particle state into a number of SVector and then evaluating 
 the basis (or other layer) on the transformed state. 
 
-This is basically a 2-stage Chain, but with additional logic, specifically 
+This is basically a 3-stage Chain, but with additional logic, specifically 
 the implementation of evaluate_ed allowing differentiation through 
-and XState or NamedTuple input. 
+and XState or NamedTuple input. This is e.g. needed for jacobians. 
 """
 @concrete struct EmbedDP <: AbstractLuxContainerLayer{(:trans, :basis, :post)}
    trans
@@ -88,13 +88,6 @@ function _apply_embeddp(l::EmbedDP, X::AbstractArray, ps, st)
    return post_P2
 end
 
-#
-# TODO: to make this GPU compatible the pullback 
-#       needs to be broadcast implicitly, otherwise 
-#       we have some hellishly weird type issues 
-#       in the GPU kernels... 
-#
-import DecoratedParticles: vstate_type 
 
 function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
    Y, _ = l.trans(X, ps.trans, st.trans)
@@ -115,7 +108,9 @@ end
 
 # EmbedDP is using low-dimensional input, high-dimensional output 
 # hence forward-mode differentiation is preferred. This is provided 
-# by the following rrule. 
+# by the following rrule. But it should be tested at some point 
+# whether this is really efficient. No rush for the moment, the scaling 
+# at least ought to be ok. 
 #
 # TODO: write tests for this 
 #

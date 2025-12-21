@@ -115,6 +115,7 @@ end
 
 const TupVec = Tuple{Vararg{AbstractVector}}
 const TupMat = Tuple{Vararg{AbstractMatrix}}
+# const TupMatGPU = Tuple{Vararg{AbstractMatrix}}
 const TupTen3 = Tuple{Vararg{AbstractArray{T, 3}}} where {T}
 const TupVecMat = Union{TupVec, TupMat}
 

@@ -106,16 +106,19 @@ function evaluate(tensor::SparseACEbasis, Rnl, Ylm, ps, st)
    return BB
 end 
 
+
 # for Ten3 inputs, there is no CPU implementation 
-#   TODO (fix this!!!)
+# so everything based on TupTen3 gets automatically dispatched to 
+# ka_evaluate, which is good. 
 
 evaluate(tensor::SparseACEbasis, BB::TupTen3, args...) = 
       ka_evaluate(tensor, BB, args...)
 
 
-evaluate(tensor::SparseACEbasis, Rnl::AbstractArray{T, 3}, Ylm::AbstractArray{T, 3}, 
-         ps, st) where {T} = 
-      ka_evaluate(tensor, Rnl, Ylm, ps, st)[1] 
+evaluate(tensor::SparseACEbasis, 
+         Rnl::AbstractArray{T, 3}, Ylm::AbstractArray{T, 3}, 
+         args...) where {T} = 
+      ka_evaluate(tensor, Rnl, Ylm, args...)[1] 
 
 
 # ---------
@@ -177,8 +180,9 @@ end
 # ChainRules integration 
 using ChainRulesCore: unthunk 
 
-function rrule(::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
-
+function rrule(::typeof(evaluate), tensor::SparseACEbasis, 
+               Rnl::AbstractMatrix, Ylm::AbstractMatrix, ps, st)
+   @info("wrong rrule")
    # evaluate the A basis
    # TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
    # A = zeros(TA, length(tensor.abasis))    # use Bumper here
@@ -200,7 +204,8 @@ end
 
 # rrule for 3D array inputs (batched evaluation) - delegates to ka_evaluate
 function rrule(::typeof(evaluate), tensor::SparseACEbasis,
-               Rnl::Array{T, 3}, Ylm::Array{T, 3}, ps, st) where {T}
+               Rnl::AbstractArray{T, 3}, Ylm::AbstractArray{T, 3}, 
+               ps, st) where {T}
    # Delegate to ka_evaluate which has its own rrule
    𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl, Ylm,
                           st.aspec, st.aaspecs, st.A2Bmaps)
