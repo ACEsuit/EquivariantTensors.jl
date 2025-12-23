@@ -19,13 +19,14 @@ export O3, gpu_device, cpu_device
 include("generics.jl")
 
 # ------------------------------------------------------
-# embedding layers & auxiliary functionality 
-include("embed/diffnt.jl")
-include("embed/transform.jl")
+# embedding layers, transforms, & auxiliary functionality 
+include("transforms/diffnt.jl")
+include("transforms/decpart.jl")
+include("transforms/agnesi.jl")
+
 include("embed/graph.jl")
 include("embed/rnlylmbasis.jl")
 include("embed/embeddings.jl")
-include("embed/envelope.jl")
 
 
 # ------------------------------------------------------
@@ -59,9 +60,6 @@ include("utils/promotion.jl")
 
 include("utils/selectlinl.jl")
 include("utils/selector.jl")
-
-# transforms 
-include("transforms/agnesi.jl")
 
 # other utilities 
 include("utils/adapt.jl")

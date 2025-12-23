@@ -101,11 +101,14 @@ by `svector_type(x)`, i.e. flattening the data stored in `x` into a single vecto
 @generated function _nt2svec(x::TX)  where {TX <: NamedTuple}
    SYMS = fieldnames(x)
    TT = fieldtypes(x)
+   __length(x) = length(x) 
+   __length(::Type{T}) where {T <: Number} = 1 
+   __length(::Type{SVector{N, T}}) where {N, T <: Number} = N
 
    idx = 1 
    code = "SA["
    for (T, sym) in zip(TT, SYMS)
-      for i = 1:length(T)      
+      for i = 1:__length(T)      
          code *= "x.$sym[$i], "
       end 
    end 
@@ -228,19 +231,24 @@ end
 # --------------------------------------- 
 # differentiation w.r.t. DP 
 
-import DecoratedParticles: PState, VState, XState 
+import DecoratedParticles: PState, VState, XState, vstate_type
 
 _svec2nt(v::SVector, x::VState) = VState( _svec2nt(v, getfield(x, :x)) )
 
 _nt2svec(x::VState) = _nt2svec( getfield(x, :x) )
 
 function grad_fd(f, x::STATE, args...) where {STATE <: XState}
-   x_nt = getfield(x, :x)
-   v_nt = _ctsnt(x_nt)  # extract continuous variables into an SVector 
-   v = _nt2svec(v_nt)
-   _fvec = _v -> f(STATE(_replace(x_nt, _svec2nt(_v, v_nt))), args...)
-   g = ForwardDiff.gradient(_fvec, _nt2svec(v_nt))
-   return VState(_svec2nt(g, v_nt))  # return as NamedTuple
+   v0 = zero(vstate_type(x))
+   f_svec(sv) = f(x + _svec2nt(sv, v0), args...)
+   g_svec = ForwardDiff.gradient(f_svec, _nt2svec(getfield(x, :x)))
+   return _svec2nt(g_svec, v0)
+
+   # x_nt = getfield(x, :x)
+   # v_nt = _ctsnt(x_nt)  # extract continuous variables into an SVector 
+   # v = _nt2svec(v_nt)
+   # _fvec = _v -> f(STATE(_replace(x_nt, _svec2nt(_v, v_nt))), args...)
+   # g = ForwardDiff.gradient(_fvec, _nt2svec(v_nt))
+   # return VState(_svec2nt(g, v_nt))  # return as NamedTuple
 end 
 
 # function jac_fd(f, x::STATE, args...) where {STATE <: XState}
