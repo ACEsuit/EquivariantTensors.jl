@@ -239,8 +239,9 @@ _nt2svec(x::VState) = _nt2svec( getfield(x, :x) )
 
 function grad_fd(f, x::STATE, args...) where {STATE <: XState}
    v0 = zero(vstate_type(x))
-   f_svec(sv) = f(x + _svec2nt(sv, v0), args...)
-   g_svec = ForwardDiff.gradient(f_svec, _nt2svec(getfield(x, :x)))
+   sv0 = _nt2svec(v0)
+   f_svec = sv -> f(x + _svec2nt(sv, v0), args...)
+   g_svec = ForwardDiff.gradient(f_svec, sv0)
    return _svec2nt(g_svec, v0)
 
    # x_nt = getfield(x, :x)

@@ -27,7 +27,7 @@ module TestDP
    # random expression, but representative in terms of simplicity 
    struct F{N, T}; W::SVector{N, T}; end
    evaluate(f::F, x) = sum(x.r .* x.r) * x.q / (1 + f.W[x.z]^2)   
-   (f::F)(x::PState) = evaluate(f, x)
+   (f::F)(x) = evaluate(f, x)
 
    # manual gradient 
    function grad_man(f::F, x) 
@@ -55,14 +55,16 @@ end
 
 f = TestDP.F(@SVector randn(10))
 x = rand_x_dp() 
+x_nt = getfield(x, :x)
 
 f(x)
 g0 = TestDP.grad_man(f, x)
 g1 = TestDP.grad_1(f, x)
 g2 = TestDP.grad_zy(f, x)
 g3 = ET.DiffNT.grad_fd(f, x)
+g4 = ET.DiffNT.grad_fd(f, x_nt)
 
-println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3)
+println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3 ≈ VState(g4))
 
 ##
 
