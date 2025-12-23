@@ -1,94 +1,8 @@
-#
-# TODO: remove ParallelEmbed, and polish EdgeEmbed instead 
-#
 
 using ConcreteStructs 
-using Lux: AbstractLuxWrapperLayer
+using Lux: AbstractLuxWrapperLayer, AbstractLuxContainerLayer
+using LinearAlgebra: dot 
 import Lux 
-
-"""
-`struct ParallelEmbed` : basically a variation on Lux.Parallel, 
-but makes some assumptions on what the individual layers to 
-be evaluated in parallel do to enable some simple optimizations. 
-
-The assumption is that each layer is a "basis", i.e. a mapping x -> B(x), 
-where x is low-dimensional and B(x) is moderate-dimensional. This means that 
-the optimal differentiation is in forward-mode. This is exploited by 
-implementing the functions `evaluate` and `evaluate_ed`. For implementing 
-models that use `ParallelEmbed` a forward-pass that also differentiates 
-(e.g. energy and forces) is implemented with `evaluate_ed`. 
-"""
-@concrete struct ParallelEmbed <: AbstractLuxWrapperLayer{:layers}
-   layers <: NamedTuple
-   name
-end
-
-ParallelEmbed(layers...; name = "Embedding") = 
-      ParallelEmbed((;layers...), name)
-
-ParallelEmbed(; name="Embedding", kwargs...) = 
-      ParallelEmbed((; kwargs...), name)
-
-
-evaluate(emb::ParallelEmbed, X::ETGraph, ps, st) = 
-      _applyparallelembed(emb.layers, X, ps, st)
-
-(emb::ParallelEmbed)(args...) = evaluate(emb, args...)      
-
-# This here is almost copy-pasted from Lux.jl; with very minor difference, 
-# The real assumptions are made once we differentiate. 
-#
-@generated function _applyparallelembed(layers::NamedTuple{names}, 
-                                 X::ETGraph, ps, st::NamedTuple) where {names}
-   N = length(names)
-   y_symbols = ntuple(i -> gensym(), N)
-   y3_symbols = ntuple(i -> gensym(), N)
-   st_symbols = ntuple(i -> gensym(), N)
-   calls = []
-   append!(calls,
-         [ :(
-                ($(y_symbols[i]), $(st_symbols[i])) = evaluate(
-                    layers.$(names[i]), X.edge_data, ps.$(names[i]), st.$(names[i]) )
-            ) for i in 1:N ], )
-   append!(calls,
-         [ :( $(y3_symbols[i]) = reshape_embedding($(y_symbols[i]), X) ) 
-           for i in 1:N ], )
-   push!(calls, :(out = ($(y3_symbols...),)))
-   push!(calls, :(st = NamedTuple{$names}((($(st_symbols...),)))))
-   push!(calls, :(return out, st))
-   return Expr(:block, calls...)
-end
-
-
-# -------------------------------------------------------------------
-
-# evaluate_ed(emb::ParallelEmbed, X::ETGraph, ps, st) = 
-#       _applyparallelembed_ed(emb.layers, X, ps, st)
-
-
-
-import ChainRulesCore: rrule, @not_implemented
-
-function rrule(::typeof(evaluate), emb::ParallelEmbed, X::ETGraph, ps, st)
-   out, st = evaluate(emb, X, ps, st)
-
-   function _pb_X(∂out) 
-      return @not_implemented("backprop w.r.t. X not yet implemented")
-   end
-
-   function _pb_ps(∂out) 
-      # the simplest case is in fact that there are no parameters, so we 
-      # should simply return a ZeroTangent() 
-      if sizeof(ps) > 0 
-         return @not_implemented("Current implementation of ParallelEmbed rrule does not support parameters!")
-      end
-      return ZeroTangent() 
-   end
-
-   return (out, st), ∂out -> (NoTangent(), NoTangent(), 
-                              _pb_X(∂out), _pb_ps(∂out), NoTangent()) 
-end
-
 
 
 # -------------------------------------------------------------------
@@ -97,28 +11,133 @@ end
 # of the Lux infrastructure / automatic differentiation.
 #
 
+"""
+   struct EdgeEmbed 
 
+Wraps a layer that embeds an edge state into Vector to manage the 
+reformatting of the embedding from a list of embedded states into 
+a 3-dimensionsonal tensor that is aware of the graph structure.
+
+Also implements an evaluate_ed wrapper, which is useful for 
+computing jacobians. 
+"""
 @concrete struct EdgeEmbed <: AbstractLuxWrapperLayer{:layer}
    layer
-   name
 end
-
-EdgeEmbed(layer; name = "Edge Embedding") = EdgeEmbed(layer, name)
 
 function (l::EdgeEmbed)(X::ETGraph, ps, st)
    Φ2, st = l.layer(X.edge_data, ps, st)
-   Φ3 = map(ϕ2 -> reshape_embedding(ϕ2, X), Φ2)
+   Φ3 = reshape_embedding(Φ2, X)
    return Φ3, st
 end
 
+function evaluate_ed(l::EdgeEmbed, X::ETGraph, ps, st)
+   (Φ2, ∂Φ2), st = evaluate_ed(l.layer, X.edge_data, ps, st)
+   Φ3 = reshape_embedding(Φ2, X)
+   ∂Φ3 = reshape_embedding(∂Φ2, X)
+   return (Φ3, ∂Φ3), st
+end
 
-function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
-   ϕ3 = reshape_embedding(ϕ2, X)
+# NOTE: this should not need an rrule because l.layer should have an rrule 
+#       and reshape_embedding already has an rrule defined.
+#       for some manual test implementations the following is still useful. 
 
-   function _pb_ϕ(∂ϕ3)
-      ∂ϕ2 = rev_reshape_embedding(∂ϕ3, X)
-      return NoTangent(), ∂ϕ2, NoTangent()
+function _pullback_edge_embedding(∂Φ3, dΦ3, X::ETGraph)
+   ∂Φ2 = rev_reshape_embedding(∂Φ3, X)
+   dΦ2 = rev_reshape_embedding(dΦ3, X)
+   return dropdims( sum(∂Φ2 .* dΦ2, dims = 2), dims = 2) 
+end
+
+
+# -------------------------------------------------------------------
+
+
+"""
+   struct EmbedDP 
+
+Embed a particle state into a vector. This is done by first applying a 
+transform to the particle state into a number of SVector and then evaluating 
+the basis (or other layer) on the transformed state. 
+
+This is basically a 3-stage Chain, but with additional logic, specifically 
+the implementation of evaluate_ed allowing differentiation through 
+and XState or NamedTuple input. This is e.g. needed for jacobians. 
+"""
+@concrete struct EmbedDP <: AbstractLuxContainerLayer{(:trans, :basis, :post)}
+   trans
+   basis
+   post 
+end
+
+EmbedDP(trans, basis) = EmbedDP(trans, basis, IDpost())
+
+# Base.show(io::IO, ::MIME"text/plain", l::EmbedDP) = 
+#       print(io, "EmbedDP($(l.name))")         
+
+
+(l::EmbedDP)(X::AbstractArray, ps, st) = _apply_embeddp(l, X, ps, st), st 
+
+function _apply_embeddp(l::EmbedDP, X::AbstractArray, ps, st)   
+   # first gets rid of the state variable in the return 
+   # NOTE: here we assume that the transform implicitly broadcasts
+   Y, _ = l.trans(X, ps.trans, st.trans)
+   P2, _ = l.basis(Y, ps.basis, st.basis)
+   # opportunity for another transformation that depends also on X 
+   # if post == IDpost then this is a no-op
+   post_P2, _ = l.post((P2, X), ps.post, st.post)
+   return post_P2
+end
+
+
+function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
+   Y, _ = l.trans(X, ps.trans, st.trans)
+   P2, dP2 = evaluate_ed(l.basis, Y, ps.basis, st.basis)
+
+   # pushforward the P' through the post-transform layer 
+   # if post == IDpost then this is a no-op
+   (pP2, d_pP2), _ = pfwd_ed(l.post, (P2, dP2, X), ps.post, st.post)
+
+   # pullback through the transform to get ∂P2
+   # this is kind of a temporary hack and we need to understand why 
+   # there is no simple generic solution ... 
+   ∂_pP2 = _pb_ed(l.trans, d_pP2, X, ps.trans, st.trans)
+   
+   return (pP2, ∂_pP2), st
+end
+
+
+# EmbedDP is using low-dimensional input, high-dimensional output 
+# hence forward-mode differentiation is preferred. This is provided 
+# by the following rrule. But it should be tested at some point 
+# whether this is really efficient. No rush for the moment, the scaling 
+# at least ought to be ok. 
+#
+# TODO: write tests for this 
+#
+function rrule(::typeof(_apply_embeddp), 
+               l::EmbedDP, X::AbstractArray, ps, st)
+
+   (P, dP), st = evaluate_ed(l, X, ps, st)
+
+   function _pb_embeddp(_∂P)
+      ∂P = unthunk(_∂P)
+      ∂X = dropdims( sum(∂P .* dP, dims = 2), dims = 2) 
+      return NoTangent(), NoTangent(), ∂X, NoTangent(), NoTangent()
    end
 
-   return ϕ3, _pb_ϕ
+   return P, _pb_embeddp
 end
+
+
+
+
+# -------------------------------------------------------------------
+
+struct IDpost <: AbstractLuxLayer
+end 
+
+(l::IDpost)(P_X, ps, st) = P_X[1], st 
+
+pfwd_ed(l::IDpost, P_dP_X, ps, st) = (P_dP_X[1], P_dP_X[2]), st
+
+

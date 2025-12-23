@@ -267,7 +267,8 @@ function whatalloc(::typeof(pushforward!),
 end
 
 
-function pushforward!(AA, ∂AA, basis::SparseSymmProd, A, ∂A)
+function pushforward!(AA, ∂AA, basis::SparseSymmProd, 
+                      A, ∂A)
    @assert size(∂A) == size(A)
    @assert size(∂AA) == size(AA)
    T = promote_type(eltype(A), eltype(∂A))
@@ -287,6 +288,97 @@ function pushforward!(AA, ∂AA, basis::SparseSymmProd, A, ∂A)
    end
    return AA, ∂AA
 end
+
+
+#
+# a kind of pushforward, but very specific, used to compute Jacobians.
+# see _jacobian_X(basis::PooledSparseProduct{2}, ...) for more details.
+#
+# It is plausible that each maxneigs dimension can be interpreted as one 
+# perturbation direction -> with that in mind this can be thought of as 
+# a batched pushforward. This would allow us to implement it as a 
+# generic frule. => need to think about how to leverage this observation.  
+#
+# Inputs: 
+#    A : nnodes x nfeat(A)
+#   ∂A : maxneigs x nnodes x nfeat(A)
+#
+# Outputs: 
+#   AA : nnodes x nfeat(AA)
+#  ∂AA : maxneigs x nnodes x nfeat(AA)
+#
+function _jacobian_X(basis::SparseSymmProd,
+                     A::AbstractMatrix, ∂A::AbstractArray{T∂A, 3}) where {T∂A} 
+   nnodes, nA = size(A)
+   maxneigs = size(∂A, 1)
+   @assert size(∂A) == (maxneigs, nnodes, nA)
+
+   nAA = length(basis)
+   TAA = eltype(A) 
+   T∂AA = T∂A 
+   AA = similar(A, TAA, (nnodes, nAA))
+   ∂AA = similar(A, T∂AA, (maxneigs, nnodes, nAA))
+
+   # off-load distribution of computation to a generated function 
+   # which can handle the type instability inherent to the the way 
+   # the basis is stored. 
+   _jacobian_X!(AA, ∂AA, basis, A, ∂A)
+   return AA, ∂AA
+end
+
+@generated function _jacobian_X!(
+               AA::AbstractMatrix{TA}, ∂AA::AbstractArray{T∂A, 3},
+               basis::SparseSymmProd{ORD},
+               A::AbstractMatrix{TA}, ∂A::AbstractArray{T∂A, 3}
+                     ) where {TA, T∂A, ORD} 
+
+   quote
+      fill!(AA, zero(TA))
+      fill!(∂AA, zero(T∂A))
+      @nexprs $ORD N -> _jacobian_X_N!(
+                              AA, ∂AA, 
+                              basis.ranges[N], 
+                              basis.specs[N], 
+                              A, ∂A)
+      return nothing 
+   end 
+end 
+
+function _jacobian_X_N!(
+               AA::AbstractMatrix{TA}, 
+               ∂AA::AbstractArray{T∂A, 3}, 
+               iiAA,  # index range for order N
+               spec::Vector{NTuple{N, Int}},   # spec for order N
+               A::AbstractMatrix{TA}, 
+               ∂A::AbstractArray{T∂A, 3}
+                     ) where {TA, T∂A, N} 
+
+   nnodes, nA = size(A)
+   maxneigs = size(∂A, 1)
+   @assert length(iiAA) == length(spec)
+
+   @inbounds for (iAA, ϕ) in zip(iiAA, spec)
+      for i = 1:nnodes 
+         Avals = ntuple(t -> A[i, ϕ[t]], N)
+         # aa = ∏ₜ Aⁱₜ 
+         # ∇aa[t] = ∂aa / ∂A_{ϕ[t]}
+         aa, ∇aa = _static_prod_ed(Avals) 
+         AA[i, iAA] = aa
+
+         # ∂AA[j, i, iAA] = ∑ₜ ∇aa[t] * ∂A[j, i, ϕ[t]]
+         for t = 1:N 
+            ∇aa_t = ∇aa[t]; ϕ_t = ϕ[t]
+            @simd ivdep for j = 1:maxneigs
+               ∂AA[j, i, iAA] += ∇aa_t * ∂A[j, i, ϕ_t]
+            end
+         end
+      end
+   end
+
+   return nothing                      
+end
+
+
 
 
 # ------------------------------------------
@@ -311,20 +403,20 @@ function rrule(::typeof(pullback), ∂AA, basis::SparseSymmProd, A)
 end
 
 
+# -------------- frules for forward-mode AD
 
-# -------------- Lux integration 
-# it needs an extra lux interface reason as in the case of the `basis` 
-# should it not be enough to just overload valtype? 
+import ChainRulesCore: frule
 
-# function evaluate(l::PolyLuxLayer{<: SparseSymmProd}, A::AbstractVector{T}, ps, st) where {T}
-#    AA = acquire!(st.pool, :AA, (length(l),), T)
-#    evaluate!(AA, l.basis, A)
-#    return AA, st
-# end
+function frule((_, Δbasis, ΔA), ::typeof(evaluate), basis::SparseSymmProd, A)
+   # Use existing pushforward! implementation
+   AA, ∂AA = @withalloc pushforward!(basis, A, ΔA)
+   return AA, ∂AA
+end
 
-# function evaluate(l::PolyLuxLayer{<: SparseSymmProd}, A::AbstractMatrix{T}, ps, st) where {T}
-#    nX = size(A, 1)
-#    AA = acquire!(st.pool, :AAbatch, (nX, length(l)), T)
-#    evaluate!(AA, l.basis, A)
-#    return AA, st
-# end
+function frule((_, ΔAA, Δbasis, ΔA), ::typeof(evaluate!), AA, basis::SparseSymmProd, A)
+   evaluate!(AA, basis, A)
+   # Use existing pushforward! to compute derivative
+   _, ∂AA = @withalloc pushforward!(basis, A, ΔA)
+   return AA, ∂AA
+end
+

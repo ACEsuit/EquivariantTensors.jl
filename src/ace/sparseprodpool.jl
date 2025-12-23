@@ -115,6 +115,7 @@ end
 
 const TupVec = Tuple{Vararg{AbstractVector}}
 const TupMat = Tuple{Vararg{AbstractMatrix}}
+# const TupMatGPU = Tuple{Vararg{AbstractMatrix}}
 const TupTen3 = Tuple{Vararg{AbstractArray{T, 3}}} where {T}
 const TupVecMat = Union{TupVec, TupMat}
 
@@ -209,6 +210,12 @@ function whatalloc(::typeof(pullback!),
                    ∂A, basis::PooledSparseProduct{NB}, BB::TupMat) where  {NB}
    TA = promote_type(eltype.(BB)..., eltype(∂A))
    return ntuple(i -> (TA, size(BB[i])...), NB)                   
+end
+
+function whatalloc(::typeof(pullback!),
+                   ∂A, basis::PooledSparseProduct{NB}, BB::TupVec) where  {NB}
+   TA = promote_type(eltype.(BB)..., eltype(∂A))
+   return ntuple(i -> (TA, length(BB[i])), NB)
 end
 
 function pullback(∂A, basis::PooledSparseProduct, BB)
@@ -484,7 +491,9 @@ function whatalloc(::typeof(pushforward!),
    return (TA, length(basis)), (T∂A, length(basis))
 end
 
-function pushforward!(A, ∂A, basis::PooledSparseProduct{NB}, BB, ∂BB) where {NB}
+function pushforward!(A::AbstractVector, ∂A, 
+                      basis::PooledSparseProduct{NB}, 
+                      BB::TupMat, ∂BB) where {NB}
 
    function _dual(i)
       T = promote_type(eltype(BB[i]), eltype(∂BB[i]))
@@ -508,10 +517,70 @@ function pushforward!(A, ∂A, basis::PooledSparseProduct{NB}, BB, ∂BB) where 
    return A, ∂A 
 end
 
+#
+# A kind of pushforward, but very specific, used to compute Jacobians. 
+#
+# This internal function doesn't just compute a basic pushforward for a 
+# simple unidirectional perturbation of BB but computes the full Jacobian 
+#   ∂A / ∂X  
+# where X are the inputs from which BB are computed. 
+#
+# The implicit assumption is that the Rnl, Ylm come in a very specific format 
+# which is specific to ACE models, i.e. each Rnl^ij = Rnl(xij) and so forth. 
+# this significantly simplifies the bookkeeping, but also means this 
+# pushforward is not generic but only specific to ACE models. 
+#
+# For simplicity, this is an implementation for NB = 2 only. Once this 
+# is verified to be correct, we can generalize it to arbitrary NB.
+#
+# Documenting some information about inputs and output:  
+#
+# BB = (Rnl, Ylm) 
+# with each of these coming in the format (maxneigs, nnodes, nfeatures)
+# The output will be 
+#    A : nnodes x nfeat(A) 
+#    ∂A : maxneigs x nnodes x nfeat(A) 
+#
+function _jacobian_X(basis::PooledSparseProduct{2},
+                     BB::TupTen3, ∂BB::TupTen3)
+   
+   Rnl, Ylm = BB 
+   ∂Rnl, ∂Ylm = ∂BB 
+   maxneigs, nnodes, lenR = size(Rnl) 
+   _, _, lenY = size(Ylm)
+   nA = length(basis)
+   @assert size(∂Rnl) == (maxneigs, nnodes, lenR)
+   @assert size(∂Ylm) == (maxneigs, nnodes, lenY)
+
+   # allocate output 
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   T∂A = promote_type(TA, eltype(∂Rnl), eltype(∂Ylm))
+   A = similar(Rnl, TA, (nnodes, nA))
+   ∂A = similar(Rnl, T∂A, (maxneigs, nnodes, nA))
+
+   @inbounds for (iA, (ϕR, ϕY)) in enumerate(basis.spec)
+      for i = 1:nnodes 
+         a = zero(TA)
+         @simd ivdep for j = 1:maxneigs
+            bR = Rnl[j, i, ϕR]
+            bY = Ylm[j, i, ϕY]
+            a += bR * bY   # TODO: switch to muladd! 
+
+            ∂bR = ∂Rnl[j, i, ϕR]
+            ∂bY = ∂Ylm[j, i, ϕY]
+            ∂A[j, i, iA] = ∂bR * bY + bR * ∂bY
+         end
+         A[i, iA] = a
+      end
+   end
+
+   return A, ∂A
+end
 
 
 # --------------------- connect with ChainRules 
 # can this be generalized again? 
+
 
 import ChainRulesCore: rrule, NoTangent
 
@@ -538,8 +607,23 @@ function rrule(::typeof(pullback), Δ, basis::PooledSparseProduct, BB)
    return ∂BB, pb
 end
 
-# TODO: frules 
+# --------------------- frules for forward-mode AD
 
+import ChainRulesCore: frule, Tangent
+
+function frule((_, Δbasis, ΔBB), ::typeof(evaluate), basis::PooledSparseProduct, BB)
+   A = evaluate(basis, BB)
+   # Use existing pushforward! implementation
+   _, ∂A = @withalloc pushforward!(basis, BB, ΔBB)
+   return A, ∂A
+end
+
+function frule((_, Δbasis, ΔBB), ::typeof(evaluate!), A, basis::PooledSparseProduct, BB)
+   evaluate!(A, basis, BB)
+   # Use existing pushforward! implementation
+   _, ∂A = @withalloc pushforward!(basis, BB, ΔBB)
+   return A, ∂A
+end
 
 
 # --------------------- connect with Lux 

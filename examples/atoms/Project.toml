@@ -7,3 +7,7 @@ LuxCore = "bb33d45b-7691-41d6-9220-0943567d0623"
 NeighbourLists = "2fcf5ba9-9ed4-57cf-b73f-ff513e316b9c"
 Polynomials4ML = "03c4bcba-a943-47e9-bfa1-b1661fc2974f"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
+[sources]
+EquivariantTensors = {path = "../.."}
+Polynomials4ML = {path = "/Users/ortner/gits/Polynomials4ML.jl/"}

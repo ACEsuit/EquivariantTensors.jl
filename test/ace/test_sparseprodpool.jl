@@ -5,7 +5,7 @@ using EquivariantTensors: PooledSparseProduct, evaluate, evaluate!,
 # using Polynomials4ML.Testing: test_withalloc
 using ACEbase.Testing: fdtest, println_slim, print_tf 
 
-ET = EquivariantTensors
+import EquivariantTensors as ET 
 
 test_evaluate(basis::PooledSparseProduct, BB::Tuple{Vararg{AbstractVector}}) =
    [prod(BB[j][basis.spec[i][j]] for j = 1:length(BB))
@@ -172,7 +172,7 @@ ntest = 10
 itest = 2
 
 for itest = 1:ntest       
-   local nX, basis, P1, P2  
+   local nX, basis, P1, P2, P3   
    order = mod1(itest, 3)
    basis = _generate_basis(; order=order, len = rand(50:200))
    BB = _generate_input(basis) 

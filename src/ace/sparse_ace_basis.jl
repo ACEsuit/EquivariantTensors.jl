@@ -99,28 +99,26 @@ end
 =#
 
 function evaluate(tensor::SparseACEbasis, Rnl, Ylm, ps, st)
-   TA = promote_type(eltype(Rnl), eltype(Ylm))
    A = ka_evaluate(tensor.abasis, (Rnl, Ylm))
-
-   # evaluate the AA basis
-   # AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
    AA = ka_evaluate(tensor.aabasis, A)
-
    # evaluate the coupling coefficients
    BB = tensor.A2Bmaps .* Ref(AA)
    return BB
 end 
 
+
 # for Ten3 inputs, there is no CPU implementation 
-#   TODO (fix this!!!)
+# so everything based on TupTen3 gets automatically dispatched to 
+# ka_evaluate, which is good. 
 
 evaluate(tensor::SparseACEbasis, BB::TupTen3, args...) = 
       ka_evaluate(tensor, BB, args...)
 
 
-evaluate(tensor::SparseACEbasis, Rnl::AbstractArray{T, 3}, Ylm::AbstractArray{T, 3}, 
-         ps, st) where {T} = 
-      ka_evaluate(tensor, Rnl, Ylm, ps, st)[1] 
+evaluate(tensor::SparseACEbasis, 
+         Rnl::AbstractArray{T, 3}, Ylm::AbstractArray{T, 3}, 
+         args...) where {T} = 
+      ka_evaluate(tensor, Rnl, Ylm, args...)[1] 
 
 
 # ---------
@@ -182,16 +180,17 @@ end
 # ChainRules integration 
 using ChainRulesCore: unthunk 
 
-function rrule(::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
-
+function rrule(::typeof(evaluate), tensor::SparseACEbasis, 
+               Rnl::AbstractMatrix, Ylm::AbstractMatrix, ps, st)
+   @info("wrong rrule")
    # evaluate the A basis
-   TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
-   A = zeros(TA, length(tensor.abasis))    # use Bumper here
-   evaluate!(A, tensor.abasis, (Rnl, Ylm))
+   # TA = promote_type(eltype(Rnl), eltype(eltype(Ylm)))
+   # A = zeros(TA, length(tensor.abasis))    # use Bumper here
+   A = evaluate(tensor.abasis, (Rnl, Ylm))
 
    # evaluate the AA basis
-   AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
-   evaluate!(AA, tensor.aabasis, A)
+   # AA = zeros(TA, length(tensor.aabasis))     # use Bumper here
+   AA = evaluate(tensor.aabasis, A)
 
    # evaluate the coupling coefficients
    BB = tensor.A2Bmaps .* Ref(AA)
@@ -202,6 +201,66 @@ function rrule(::typeof(evaluate), tensor::SparseACEbasis, Rnl, Ylm, ps, st)
    end
    return BB, pb
 end
+
+# rrule for 3D array inputs (batched evaluation) - delegates to ka_evaluate
+function rrule(::typeof(evaluate), tensor::SparseACEbasis,
+               Rnl::AbstractArray{T, 3}, Ylm::AbstractArray{T, 3}, 
+               ps, st) where {T}
+   # Delegate to ka_evaluate which has its own rrule
+   𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl, Ylm,
+                          st.aspec, st.aaspecs, st.A2Bmaps)
+
+   function pb_3d(∂out)
+      ∂𝔹 = ∂out[1]  # gradient w.r.t. 𝔹 (∂out[2] is for st which is NoTangent)
+      ∂Rnl, ∂Ylm = _ka_pullback(∂𝔹, tensor, Rnl, Ylm, A, 𝔸,
+                                st.aspec, st.aaspecs, st.A2Bmaps)
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, NoTangent(), NoTangent()
+   end
+
+   return (𝔹, st), pb_3d
+end
+
+
+# --------------------------------------------------------
+# 
+#  Jacobian of basis w.r.t. inputs (normally positions) 
+#
+# Assume the input data is organized as follows: 
+#   Rnl : #j x #i x #R  array with #R the length of the radial basis 
+#   Ylm : #j x #i x #Y  array with #Y the length of the spherical basis
+#   dRnl, dYlm : same shape as Rnl, Ylm with 
+#       dRnl[j, i, k] = ∂Rnl[i, j] / ∂X[i, j]  
+#       dYlm[j, i, k] = ∂Ylm[i, j] / ∂X[i, j]
+#
+
+function _jacobian_X(tensor::SparseACEbasis, 
+                     Rnl, Ylm, 
+                     dRnl, dYlm)
+
+   A, ∂A = _jacobian_X(tensor.abasis, (Rnl, Ylm), (dRnl, dYlm))
+   AA, ∂AA = _jacobian_X(tensor.aabasis, A, ∂A)
+   
+   # BB = tensor.A2Bmap * AA  if vector (single input)
+   #     or AA * A2Bmap'  if matrix (batch)
+   # BB = #nodes x #features 
+   # ∂BB = maxneigs x #nodes x #features
+   # for now assume only one basis ... 
+   𝔹 = permutedims.( tensor.A2Bmaps .* Ref(permutedims(AA)) )
+
+   # convert 3-tensor to matrix, apply A2Bmaps, then back to 3-tensor
+   # this should be merged into a single kernel for efficiency 
+   ∂AA_mat = reshape(∂AA, :, size(∂AA, 3))
+   ∂𝔹_mat = permutedims.( tensor.A2Bmaps .* Ref(permutedims(∂AA_mat)) )
+
+   @assert length(tensor.A2Bmaps) == 1 "Jacobian currently only supports single basis"
+   ∂𝔹 = ( reshape(∂𝔹_mat[1], size(∂AA, 1), :, size(∂𝔹_mat[1], 2)), )
+
+   return 𝔹, ∂𝔹
+end
+
+
+# --------------------------------------------------------
+
 
 const NT_NL_SPEC = NamedTuple{(:n, :l), Tuple{Int, Int}}
 
@@ -219,83 +278,4 @@ function get_nnll_spec(tensor::SparseACEbasis{NL, TA, TAA, TSYM}, idx) where {NL
    end
    return nnll_list
 end
-#=
 
-
-
-# ----------------------------------------
-#  experimental pushforwards 
-
-function _pfwd(tensor::SparseACE{T}, Rnl, Ylm, ∂Rnl, ∂Ylm) where {T}
-   A, ∂A = _pfwd(tensor.abasis, (Rnl, Ylm), (∂Rnl, ∂Ylm))
-   _AA, _∂AA = _pfwd(tensor.aabasis, A, ∂A)
-
-   # project to the actual AA basis 
-   proj = tensor.aabasis.projection
-   AA = _AA[proj]  
-   ∂AA = _∂AA[proj, :]
-
-   # evaluate the coupling coefficients
-   B = tensor.A2Bmap * AA 
-   ∂B = tensor.A2Bmap * ∂AA 
-   return B, ∂B 
-end
-
-
-function _pfwd(abasis::Polynomials4ML.PooledSparseProduct{2}, RY, ∂RY) 
-   R, Y = RY 
-   TA = typeof(R[1] * Y[1])
-   ∂R, ∂Y = ∂RY
-   ∂TA = typeof(R[1] * ∂Y[1] + ∂R[1] * Y[1])
-
-   # check lengths 
-   nX = size(R, 1)
-   @assert nX == size(R, 1) == size(∂R, 1) == size(Y, 1) == size(∂Y, 1)
-
-   A = zeros(TA, length(abasis.spec))
-   ∂A = zeros(∂TA, size(∂R, 1), length(abasis.spec))
-
-   for i = 1:length(abasis.spec)
-      @inbounds begin 
-         n1, n2 = abasis.spec[i]
-         ai = zero(TA)
-         @simd ivdep for α = 1:nX 
-            ai += R[α, n1] * Y[α, n2]
-            ∂A[α, i] = R[α, n1] * ∂Y[α, n2] + ∂R[α, n1] * Y[α, n2]
-         end 
-         A[i] = ai
-      end 
-   end 
-   return A, ∂A
-end 
-
-
-function _pfwd(aabasis::Polynomials4ML.SparseSymmProdDAG, A, ∂A)
-   n∂ = size(∂A, 1)
-   num1 = aabasis.num1 
-   nodes = aabasis.nodes 
-   AA = zeros(eltype(A), length(nodes))
-   T∂AA = typeof(A[1] * ∂A[1])
-   ∂AA = zeros(T∂AA, length(nodes), size(∂A, 1))
-   for i = 1:num1 
-      AA[i] = A[i] 
-      for α = 1:n∂
-         ∂AA[i, α] = ∂A[α, i]
-      end
-   end 
-   for iAA = num1+1:length(nodes)
-      n1, n2 = nodes[iAA]
-      AA_n1 = AA[n1]
-      AA_n2 = AA[n2]
-      AA[iAA] = AA_n1 * AA_n2
-      for α = 1:n∂
-         ∂AA[iAA, α] = AA_n2 * ∂AA[n1, α] + AA_n1 * ∂AA[n2, α]
-      end
-   end
-   return AA, ∂AA
-end
-
-
-
-
-=#

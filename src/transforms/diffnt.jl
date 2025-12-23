@@ -98,7 +98,60 @@ end
 Converts a `NamedTuple` `x` into a `SVector` of the type generated 
 by `svector_type(x)`, i.e. flattening the data stored in `x` into a single vector.
 """
-_nt2svec(x::NamedTuple) = reinterpret(svector_type(x), x) 
+@generated function _nt2svec(x::TX)  where {TX <: NamedTuple}
+   SYMS = fieldnames(x)
+   TT = fieldtypes(x)
+   __length(x) = length(x) 
+   __length(::Type{T}) where {T <: Number} = 1 
+   __length(::Type{SVector{N, T}}) where {N, T <: Number} = N
+
+   idx = 1 
+   code = "SA["
+   for (T, sym) in zip(TT, SYMS)
+      for i = 1:__length(T)      
+         code *= "x.$sym[$i], "
+      end 
+   end 
+   code *= "]"
+   return quote 
+      $(Meta.parse(code))
+   end
+end
+
+# NOTE: 
+#   it is very odd - this should work fine with reinterpret: 
+#      _nt2svec(x::NamedTuple) = reinterpret(svector_type(x), x) 
+#   but that is causing problems with Kernelabstractions.  
+#   The manual implementation above seems to work fine. 
+
+
+
+
+# 
+# Start of a simpler implementation of _svec2nt 
+# it causes all sorts of hell with the scope of typenames and in particular 
+# tags from ForwardDiff. Maybe we can return to this later...
+#
+# import EquivariantTensor
+#
+# @generated function _replace_T(::Type{T}, x::NT) where {T, NT <: NamedTuple}
+#    _sub(T, Told::Type{T1}) where {T1 <: Number} = T 
+#    _sub(T, Told::Type{SVector{N, T1}}) where {N, T1 <: Number} = SVector{N, T}
+#    SYMS = fieldnames(x)
+#    TT = _sub.(T, fieldtypes(x)) 
+#    code = "@NamedTuple{" * prod("$(sym)::$(tt), " 
+#             for (sym, tt) in zip(SYMS, TT)) * "}"
+#    return quote 
+#       $(Meta.parse(code))
+#    end                
+# end 
+
+# function _svec2nt(v::SVector{N, T}, x::NamedTuple) where {N, T} 
+#    NTNEW = _replace_T(T, x) 
+#    return reinterpret(NTNEW, Tuple(v))
+# end 
+
+
 
 """
    _svec2nt(v::SVector, x::NamedTuple)
@@ -148,6 +201,9 @@ provides the data and the data type.
 end 
 
 
+__zero(::Type{TX}) where {TX <: NamedTuple} = 
+      reinterpret(TX, ntuple(_ -> Int8(0), sizeof(TX)))
+
 """
    grad_fd(f, x::NamedTuple, args...)
 
@@ -157,11 +213,54 @@ the gradient values corresponding to the continuous variables in `x`.
 The `args...` are taken as constant paramteters during this differentiation. 
 """
 function grad_fd(f, x::NamedTuple, args...)
-   v_nt = _ctsnt(x)  # extract continuous variables into an SVector 
-   _fvec = _v -> f(_replace(x, _svec2nt(_v, v_nt)), args...)
-   g = ForwardDiff.gradient(_fvec, _nt2svec(v_nt))
-   return _svec2nt(g, v_nt)  # return as NamedTuple
+   x_cts = _ctsnt(x)  # extract continuous variables into an SVector 
+   _fvec = _v -> f(_replace(x, _svec2nt(_v, x_cts)), args...)
+   g = ForwardDiff.gradient(_fvec, _nt2svec(x_cts))
+   return _svec2nt(g, x_cts)  # return as NamedTuple
 end 
+
+# function jac_fd(f, x::NamedTuple, ps, st)
+#    x_cts = _ctsnt(x)  # extract continuous variables into an SVector 
+#    v = _nt2svec(x_cts)
+#    TV = typeof(v)
+#    _fvec = _v -> f(_replace(x, _svec2nt(_v, x_cts)), ps, st)[1]
+#    J = ForwardDiff.jacobian(_fvec, v)
+#    return [ _svec2nt(TV(rowJ), x_cts) for rowJ in eachrow(J) ]
+# end
+
+# --------------------------------------- 
+# differentiation w.r.t. DP 
+
+import DecoratedParticles: PState, VState, XState, vstate_type
+
+_svec2nt(v::SVector, x::VState) = VState( _svec2nt(v, getfield(x, :x)) )
+
+_nt2svec(x::VState) = _nt2svec( getfield(x, :x) )
+
+function grad_fd(f, x::STATE, args...) where {STATE <: XState}
+   v0 = zero(vstate_type(x))
+   sv0 = _nt2svec(v0)
+   f_svec = sv -> f(x + _svec2nt(sv, v0), args...)
+   g_svec = ForwardDiff.gradient(f_svec, sv0)
+   return _svec2nt(g_svec, v0)
+
+   # x_nt = getfield(x, :x)
+   # v_nt = _ctsnt(x_nt)  # extract continuous variables into an SVector 
+   # v = _nt2svec(v_nt)
+   # _fvec = _v -> f(STATE(_replace(x_nt, _svec2nt(_v, v_nt))), args...)
+   # g = ForwardDiff.gradient(_fvec, _nt2svec(v_nt))
+   # return VState(_svec2nt(g, v_nt))  # return as NamedTuple
+end 
+
+# function jac_fd(f, x::STATE, args...) where {STATE <: XState}
+#    x_nt = getfield(x, :x)
+#    v_nt = _ctsnt(x_nt)  # extract continuous variables into an SVector 
+#    v = _nt2svec(v_nt)
+#    _fvec = _v -> f(STATE(_replace(x_nt, _svec2nt(_v, v_nt))), args...)
+#    g = ForwardDiff.jacobian(_fvec, _nt2svec(v_nt))
+#    return VState(_svec2nt(g, v_nt))  # return as NamedTuple
+# end 
 
 
 end 
+

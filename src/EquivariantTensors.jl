@@ -19,13 +19,13 @@ export O3, gpu_device, cpu_device
 include("generics.jl")
 
 # ------------------------------------------------------
-# embedding layers & auxiliary functionality 
-include("embed/diffnt.jl")
-include("embed/transform.jl")
+# embedding layers, transforms, & auxiliary functionality 
+include("transforms/diffnt.jl")
+include("transforms/decpart.jl")
+include("transforms/agnesi.jl")
+
 include("embed/graph.jl")
-include("embed/rnlylmbasis.jl")
 include("embed/embeddings.jl")
-include("embed/envelope.jl")
 
 
 # ------------------------------------------------------
@@ -57,13 +57,14 @@ include("utils/sparseprod.jl")
 include("utils/symmop.jl")
 include("utils/promotion.jl")
 
+# a linear layer that selects a linear operator from 
+# multiple choices depending on the input. 
 include("utils/selectlinl.jl")
 include("utils/selector.jl")
 
-# transforms 
-include("transforms/agnesi.jl")
-
 # other utilities 
+#  adapt.jl : provides some conversion utilities especially moving 
+#             Float64 to Float32 recursively in NamedTuples etc.
 include("utils/adapt.jl")
 
 # ------------------------------------------------------

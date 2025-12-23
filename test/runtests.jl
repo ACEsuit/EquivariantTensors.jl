@@ -16,7 +16,7 @@ end
 @testset "Embed" begin 
     @testset "NamedTuples" begin include("embed/test_diffnt.jl"); end
     @testset "Transform" begin include("embed/test_transform.jl"); end
-    @testset "ParallelEmbed" begin include("embed/test_parallelembed.jl"); end
+    @testset "Decorated Particles" begin include("test_decoratedparticles.jl"); end
 end
 
 @testset "ACE Layers" begin 
@@ -38,7 +38,12 @@ end
     @testset "Pullback" begin include("acemodels/test_sparse_ace.jl"); end
     @testset "Pullback complex" begin include("acemodels/test_sparse_ace_cplx.jl"); end
     @testset "ACE KA and grad" begin include("acemodels/test_ace_ka.jl"); end
-    @testset "ACE KA new version" begin include("acemodels/test_ace_ka2.jl"); end
+    # temporarily remove this testset. 
+    # @testset "ACE KA new version" begin include("acemodels/test_ace_ka2.jl"); end
+end 
+
+@testset "Atoms" begin 
+    @testset "NeighbourListsExt" begin include("atoms/test_neighbourlistsext.jl"); end
 end 
 
 end

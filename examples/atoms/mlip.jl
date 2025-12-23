@@ -8,7 +8,7 @@
 @info("Convert a structure to an ETGraph")
 
 # need to load NeighbourLists to trigger the atoms extension 
-using AtomsBuilder, NeighbourLists, Unitful 
+using AtomsBuilder, NeighbourLists, Unitful, Polynomials4ML 
 import EquivariantTensors as ET
 
 sys = rattle!(bulk(:Si, cubic=true) * (3,3,2), 0.1u"Å")
@@ -32,34 +32,32 @@ ORD = 3      # correlation-order (body-order = ORD + 1)
 # To test with a larger model replace with the following 
 # Dtot = 16; maxl = 10; ORD = 3
 
-polys = P4ML.ChebBasis(Dtot+1)
-Rnl_spec = P4ML.natural_indices(polys)
-ybas = P4ML.real_sphericalharmonics(maxl; T = Float32, static=true)
-Ylm_spec = P4ML.natural_indices(ybas)
+ytrans = ET.NTtransform(x -> x.𝐫)
+ybasis = P4ML.real_sphericalharmonics(maxl; T = Float32, static=true)
+Ylm_spec = P4ML.natural_indices(ybasis)
+yembed = ET.EdgeEmbed( ET.EmbedDP(ytrans, ybasis); name = "Ylm" )
+
+rtrans = ET.NTtransform(x -> 1 / (1+norm(x.𝐫)^2))
+rpolys = P4ML.ChebBasis(Dtot+1)
+Rnl_spec = P4ML.natural_indices(rpolys)
+
+rbasis = let rcut_u = ustrip(rcut), rpolys = rpolys 
+   ycut = rtrans( (𝐫 = rcut_u,))
+   env = y -> (y - ycut)^2 * (y + ycut)^2
+   P4ML.wrapped_basis( 
+            SkipConnection(
+               rpolys,
+               WrappedFunction( PY -> env.(PY[2]) .* PY[1] )
+            ), 
+            rand(Float32))
+end
+
+rembed = ET.EdgeEmbed( ET.EmbedDP(rtrans, rbasis); name = "Rnl" )
 
 # generate the embedding layer 
-rcut_u = ustrip(rcut)
-ycut = 1 / 2  # 1 / (1 + r / rcut) is the distrance transform 
-env = y -> (y - ycut)^2 * (y + ycut)^2
 
-rbasis = Chain( y = ET.NTtransform(x -> 1 / (1+norm(x.𝐫/rcut_u))),
-                P = SkipConnection(
-                    polys,
-                    WrappedFunction( PY -> env.(PY[2]) .* PY[1] )
-                ) )
 
-ybasis = Chain( trans = ET.NTtransform(x -> x.𝐫), 
-                basis = ybas )
-
-# rbasis = ET.TransformedBasis( ET.NTtransform(x -> 1 / (1+norm(x.𝐫/rcut_u))), 
-#                               P4ML.ChebBasis(Dtot+1), 
-#                               ET.Envelope( (x, y) -> env(y) ) )
-# ybasis = ET.TransformedBasis( ET.NTtransform(x -> x.𝐫), 
-#                               P4ML.real_sphericalharmonics(maxl; T = Float32, static=true) )
-
-embed = ET.EdgeEmbed( BranchLayer(; Rnl = rbasis, Ylm = ybasis) )
-
-acel = let ORD = ORD, Dtot = Dtot, maxl = maxl 
+mbbasis = let ORD = ORD, Dtot = Dtot, maxl = maxl 
    mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
                   minn = 0, maxn = Dtot, maxl = maxl, 
                   level = bb -> sum((b.n + b.l) for b in bb; init=0), 
@@ -70,13 +68,12 @@ acel = let ORD = ORD, Dtot = Dtot, maxl = maxl
                   Rnl_spec = Rnl_spec, 
                   Ylm_spec = Ylm_spec, 
                   basis = real )
-
-   acel = ET.SparseACElayer(𝔹basis, (1,))  # the (1,) says just one output channel 
 end
+
 
 # build the model from the two layers
 model = Lux.Chain(; embed = embed,  # embedding layer 
-                    ace = acel,     # ACE layer / correlation layer 
+                    ace = mbbasis,     # ACE layer / correlation layer 
                     energy = WrappedFunction(x -> sum(x[1]))   # sum up to get a total energy 
                   )
 ps, st = LuxCore.setup(MersenneTwister(1234), model)

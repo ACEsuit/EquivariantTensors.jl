@@ -74,6 +74,9 @@ end
 # utility functions to work with the ETGraph and embedding it into 
 # various formats for further processing
 
+__zero(x) = zero(x) 
+__zero(TX::Type{<: NamedTuple}) = DiffNT.__zero(TX)
+
 """
    reshape_embedding(P, ii, jj, nnodes, maxneigs)
 
@@ -92,11 +95,13 @@ function reshape_embedding(P, X::ETGraph)
       end
       nothing 
    end
+
+
    
    # size(P) == #edges x # features 
    nedges, nfeatures = size(P)
    P3 = similar(P, (maxneigs(X), nnodes(X), nfeatures))
-   fill!(P3, zero(eltype(P3)))
+   fill!(P3, __zero(eltype(P3)))    # TODO : nasty hack, another reason to switch to DecoratedParticles 
    backend = KernelAbstractions.get_backend(P3)
    kernel! = _reshape_embedding!(backend)
    kernel!(P3, P, X.first; ndrange = (nnodes(X), nfeatures))
@@ -137,3 +142,13 @@ function rev_reshape_embedding(P3, X::ETGraph)
 end
 
 
+function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
+   ϕ3 = reshape_embedding(ϕ2, X)
+
+   function _pb_ϕ(∂ϕ3)
+      ∂ϕ2 = rev_reshape_embedding(∂ϕ3, X)
+      return NoTangent(), ∂ϕ2, NoTangent()
+   end
+
+   return ϕ3, _pb_ϕ
+end
