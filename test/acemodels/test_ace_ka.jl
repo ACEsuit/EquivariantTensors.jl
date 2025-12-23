@@ -101,12 +101,13 @@ ORD = 3     # correlation-order (body-order = ORD + 1)
 # generate the embedding layer 
 
 rbasis = P4ML.ChebBasis(Dtot+1)
-rtrans = ET.NTtransform(x -> 1 / (1+norm(x.𝐫)^2))
-rembed = ET.EdgeEmbed( ET.EmbedDP(rtrans, rbasis); name = "Rnl" )
+_rtrans = x -> 1 / (1 + norm(x.𝐫)^2)
+rtrans = ET.dp_transform(_rtrans)
+rembed = ET.EdgeEmbed( ET.EmbedDP(rtrans, rbasis))
 
 ybasis = P4ML.real_solidharmonics(maxl; static=true)
-ytrans = ET.NTtransform(x -> x.𝐫)
-yembed = ET.EdgeEmbed( ET.EmbedDP(ytrans, ybasis); name = "Ylm" )
+ytrans = ET.dp_transform(x -> x.𝐫)
+yembed = ET.EdgeEmbed( ET.EmbedDP(ytrans, ybasis))
 
 mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD, 
                   minn = 0, maxn = Dtot, maxl = maxl, 
@@ -157,7 +158,7 @@ println_slim(@test φ ≈ φ_dev1)
 # implementation, also skipping the graph datastructure entirely. 
 
 function _basis_env(model::ACEKA.SimpleACE, 𝐑i)
-   rij = [ rtrans(x) for x in 𝐑i ]
+   rij = [ _rtrans(x) for x in 𝐑i ]
    Rnl = P4ML.evaluate(rbasis, rij)
    𝐫ij = [ x.𝐫 for x in 𝐑i ]
    Ylm = P4ML.evaluate(ybasis, 𝐫ij)
