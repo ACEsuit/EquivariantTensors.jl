@@ -26,13 +26,13 @@ end
     @testset "SparseMatrix-KA" begin include("ace/test_sparsemat_ka.jl"); end
 end
 
-# @testset "O3-Coupling" begin 
-#     @testset "SYYVector" begin include("test_yyvector.jl"); end
-#     @testset "Clebsch Gordan Coeffs" begin include("test_clebschgordans.jl"); end
-#     @testset "Representation" begin include("test_representation.jl"); end
-#     @testset "Real AA to Complex AA" begin include("test_rAA2cAA.jl"); end
-#     @testset "Coupling Coeffs" begin include("test_coupling.jl"); end
-# end
+@testset "O3-Coupling" begin 
+    @testset "SYYVector" begin include("test_yyvector.jl"); end
+    @testset "Clebsch Gordan Coeffs" begin include("test_clebschgordans.jl"); end
+    @testset "Representation" begin include("test_representation.jl"); end
+    @testset "Real AA to Complex AA" begin include("test_rAA2cAA.jl"); end
+    @testset "Coupling Coeffs" begin include("test_coupling.jl"); end
+end
 
 @testset "ACE Models" begin 
     @testset "Pullback" begin include("acemodels/test_sparse_ace.jl"); end
