@@ -542,7 +542,8 @@ end
 #    ∂A : maxneigs x nnodes x nfeat(A) 
 #
 function _jacobian_X(basis::PooledSparseProduct{2},
-                     BB::TupTen3, ∂BB::TupTen3)
+                     BB::TupTen3, ∂BB::TupTen3, 
+                     spec = basis.spec)
    
    Rnl, Ylm = BB 
    ∂Rnl, ∂Ylm = ∂BB 
@@ -558,9 +559,21 @@ function _jacobian_X(basis::PooledSparseProduct{2},
    A = similar(Rnl, TA, (nnodes, nA))
    ∂A = similar(Rnl, T∂A, (maxneigs, nnodes, nA))
 
-   @inbounds for (iA, (ϕR, ϕY)) in enumerate(basis.spec)
+   _jacobian_X!(A, ∂A, basis, spec, Rnl, ∂Rnl, Ylm, ∂Ylm)
+
+   return A, ∂A
+end
+
+function _jacobian_X!(A::AbstractArray, ∂A::AbstractArray, 
+                       basis::PooledSparseProduct{2},
+                       spec, 
+                       Rnl, ∂Rnl, Ylm, ∂Ylm, )
+
+   maxneigs, nnodes, _ = size(Rnl) 
+
+   @inbounds for (iA, (ϕR, ϕY)) in enumerate(spec)
       for i = 1:nnodes 
-         a = zero(TA)
+         a = zero(eltype(A))
          @simd ivdep for j = 1:maxneigs
             bR = Rnl[j, i, ϕR]
             bY = Ylm[j, i, ϕY]
@@ -573,10 +586,8 @@ function _jacobian_X(basis::PooledSparseProduct{2},
          A[i, iA] = a
       end
    end
-
-   return A, ∂A
-end
-
+   return nothing 
+end 
 
 # --------------------- connect with ChainRules 
 # can this be generalized again? 
