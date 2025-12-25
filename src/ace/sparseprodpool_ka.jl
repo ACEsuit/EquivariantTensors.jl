@@ -99,7 +99,7 @@ function _ka_evaluate_launcher!(
    kernel!(A, BB, spec, nneig, Val{NB}(); ndrange = (length(spec), nX, ))
    return nothing
 end
-   
+
 @kernel function _ka_evaluate_PooledSparseProduct_batched_v1!(
                                  A, BB, spec, nneig, ::Val{NB}) where {NB}
    iA, inode = @index(Global, NTuple)
@@ -181,3 +181,37 @@ function rrule(::typeof(ka_evaluate),
 
    return A, _pb_ka_evaluate
 end
+
+
+# ---------------------------------
+#  KA Jacobian implementation 
+
+function _jacobian_X!(A::AbstractGPUArray, ∂A::AbstractGPUArray, 
+                       basis::PooledSparseProduct{2}, spec, 
+                       Rnl, ∂Rnl, Ylm, ∂Ylm)
+
+   nA = length(spec)
+   maxneigs, nnodes, lenR = size(Rnl) 
+   @assert size(A) == (nnodes, nA)
+   @assert size(∂A) == (maxneigs, nnodes, nA)
+   
+   backend = KernelAbstractions.get_backend(A)
+   kernel! = _ka_jacobian_X_pooledsparseproduct_kernel_2!(backend)
+   kernel!(A, ∂A, spec, Rnl, ∂Rnl, Ylm, ∂Ylm; 
+           ndrange = (nnodes, nA))
+end
+
+@kernel function _ka_jacobian_X_pooledsparseproduct_kernel_2!(
+                          A, ∂A, spec, Rnl, ∂Rnl, Ylm, ∂Ylm)
+   inode, iA = @index(Global, NTuple)
+   ϕR, ϕY = spec[iA]
+   a = zero(eltype(A))
+   for j = 1:size(Rnl, 1)
+      bR = Rnl[j, inode, ϕR]
+      bY = Ylm[j, inode, ϕY]
+      a += bR * bY
+      ∂A[j, inode, iA] = ∂Rnl[j, inode, ϕR] * bY + bR * ∂Ylm[j, inode, ϕY]
+   end
+   A[inode, iA] = a                          
+end
+

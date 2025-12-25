@@ -308,7 +308,8 @@ end
 #  ∂AA : maxneigs x nnodes x nfeat(AA)
 #
 function _jacobian_X(basis::SparseSymmProd,
-                     A::AbstractMatrix, ∂A::AbstractArray{T∂A, 3}) where {T∂A} 
+                     A::AbstractMatrix, ∂A::AbstractArray{T∂A, 3}, 
+                     specs) where {T∂A} 
    nnodes, nA = size(A)
    maxneigs = size(∂A, 1)
    @assert size(∂A) == (maxneigs, nnodes, nA)
@@ -322,15 +323,15 @@ function _jacobian_X(basis::SparseSymmProd,
    # off-load distribution of computation to a generated function 
    # which can handle the type instability inherent to the the way 
    # the basis is stored. 
-   _jacobian_X!(AA, ∂AA, basis, A, ∂A)
+   _jacobian_X!(AA, ∂AA, basis, A, ∂A, specs)
    return AA, ∂AA
 end
 
 @generated function _jacobian_X!(
                AA::AbstractMatrix{TA}, ∂AA::AbstractArray{T∂A, 3},
                basis::SparseSymmProd{ORD},
-               A::AbstractMatrix{TA}, ∂A::AbstractArray{T∂A, 3}
-                     ) where {TA, T∂A, ORD} 
+               A::AbstractMatrix{TA}, ∂A::AbstractArray{T∂A, 3}, 
+               specs ) where {TA, T∂A, ORD} 
 
    quote
       fill!(AA, zero(TA))
@@ -338,7 +339,7 @@ end
       @nexprs $ORD N -> _jacobian_X_N!(
                               AA, ∂AA, 
                               basis.ranges[N], 
-                              basis.specs[N], 
+                              specs[N], 
                               A, ∂A)
       return nothing 
    end 
@@ -366,6 +367,9 @@ function _jacobian_X_N!(
          AA[i, iAA] = aa
 
          # ∂AA[j, i, iAA] = ∑ₜ ∇aa[t] * ∂A[j, i, ϕ[t]]
+         # for t = 1:N, j = 1:maxneigs
+         #    ∂AA[j, i, iAA] += ∇aa[t] * ∂A[j, i, ϕ[t]]
+         # end
          for t = 1:N 
             ∇aa_t = ∇aa[t]; ϕ_t = ϕ[t]
             @simd ivdep for j = 1:maxneigs

@@ -235,27 +235,37 @@ end
 
 function _jacobian_X(tensor::SparseACEbasis, 
                      Rnl, Ylm, 
-                     dRnl, dYlm)
+                     dRnl, dYlm, 
+                     ps, st)
+   backend = KernelAbstractions.get_backend(Rnl)
+   KernelAbstractions.synchronize(backend)
 
-   A, ∂A = _jacobian_X(tensor.abasis, (Rnl, Ylm), (dRnl, dYlm))
-   AA, ∂AA = _jacobian_X(tensor.aabasis, A, ∂A)
+   A, ∂A = _jacobian_X(tensor.abasis, (Rnl, Ylm), (dRnl, dYlm),
+                       st.aspec)
+   KernelAbstractions.synchronize(backend)
+
+   AA, ∂AA = _jacobian_X(tensor.aabasis, A, ∂A,
+                         st.aaspecs)
+
+   KernelAbstractions.synchronize(backend)
    
    # BB = tensor.A2Bmap * AA  if vector (single input)
    #     or AA * A2Bmap'  if matrix (batch)
    # BB = #nodes x #features 
    # ∂BB = maxneigs x #nodes x #features
    # for now assume only one basis ... 
-   𝔹 = permutedims.( tensor.A2Bmaps .* Ref(permutedims(AA)) )
+   @assert length(st.A2Bmaps) == 1 "Jacobian currently only supports single basis"
+   A2Bmaps1 = st.A2Bmaps[1] 
+   𝔹 = permutedims( mul(A2Bmaps1, permutedims(AA) ) )
 
    # convert 3-tensor to matrix, apply A2Bmaps, then back to 3-tensor
    # this should be merged into a single kernel for efficiency 
    ∂AA_mat = reshape(∂AA, :, size(∂AA, 3))
-   ∂𝔹_mat = permutedims.( tensor.A2Bmaps .* Ref(permutedims(∂AA_mat)) )
+   ∂𝔹_mat1 = permutedims( mul(A2Bmaps1, permutedims(∂AA_mat)) )
 
-   @assert length(tensor.A2Bmaps) == 1 "Jacobian currently only supports single basis"
-   ∂𝔹 = ( reshape(∂𝔹_mat[1], size(∂AA, 1), :, size(∂𝔹_mat[1], 2)), )
+   ∂𝔹 = reshape(∂𝔹_mat1, size(∂AA, 1), :, size(∂𝔹_mat1, 2))
 
-   return 𝔹, ∂𝔹
+   return (𝔹,), (∂𝔹,)
 end
 
 

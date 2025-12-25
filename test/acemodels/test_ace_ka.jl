@@ -57,7 +57,8 @@ module ACEKA
    function jacobian_basis(model::SimpleACE, X::ET.ETGraph, ps, st) 
       (R, ∂R), _ = ET.evaluate_ed(model.Rnl, X, ps.Rnl, st.Rnl)
       (Y, ∂Y), _ = ET.evaluate_ed(model.Ylm, X, ps.Ylm, st.Ylm)
-      𝔹, ∂𝔹 = ET._jacobian_X(model.symbasis, R, Y, ∂R, ∂Y)
+      𝔹, ∂𝔹 = ET._jacobian_X(model.symbasis, R, Y, ∂R, ∂Y, 
+                              ps.symbasis, st.symbasis)
       return 𝔹, ∂𝔹
    end
 

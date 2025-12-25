@@ -149,3 +149,63 @@ end
    end
    nothing 
 end
+
+# --------------------------------------------------------
+#
+# KA implementation of jacobian pushforward 
+#
+
+function _jacobian_X_N!(
+               AA::AbstractGPUArray{TA, 2}, 
+               ∂AA::AbstractGPUArray{T∂A, 3}, 
+               iiAA,  # index range for order N
+               spec::AbstractGPUArray{NTuple{N, Int}},   # spec for order N
+               A::AbstractGPUArray{TA, 2}, 
+               ∂A::AbstractGPUArray{T∂A, 3}
+                     ) where {TA, T∂A, N} 
+
+   nnodes, nA = size(A)
+   maxneigs = size(∂A, 1)
+   @assert length(iiAA) == length(spec)
+
+   backend = KernelAbstractions.get_backend(AA)
+   kernel! = _jacobian_X_N_sparsesymmprod_kernel!(backend)
+   kernel!(AA, ∂AA, iiAA, spec, A, ∂A, Val{N}(); 
+           ndrange = (nnodes, length(iiAA)))
+end
+
+
+# @generated function __write_AA_jac(
+#                   ::Val{N}, ∂AA, ∇aa, ∂A, j, iX, iAA, i) 
+#    quote                   
+#       @nexprs $N t -> (
+#          ∂AA[j, iX, iAA] += ∇aa[t] * ∂A[j, i, ϕ[t]]
+#       ) 
+#    end
+# end
+
+@kernel function _jacobian_X_N_sparsesymmprod_kernel!(
+               AA, ∂AA, iiAA, spec, A, ∂A, ::Val{N}) where {N}
+
+   (iX, i_iiAA) = @index(Global, NTuple)
+   iAA = iiAA[i_iiAA]
+   ϕ = spec[i_iiAA]
+   maxneigs = size(∂AA, 1) 
+
+   # aa = prod(A[iX, ϕ[t]] for t = 1:length(ϕ); init = one(eltype(A)))
+   Avals = ntuple(t -> A[iX, ϕ[t]], N)
+   # aa = ∏ₜ Aⁱₜ 
+   # ∇aa[t] = ∂aa / ∂A_{ϕ[t]}
+   aa, ∇aa = _static_prod_ed(Avals) 
+   AA[iX, iAA] = aa 
+
+   for j = 1:maxneigs, t = 1:N
+      # NOTE: could unroll the loop over t here 
+      #       cf. above? 
+      ∂AA[j, iX, iAA] += ∇aa[t] * ∂A[j, iX, ϕ[t]] 
+   end
+
+   nothing 
+end
+
+
