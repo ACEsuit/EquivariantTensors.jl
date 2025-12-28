@@ -94,16 +94,11 @@ end
 
 function _pb_ed(l::NTtransformST, Δ::AbstractArray, 
                  X::AbstractVector{<: NTorDP}, ps, st)
-   pb1(x, d) = DiffNT.grad_fd(_x -> dot(l.f(_x, st), d), x)
-   # pb1(x, d) = d * DiffNT.grad_fd(l.f, x, st)
+   # make sure the closure doesn't capute l, but only l.f                  
+   # and l.f itself cannot capute anything that doesn't run on GPU.
+   pb1 = let l_f = l.f, st = st 
+      (x, d) -> DiffNT.grad_fd(_x -> dot(l_f(_x, st), d), x)
+   end                 
    return pb1.(X, Δ)
 end 
 
-# WORKAROUND FOR THE RADIAL AGNESI EMBEDDING WITH 
-# PARAMETERS STORED INSIDE THE TYPE NOT JUST THE STATE 
-function _pb_ed(l::NTtransformST, Δ::AbstractArray{TY}, 
-                 X::AbstractVector{<: NTorDP}, ps, st
-                 ) where {TY <: Number} 
-   (Y, dY), _ = evaluate_ed(l, X, ps, st)
-   return dY .* Δ                 
-end 

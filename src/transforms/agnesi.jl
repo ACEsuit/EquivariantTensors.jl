@@ -55,6 +55,14 @@ function eval_agnesi(r::Real, params::NamedTuple)
          params.pin, params.pcut, params.a, params.b0, params.b1, 
          params.rin, params.req
 
+   # F32D = Union{Float32, Dual{T, Float32, S} } where {T, S}
+   # @assert r isa F32D 
+   # @assert rin isa F32D
+   # @assert req isa F32D
+   # @assert b0 isa F32D
+   # @assert b1 isa F32D
+   # @assert a isa F32D
+
    s = (r - rin) / (req - rin)
    x = 1 / (1 + a * s^(pin) / (1 + s^(pin - pcut)))
    y = max(-1, min(1, b1 * x + b0))
