@@ -94,8 +94,8 @@ end
 
 function _pb_ed(l::NTtransformST, Δ::AbstractArray, 
                  X::AbstractVector{<: NTorDP}, ps, st)
-   # make sure the closure doesn't capute l, but only l.f                  
-   # and l.f itself cannot capute anything that doesn't run on GPU.
+   # make sure the closure doesn't capture l, but only l.f                  
+   # and l.f itself cannot capture anything that doesn't run on GPU.
    pb1 = let l_f = l.f, st = st 
       (x, d) -> DiffNT.grad_fd(_x -> dot(l_f(_x, st), d), x)
    end                 

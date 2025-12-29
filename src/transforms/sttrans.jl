@@ -29,11 +29,16 @@ initialstates(rng::AbstractRNG, l::TransformST) = deepcopy(l.refstate)
 (l::TransformST)(x, st) = l.f(x, st)
 (l::TransformST)(x) = l.f(x, l.refstate)
 
-(l::TransformST)(x::AbstractVector, ps, st) = 
-         l(x, st), st 
+(l::TransformST)(x::AbstractVector, ps, st) = l(x, st), st 
+(l::TransformST)(x::AbstractVector, st) = broadcast(l.f, x, Ref(st))
 
-(l::TransformST)(x::AbstractVector, st) = 
-         broadcast(l.f, x, Ref(st))
+evaluate(l::TransformST, x, ps, st) = l.f(x, st)
 
-evaluate(l::TransformST, x, ps, st) = 
-         l.f(x, st)
+function evaluate_ed(l::TransformST, x::AbstractVector, ps, st)
+   y = broadcast(l.f, x, Ref(st))
+   # dy = let l_f = l.f, st = st 
+   #    broadcast(DiffNT.grad_fd, Ref(l_f), x, Ref(st)) 
+   # end 
+   dy = map(xi -> DiffNT.grad_fd(l.f, xi, st), x)
+   return (y, dy), st
+end
