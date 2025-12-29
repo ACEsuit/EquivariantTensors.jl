@@ -23,6 +23,7 @@ include("generics.jl")
 include("transforms/diffnt.jl")
 include("transforms/decpart.jl")
 include("transforms/agnesi.jl")
+include("transforms/sttrans.jl")
 
 include("embed/graph.jl")
 include("embed/embeddings.jl")

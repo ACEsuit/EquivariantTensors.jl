@@ -144,7 +144,7 @@ function agnesi_transform(categories, rins, reqs, rcuts,
    f_agnesi = let 
       (x, st) -> begin
          r = norm(x.𝐫)
-         idx = catcat2idx_sym(st.zlist, x.s0, x.s1)
+         idx = catcat2idx_sym(st.zlist, x.z0, x.z1)
          return eval_agnesi(r, st.params[idx])
       end   
    end

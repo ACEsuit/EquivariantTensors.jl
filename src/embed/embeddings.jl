@@ -91,6 +91,8 @@ end
 
 function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
    Y, _ = l.trans(X, ps.trans, st.trans)
+   @show typeof(Y)
+   @show typeof(st.basis)
    P2, dP2 = evaluate_ed(l.basis, Y, ps.basis, st.basis)
 
    # pushforward the P' through the post-transform layer 
