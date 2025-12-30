@@ -20,7 +20,7 @@ here `y = trans(x)`, the selector chooses the index `i(x)` of the spline,
    states          # reference spline parameters (frozen hence states)
 end 
 
-LuxCore.initialstates(rng::AbstractRNG, l::TransSelSplines) = 
+initialstates(rng::AbstractRNG, l::TransSelSplines) = 
       ( trans = LuxCore.initialstates(rng, l.trans), 
         envelope = LuxCore.initialstates(rng, l.envelope), 
       #   selector = LuxCore.initialstates(rng, l.selector), 
@@ -28,7 +28,7 @@ LuxCore.initialstates(rng::AbstractRNG, l::TransSelSplines) =
 
 (l::TransSelSplines)(x, ps, st) = _apply_etsplinebasis(l, x, st), st 
 
-evaluate(l::TransSelSplines, x, ps, st) = _apply_etsplinebasis(l, x, st)
+evaluate(l::TransSelSplines, x, ps, st) = _apply_etsplinebasis(l, x, st), st 
 
       
 function _apply_etsplinebasis(l::TransSelSplines, 
