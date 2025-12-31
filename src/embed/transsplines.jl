@@ -56,8 +56,8 @@ end
 
 
 function evaluate_ed(l::TransSelSplines, 
-                         X::AbstractVector{<: XState}, 
-                         ps, st)
+                     X::AbstractVector{<: XState}, 
+                     ps, st)
    # transform 
    (Y, dY), _ = evaluate_ed(l.trans, X, NamedTuple(), st.trans)
    # select the spline parameters
@@ -75,9 +75,24 @@ function evaluate_ed(l::TransSelSplines,
 
    if l.envelope != nothing 
       (ee, ∂ee), _ = evaluate_ed(l.envelope, X, NamedTuple(), st.envelope)
-      S1 = ee .* S
       ∂S .= ∂ee .* S .+ ee .* ∂S
+      S .= ee .* S
    end
 
-   return (S1, ∂S), st
+   return (S, ∂S), st
+end
+
+
+function rrule(::typeof(_apply_etsplinebasis), 
+               l::TransSelSplines, X::AbstractArray, st)
+
+   (P, dP), st = evaluate_ed(l, X, NamedTuple(), st)
+
+   function _pb_etsplinebasis(_∂P)
+      ∂P = unthunk(_∂P)
+      ∂X = dropdims( sum(∂P .* dP, dims = 2), dims = 2) 
+      return NoTangent(), NoTangent(), ∂X, NoTangent(), NoTangent()
+   end
+
+   return P, _pb_etsplinebasis
 end
