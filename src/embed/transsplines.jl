@@ -9,7 +9,9 @@
 #       (almost always, maybe always??) 
 #
 
-function trans_splines(trans, splines, selector;  
+using Lux: BranchLayer, WrappedFunction
+
+function trans_splines(trans, splines, selector,  
                        envelope = nothing)
    # precompute states for the splines 
    states = [ P4ML._init_luxstate(spl) for spl in splines ]
@@ -22,7 +24,8 @@ function trans_splines(trans, splines, selector;
 end 
 
 function trans_splines(embed::EmbedDP, ps, st; 
-                       yrange = (-1.0, 1.0), nspl = 100)
+                       yrange = (-1.0, 1.0), nspl = 100, 
+                       extract_envelope = false)
    if !(embed.post isa SelectLinL)
       error("auto conversion to splines only supported for post = SelectLinL")
    end
@@ -30,10 +33,31 @@ function trans_splines(embed::EmbedDP, ps, st;
    trans = embed.trans
    WW = ps.post.W 
    NCAT = size(WW, 3)
-   splines = [ P4ML.splinify( y -> WW[:, :, i] * embed.basis(y), 
+
+   if (embed.basis isa P4ML.WrappedBasis) && extract_envelope
+      # this means it is likely a basis * envelope situation 
+      # => confirm this. 
+      @assert embed.basis.l isa BranchLayer 
+      polys_y = embed.basis.l.layers.layer_1 
+      @assert polys_y isa P4ML.AbstractP4MLBasis
+      env = embed.basis.l.layers.layer_2 
+      @assert env isa WrappedFunction 
+      bas_fun = polys_y 
+      env_func = env.func 
+      env_trans = dp_transform( (x, st) -> env_func(trans.f(x, st)), 
+                                trans.refstate )
+   elseif embed.basis isa P4ML.AbstractP4MLBasis
+      bas_fun = y -> embed.basis(y, ps.basis, st.basis)[1]
+      env_trans = nothing 
+   else
+      error("couldn't figure out the basis structure to splinify it automatically")
+   end
+   
+   splines = [ P4ML.splinify( y -> WW[:, :, i] * bas_fun(y), 
                               yrange[1], yrange[2], nspl ) 
                for i in 1:NCAT ] 
-   return trans_splines(trans, splines, embed.post.selector)
+
+   return trans_splines(trans, splines, embed.post.selector, env_trans)
 end
 
 
