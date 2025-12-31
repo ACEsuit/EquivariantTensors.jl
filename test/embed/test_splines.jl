@@ -64,6 +64,7 @@ rand_X() = [ DP.PState( 𝐫 = (@SVector randn(3)), c = rand(1:NCAT) )
 
 Random.seed!(1)  # new seed to make sure the tests are ok.
 for ntest = 1:30 
+   local X, P1 
    X = rand_X() 
    P1, _ = rembed(X, ps, st)
    P_30, _ = spl_30(X, ps_30, st_30)
