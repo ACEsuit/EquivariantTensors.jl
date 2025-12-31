@@ -70,16 +70,17 @@ for ntest = 1:30
    P_100, _ = spl_100(X, ps_100, st_100)
 
    (P1a, dP1a), _ = ET.evaluate_ed(rembed, X, ps, st)
-   # (P_30a, dP_30a), _ = ET.evaluate_ed(spl_30, X, ps_30, st_30)
-   # (P_100a, dP_100a), _ = ET.evaluate_ed(spl_100, X, ps_100, st_100)
+   (P_30a, dP_30a), _ = ET.evaluate_ed(spl_30, X, ps_30, st_30)
+   (P_100a, dP_100a), _ = ET.evaluate_ed(spl_100, X, ps_100, st_100)
 
    print_tf(@test norm(P1 - P_30, Inf) < 1e-3)
    print_tf(@test norm(P1 - P_100, Inf) < 1e-5)
-   # print_tf(@test P_30a ≈ P_30)
-   # print_tf(@test P_100a ≈ P_100)
-   # print_tf(@test maximum(norm.(dP1a - dP_30a)) < 3e-2)
-   # print_tf(@test maximum(norm.(dP1a - dP_100a)) < 2e-3)
+   print_tf(@test P_30a ≈ P_30)
+   print_tf(@test P_100a ≈ P_100)
+   print_tf(@test maximum(norm.(dP1a - dP_30a)) < 3e-2)
+   print_tf(@test maximum(norm.(dP1a - dP_100a)) < 2e-3)
 end
+println() 
 
 ##
 
@@ -97,9 +98,12 @@ X_dev = dev(X_32)
 
 P1, _ = spl_100(X_32, ps_32, st_32)
 P2_dev, _ = spl_100(X_dev, ps_dev, st_dev)
+P2 = Array(P2_dev)
+println_slim(@test P1 ≈ P2)
 
-states = st_32.params
-FF = reduce(hcat, [ s.F for s in states ])
-GG = reduce(hcat, [ s.G for s in states ])
-
-length(eltype(st_32.params.F))
+(P1, ∂P1), _ = ET.evaluate_ed(spl_100, X_32, ps_32, st_32)
+(P2_dev, ∂P2_dev), _ = ET.evaluate_ed(spl_100, X_dev, ps_dev, st_dev)
+P2 = Array(P2_dev)
+∂P2 = Array(∂P2_dev)
+println_slim(@test P1 ≈ P2 )
+println_slim(@test all(norm.(∂P1 .- ∂P2) .< 1e-5))
