@@ -1,10 +1,5 @@
 
 import ForwardDiff as FD 
-import DecoratedParticles as DP 
-import DecoratedParticles: VState, PState, XState 
-
-const NTorDP = Union{NamedTuple, XState}
-
 
 # --------------------------------------------------------- 
 #  wrapping a transfrom from a named tuple or decorated particle 
