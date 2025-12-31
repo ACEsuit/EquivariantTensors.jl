@@ -41,11 +41,13 @@ function trans_splines(embed::EmbedDP, ps, st;
       polys_y = embed.basis.l.layers.layer_1 
       @assert polys_y isa P4ML.AbstractP4MLBasis
       env = embed.basis.l.layers.layer_2 
-      @assert env isa WrappedFunction 
+      @assert env isa TransformST
       bas_fun = polys_y 
-      env_func = env.func 
-      env_trans = dp_transform( (x, st) -> env_func(trans.f(x, st)), 
-                                trans.refstate )
+      env_trans = let trans_f = trans.f, env_func = env.f
+         # env_func = y -> (1 - y^2)^2
+         dp_transform( (x, st) -> env_func(trans_f(x, st), NamedTuple()), 
+                       trans.refstate)
+      end
    elseif embed.basis isa P4ML.AbstractP4MLBasis
       bas_fun = y -> embed.basis(y, ps.basis, st.basis)[1]
       env_trans = nothing 
@@ -122,6 +124,8 @@ function _apply_etsplinebasis(l::TransSelSplines,
    kernel! = _etspl_kernel!(backend)
    kernel!(S, Y, i_sel, st.params.F, st.params.G, st.params.x0, st.params.x1, 
            size(st.params.F, 1); ndrange = (length(X),) )
+   KernelAbstractions.synchronize(backend)
+
 
    if l.envelope != nothing 
       ee, _ = l.envelope(X, NamedTuple(), st.envelope)

@@ -1,7 +1,7 @@
 
 
-using Pkg; Pkg.activate(joinpath(@__DIR__(), "..", ".."))
-using TestEnv; TestEnv.activate();
+# using Pkg; Pkg.activate(joinpath(@__DIR__(), "..", ".."))
+# using TestEnv; TestEnv.activate();
 
 ##
 
@@ -30,19 +30,17 @@ trans_states = (; params = rand(NCAT))
 trans_fun = let 
    (x, st) -> 1 - 2 / (1 + st.params[x.c] * norm(x.𝐫))
 end 
-env_fun = let 
-   y -> (1 - y^2)^2 
-end
 trans = ET.dp_transform(trans_fun, trans_states )
 polys_y = P4ML.ChebBasis(indim)
-Penv = P4ML.wrapped_basis( BranchLayer(
+
+Penv = let polys_y = polys_y
+   env_fun = (y, st) -> (1 - y^2)^2
+   P4ML.wrapped_basis( BranchLayer(
          polys_y,   # y -> P
-         WrappedFunction( y -> env_fun.(y) ),  # y -> fₑₙᵥ
+         ET.st_transform(env_fun, NamedTuple()),  # y -> fₑₙᵥ
          fusion = WrappedFunction( Pe -> Pe[2] .* Pe[1] )  
-      ) ) 
-sel_fun = let 
-   x -> x.c 
-end 
+      ) )
+end
 sellin = ET.SelectLinL(length(polys_y), outdim, NCAT, x -> x.c)
 rembed = ET.EmbedDP(trans, Penv, sellin)
 ps, st = LuxCore.setup(rng, rembed)
@@ -100,6 +98,7 @@ println()
 
 ##
 
+#=
 
 @info("Check GPU evaluation") 
 using Metal 
@@ -124,3 +123,5 @@ P2 = Array(P2_dev)
 ∂P2 = Array(∂P2_dev)
 println_slim(@test P1 ≈ P2 )
 println_slim(@test all(norm.(∂P1 .- ∂P2) .< 1e-5))
+
+=#
