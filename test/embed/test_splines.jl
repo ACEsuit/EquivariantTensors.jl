@@ -2,14 +2,11 @@
 
 using Pkg; Pkg.activate(joinpath(@__DIR__(), "..", ".."))
 using TestEnv; TestEnv.activate();
-# Pkg.develop(url = joinpath(@__DIR__(), "..", "..", "..", "EquivariantTensors.jl"))
-# Pkg.develop(url = joinpath(@__DIR__(), "..", "..", "..", "Polynomials4ML.jl"))
-# Pkg.develop(url = joinpath(@__DIR__(), "..", "..", "DecoratedParticles"))
 
 ##
 
-using StaticArrays, Random, LuxCore, Test, LinearAlgebra, ForwardDiff
-using EquivariantTensors
+using StaticArrays, Random, LuxCore, Test, LinearAlgebra, ForwardDiff, 
+      EquivariantTensors
 
 import EquivariantTensors as ET
 import Polynomials4ML as P4ML 
@@ -35,27 +32,23 @@ rembed = ET.EmbedDP(trans, polys, sellin)
 
 ps, st = LuxCore.setup(rng, rembed)
 
+# smoothen the splines so that we can sensible errors with few spline points 
 for c = 1:NCAT
    nfeat = size(ps.post.W, 2)
-   ps.post.W[:, :, c] = ps.post.W[:, :, c] .* ((1:nfeat).^(-2))'
+   ps.post.W[:, :, c] = ps.post.W[:, :, c] .* ((1:nfeat).^(-3))'
 end
 
 ## 
 #
 # splinify the embedding 
 
-Nspl = 100 
-WW = ps.post.W 
-splines = [ 
-      P4ML.splinify( y -> WW[:, :, i] * polys(y), -1.0, 1.0, Nspl ) 
-      for i in 1:size(WW, 3)  ]
-states = [ P4ML._init_luxstate(spl) for spl in splines ]
-spl = ET.TransSelSplines(trans, nothing, sellin.selector, splines[1], states)
+spl_30 = ET.trans_splines(rembed, ps, st; 
+                           yrange = (-1.0, 1.0), nspl = 30)
+spl_100 = ET.trans_splines(rembed, ps, st; 
+                           yrange = (-1.0, 1.0), nspl = 100)
 
-# I want it to look something like this: 
-# spl_100 = ET.transsel_splines(trans, splines, nothing) 
-
-ps_spl, st_spl = LuxCore.setup(rng, spl)
+ps_30, st_30 = LuxCore.setup(rng, spl_30)
+ps_100, st_100 = LuxCore.setup(rng, spl_100)
 
 ## 
 
@@ -68,12 +61,19 @@ Random.seed!(1234)  # new seed to make sure the tests are ok.
 for ntest = 1:30 
    X = rand_X() 
    P1, _ = rembed(X, ps, st)
-   P2, _ = spl(X, ps_spl, st_spl)
+   P_30, _ = spl_30(X, ps_30, st_30)
+   P_100, _ = spl_100(X, ps_100, st_100)
+
    (P1a, dP1a), _ = ET.evaluate_ed(rembed, X, ps, st)
-   (P2a, dP2a), _ = ET.evaluate_ed(spl, X, ps_spl, st_spl)
-   print_tf(@test P2a ≈ P2)
-   print_tf(@test norm(P1 - P2, Inf) < 1e-5)
-   print_tf(@test maximum(norm.(dP1a - dP2a)) < 1e-3)
+   (P_30a, dP_30a), _ = ET.evaluate_ed(spl_30, X, ps_30, st_30)
+   (P_100a, dP_100a), _ = ET.evaluate_ed(spl_100, X, ps_100, st_100)
+
+   print_tf(@test P_30a ≈ P_30)
+   print_tf(@test P_100a ≈ P_100)
+   print_tf(@test norm(P1 - P_30, Inf) < 1e-3)
+   print_tf(@test norm(P1 - P_100, Inf) < 1e-6)
+   print_tf(@test maximum(norm.(dP1a - dP_30a)) < 3e-2)
+   print_tf(@test maximum(norm.(dP1a - dP_100a)) < 1e-3)
 end
 
 ##

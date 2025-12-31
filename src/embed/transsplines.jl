@@ -1,5 +1,28 @@
 
 
+function trans_splines(trans, splines, selector;  
+                       envelope = nothing)
+   # precompute states for the splines 
+   states = [ P4ML._init_luxstate(spl) for spl in splines ]
+   return TransSelSplines(trans, envelope, selector, splines[1], states)
+end 
+
+function trans_splines(embed::EmbedDP, ps, st; 
+                       yrange = (-1.0, 1.0), nspl = 100)
+   if !(embed.post isa SelectLinL)
+      error("auto conversion to splines only supported for post = SelectLinL")
+   end
+
+   trans = embed.trans
+   WW = ps.post.W 
+   NCAT = size(WW, 3)
+   splines = [ P4ML.splinify( y -> WW[:, :, i] * embed.basis(y), 
+                              yrange[1], yrange[2], nspl ) 
+               for i in 1:NCAT ] 
+   return trans_splines(trans, splines, embed.post.selector)
+end
+
+
 """
    struct TransSelSplines
 
