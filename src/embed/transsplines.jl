@@ -81,30 +81,17 @@ function _apply_etsplinebasis(l::TransSelSplines,
    backend = KernelAbstractions.get_backend(X)
    KernelAbstractions.synchronize(backend)
 
-   # TODO: merge the envelope into the kernel for efficiency 
-   #       (visit each memory  location only once) 
+   # TODO: merge the trans and envelope into the kernel for efficiency 
+   #       less memory allocation, visit each memory location only once
+   #       but the output types for S, ∂S then need to be inferred beforehand
 
    @kernel function _etspl_kernel!(S, Y, i_sel, FF, GG, X0, X1, NX)
       idx = @index(Global)
       icat = i_sel[idx]
-
       x, t, il, h = _spl_grid(Y[idx], X0[icat], X1[icat], NX)
-
-      # y = Y[idx]
-      # x0 = X0[icat]
-      # x1 = X1[icat]
-      # x = clamp(y, x0, x1)    # project to [x0, x1] (corresponds to Flat bc)
-      # h = (x1 - x0) / (NX-1)                 # uniform grid spacing 
-      # # il = floor(Int, (x - x0) / h)         # index of left node
-      # il = unsafe_trunc(Int, (x - x0) / h)   # floor doesn't run on Metal 
-      # # TODO: is this numerically stable? 
-      # t = (x - x0) / h - il            # relative coordinate of x in [il, il+1]
-
       s = _eval_cubic(t, FF[il+1, icat], FF[il+2, icat], 
                        h*GG[il+1, icat], h*GG[il+2, icat])
-
       S[idx, :] .= s
-
       nothing
    end
 
@@ -135,10 +122,10 @@ function evaluate_ed(l::TransSelSplines,
 
    backend = KernelAbstractions.get_backend(X)
    KernelAbstractions.synchronize(backend)
+
    @kernel function _etspl_ed_kernel!(S, ∂S, Y, dY, i_sel, FF, GG, X0, X1, NX)
       idx = @index(Global)
       icat = i_sel[idx]
-
       x, t, il, h = _spl_grid(Y[idx], X0[icat], X1[icat], NX)
       s, ds = _eval_cubic_widthgrad(t, 
                         FF[il+1, icat], FF[il+2, icat], 
@@ -151,13 +138,6 @@ function evaluate_ed(l::TransSelSplines,
    kernel! = _etspl_ed_kernel!(backend)
    kernel!(S, ∂S, Y, dY, i_sel, st.params.F, st.params.G, st.params.x0, st.params.x1, 
            size(st.params.F, 1); ndrange = (length(X),) )
-
-   # for (idx, y) in enumerate(Y)
-   #    spl_idx = st.params[i_sel[idx]]
-   #    s_i, ds_i = P4ML.evaluate_ed(l.ref_spl, y, nothing, spl_idx)
-   #    S[idx, :] = s_i
-   #    ∂S[idx, :] = Ref(dY[idx]) .* ds_i
-   # end
 
    if l.envelope != nothing 
       (ee, ∂ee), _ = evaluate_ed(l.envelope, X, NamedTuple(), st.envelope)
@@ -224,34 +204,3 @@ end
    return f, g / h 
 end
 
-
-# taken from P4ML but no longer used here 
-# """
-#    _eval_cubspl(x, F, G, x0, x1, NX)
-
-# auxiliary function to the evaluate the cubic spline basis given 
-# the spline data arrays    
-# """
-# @inline function _eval_cubspl(x, F, G, x0, x1, NX)
-#    x = clamp(x, x0, x1)     # project to [x0, x1] (corresponds to Flat bc)
-#    h = (x1 - x0) / (NX-1)   # uniform grid spacing 
-#    il = unsafe_trunc(Int, (x - x0) / h)   # index of left node
-#    # TODO: is this numerically stable? 
-#    t = (x - x0) / h - il          # relative coordinate of x in [il, il+1]
-#    @inbounds _eval_cubic(t, F[il+1], F[il+2], h*G[il+1], h*G[il+2])
-# end
-
-# @inline function _cubspl_widthgrad(x, F, G, x0, x1, NX)
-#    if x < x0 || x > x1
-#       f = _eval_cubspl(x, F, G, x0, x1, NX)
-#       return f, zero(f) 
-#    end
-#    h = (x1 - x0) / (NX-1)   # uniform grid spacing 
-#    t, _il = modf((x - x0) / h)
-#    il = Int(_il)
-#    td = Dual(t, one(t))
-#    fd = _eval_cubic(td, F[il+1], F[il+2], h*G[il+1], h*G[il+2])
-#    f = ForwardDiff.value.(fd)
-#    g = ForwardDiff.partials.(fd, 1)
-#    return f, g / h 
-# end

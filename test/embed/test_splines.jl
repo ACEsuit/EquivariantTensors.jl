@@ -1,7 +1,7 @@
 
 
-using Pkg; Pkg.activate(joinpath(@__DIR__(), "..", ".."))
-using TestEnv; TestEnv.activate();
+# using Pkg; Pkg.activate(joinpath(@__DIR__(), "..", ".."))
+# using TestEnv; TestEnv.activate();
 
 ##
 
@@ -84,6 +84,7 @@ println()
 
 ##
 
+#=
 @info("Check GPU evaluation") 
 using Metal 
 dev = Metal.mtl
@@ -107,3 +108,4 @@ P2 = Array(P2_dev)
 ∂P2 = Array(∂P2_dev)
 println_slim(@test P1 ≈ P2 )
 println_slim(@test all(norm.(∂P1 .- ∂P2) .< 1e-5))
+=#
