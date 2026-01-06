@@ -52,7 +52,7 @@ jobs:
         shell: julia --project=test --color=yes {0}
         run: |
           using Pkg
-          Pkg.develop(path="../NeighbourLists.jl")
+          Pkg.develop(path="NeighbourLists.jl")
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
   docs:
