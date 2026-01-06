@@ -15,6 +15,7 @@ Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 SpheriCart = "5caf2b29-02d9-47a3-9434-5931c85ba645"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
@@ -22,3 +23,4 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [sources]
 EquivariantTensors = {path = ".."}
+NeighbourLists = {path = "../../NeighbourLists"}
