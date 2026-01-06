@@ -1,0 +1,25 @@
+[deps]
+ACEbase = "14bae519-eb20-449c-a949-9c58ed33163e"
+AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
+AtomsBuilder = "f5cc8831-eeb7-4288-8d9f-d6c1ddb77004"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+BlockDiagonals = "0a1fb500-61f7-11e9-3c65-f5ef3456f9f0"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+EquivariantTensors = "5e107534-7145-4f8f-b06f-47a52840c895"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MLDataDevices = "7e8f7934-dd98-4c1a-8fe8-92b47a384d40"
+Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+NeighbourLists = "2fcf5ba9-9ed4-57cf-b73f-ff513e316b9c"
+Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
+SpheriCart = "5caf2b29-02d9-47a3-9434-5931c85ba645"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+
+[sources]
+EquivariantTensors = {path = ".."}
+NeighbourLists = {path = "../../NeighbourLists"}

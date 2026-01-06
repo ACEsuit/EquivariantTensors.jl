@@ -32,10 +32,14 @@ WithAlloc = "fb1aa66a-603c-4c1d-9bc4-66947c7b08dd"
 AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
 AtomsBuilder = "f5cc8831-eeb7-4288-8d9f-d6c1ddb77004"
 NeighbourLists = "2fcf5ba9-9ed4-57cf-b73f-ff513e316b9c"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
+[sources]
+NeighbourLists = {path = "../NeighbourLists"}
 
 [extensions]
 AtomsBaseExt = "AtomsBase"
-NeighbourListsExt = "NeighbourLists"
+NeighbourListsExt = ["NeighbourLists", "AtomsBase", "Unitful"]
 
 [compat]
 ACEbase = "0.4.5"
@@ -58,29 +62,33 @@ LuxCore = "1.2.4"
 MLDataDevices = "1.9.3"
 Metal = "1.9.0"
 NamedTupleTools = "0.14.0"
-NeighbourLists = "0.5.10"
+NeighbourLists = "0.5.10, 0.6"
 PartialWaveFunctions = "0.2.0"
 Polynomials4ML = "0.5.6"
 Random = "1.11"
 Rotations = "1.7.1"
 SparseArrays = "1.11"
 StaticArrays = "1.9"
+Unitful = "1"
 WignerD = "0.1.4"
 WithAlloc = "0.1.1"
 julia = "1.11"
 
 [extras]
+AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
+AtomsBuilder = "f5cc8831-eeb7-4288-8d9f-d6c1ddb77004"
 BlockDiagonals = "0a1fb500-61f7-11e9-3c65-f5ef3456f9f0"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+NeighbourLists = "2fcf5ba9-9ed4-57cf-b73f-ff513e316b9c"
 Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 SpheriCart = "5caf2b29-02d9-47a3-9434-5931c85ba645"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
-Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [targets]
 test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", "Printf", "Zygote", "Optimisers", "CUDA", "Metal", "AtomsBase", "AtomsBuilder", "NeighbourLists", "Unitful"]
