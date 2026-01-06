@@ -1,13 +1,10 @@
 #
 # Benchmark script for NeighbourLists integration
-# Run with: julia --project test/atoms/bench_neighbourlistsext.jl
+# Run with: julia --project=test test/atoms/bench_neighbourlistsext.jl
 #
 # This script compares the performance of the new multithreaded neighbour_list()
 # API against the legacy PairList implementation.
 #
-
-using Pkg
-Pkg.activate(joinpath(@__DIR__, "../.."))
 
 using EquivariantTensors, NeighbourLists, AtomsBuilder, Unitful, BenchmarkTools
 import EquivariantTensors as ET
