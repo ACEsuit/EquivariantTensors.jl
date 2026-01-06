@@ -37,6 +37,22 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
+      # Checkout dev version of NeighbourLists.jl (until 0.6 is released)
+      - name: Checkout NeighbourLists.jl dev
+        uses: actions/checkout@v6
+        with:
+          repository: JuliaMolSim/NeighbourLists.jl
+          path: NeighbourLists.jl
+      - name: Dev NeighbourLists.jl
+        shell: julia --project=. --color=yes {0}
+        run: |
+          using Pkg
+          Pkg.develop(path="NeighbourLists.jl")
+      - name: Dev NeighbourLists.jl in test environment
+        shell: julia --project=test --color=yes {0}
+        run: |
+          using Pkg
+          Pkg.develop(path="NeighbourLists.jl")
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
   docs:
