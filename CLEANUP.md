@@ -9,9 +9,9 @@ Generated: 2026-02-28
 - [x] 1. Delete `simpletrans.jl`
 - [x] 2. Delete commented `_pfwd` block in `frules.jl`
 - [x] 3. Move live frule into `sparse_ace_basis.jl` and delete `frules.jl`
-- [ ] 4. Merge `NTtransformST` / `TransformST`, remove aliases
-- [ ] 5. Replace NB=1–4 copy-paste pullback! with `@generated`
-- [ ] 6. Fix GPU atomic writes in `SelectLinL`
+- [ ] 4. Merge `NTtransformST` / `TransformST`, remove aliases ([issue #87](https://github.com/ACEsuit/EquivariantTensors.jl/issues/87))
+- [ ] 5. Replace NB=1–4 copy-paste pullback! with `@generated` ([issue #88](https://github.com/ACEsuit/EquivariantTensors.jl/issues/88))
+- [ ] 6. Fix GPU atomic writes in `SelectLinL` ([issue #89](https://github.com/ACEsuit/EquivariantTensors.jl/issues/89))
 - [ ] 7. Replace `Meta.parse` string generation with `Expr` in `diffnt.jl`
 
 ---
@@ -69,7 +69,7 @@ the main module file.
 
 ---
 
-### 4. Merge `NTtransformST` / `TransformST`, remove aliases
+### 4. Merge `NTtransformST` / `TransformST`, remove aliases ([issue #87](https://github.com/ACEsuit/EquivariantTensors.jl/issues/87))
 
 **Files:** `src/transforms/decpart.jl`, `src/transforms/sttrans.jl`
 
@@ -87,15 +87,11 @@ the main module file.
   `evaluate_ed` / `_pb_ed` via `DiffNT.grad_fd`; `TransformST.evaluate_ed`
   has a commented-out broadcast path silently replaced with `map`.
 
-**Action:** Determine whether `TransformST` has any callers outside the
-package. If not, delete `sttrans.jl` and remove its include. Rename
-`NTtransformST` to something clearer (e.g. `DPTransform` or just keep
-`NTtransformST` but drop the `nt_transform` alias). Consolidate constructor
-under one name.
+**Action:** Remove `TransformST`, delete `sttrans.jl` and remove its include. Rename `NTtransformST` to `DPTransform`, deprecate the `nt_transform` alias. Consolidate constructor under one name. Make sure thate `DPTransform` accepts either a `NamedTuple` or a `XState` as input (i.e. a `NTorDP`).
 
 ---
 
-### 5. Replace NB=1–4 copy-paste `pullback!` with `@generated`
+### 5. Replace NB=1–4 copy-paste `pullback!` with `@generated` ([issue #88](https://github.com/ACEsuit/EquivariantTensors.jl/issues/88))
 
 **File:** `src/ace/sparseprodpool.jl`
 
@@ -115,7 +111,7 @@ only the generic.
 
 ---
 
-### 6. Fix GPU atomic writes in `SelectLinL` — CORRECTNESS BUG
+### 6. Fix GPU atomic writes in `SelectLinL` — CORRECTNESS BUG ([issue #89](https://github.com/ACEsuit/EquivariantTensors.jl/issues/89))
 
 **File:** `src/utils/selectlinl.jl`
 
