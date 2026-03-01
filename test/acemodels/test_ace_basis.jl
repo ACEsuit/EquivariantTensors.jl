@@ -19,12 +19,12 @@ ybasis = P4ML.real_sphericalharmonics(maxl)
 Ylm_spec = P4ML.natural_indices(ybasis)
 
 Rembed = ET.EdgeEmbed1( 
-               Chain( ET.NTtransformST( (x, st) -> 1 / (1 + norm(x.𝐫)) ), 
+               Chain( ET.DPTransform( (x, st) -> 1 / (1 + norm(x.𝐫)) ), 
                       rbasis ); 
                name = "Radial Edge Embedding" )
 
 Yembed = ET.EdgeEmbed1( 
-               Chain( ET.NTtransformST( (x, st) -> x.𝐫 ), 
+               Chain( ET.DPTransform( (x, st) -> x.𝐫 ), 
                       ybasis ); 
                name = "Angular Edge Embedding" )
 

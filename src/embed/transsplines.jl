@@ -40,12 +40,13 @@ function trans_splines(embed::EmbedDP, ps, st;
       @assert embed.basis.l isa BranchLayer 
       polys_y = embed.basis.l.layers.layer_1 
       @assert polys_y isa P4ML.AbstractP4MLBasis
-      env = embed.basis.l.layers.layer_2 
-      @assert env isa TransformST
-      bas_fun = polys_y 
-      env_trans = let trans_f = trans.f, env_func = env.f
+      env = embed.basis.l.layers.layer_2
+      @assert env isa DPTransform || env isa WrappedFunction
+      bas_fun = polys_y
+      env_trans = let trans_f = trans.f,
+                      env_func = env isa DPTransform ? env.f : (y, st) -> env.func(y)
          # env_func = y -> (1 - y^2)^2
-         dp_transform( (x, st) -> env_func(trans_f(x, st), NamedTuple()), 
+         dp_transform( (x, st) -> env_func(trans_f(x, st), NamedTuple()),
                        trans.refstate)
       end
    elseif embed.basis isa P4ML.AbstractP4MLBasis
