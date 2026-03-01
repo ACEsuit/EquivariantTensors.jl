@@ -37,7 +37,7 @@ Penv = let polys_y = polys_y
    env_fun = (y, st) -> (1 - y^2)^2
    P4ML.wrapped_basis( BranchLayer(
          polys_y,   # y -> P
-         ET.st_transform(env_fun, NamedTuple()),  # y -> fₑₙᵥ
+         WrappedFunction(y -> (1 .- y.^2).^2),  # y -> fₑₙᵥ
          fusion = WrappedFunction( Pe -> Pe[2] .* Pe[1] )  
       ) )
 end

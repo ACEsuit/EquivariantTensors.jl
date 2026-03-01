@@ -3,8 +3,8 @@
 # transforming an interatomic distance. 
 
 
-import EquivariantTensors: agnesi_params, eval_agnesi, 
-                           NTtransformST
+import EquivariantTensors: agnesi_params, eval_agnesi,
+                           DPTransform
 
 import EquivariantTensors as ET                
 
