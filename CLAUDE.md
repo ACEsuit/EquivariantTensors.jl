@@ -13,9 +13,10 @@ Use it to set preferences, conventions, and constraints.
 - Do not add docstrings, comments, or type annotations to code you did not change.
 - Do not refactor surrounding code when fixing a bug or adding a feature — keep
   changes focused.
+- Do not add or remove any whitespaces except at those lines you are editing yourself.
+- Keep lines under 92 characters.
 
 <!-- Adjust the line length limit if the project has a preference: -->
-<!-- - Keep lines under 92 characters. -->
 
 ---
 
@@ -41,6 +42,7 @@ Use it to set preferences, conventions, and constraints.
 - Do not add dependencies to `Project.toml` without asking first.
 - GPU kernels use KernelAbstractions — do not introduce CUDA.jl-specific code
   in shared paths.
+- It is ok to use features from the latest Julia versions. If you do, provide brief summaries and comments.
 
 <!-- Uncomment if you want a specific Julia version enforced: -->
 <!-- - Target Julia 1.11+. Do not use features from 1.12 or later. -->
