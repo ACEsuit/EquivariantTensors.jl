@@ -6,9 +6,9 @@ Generated: 2026-02-28
 
 ## Checklist
 
-- [ ] 1. Delete `simpletrans.jl`
-- [ ] 2. Delete commented `_pfwd` block in `frules.jl`
-- [ ] 3. Move live frule into `sparse_ace_basis.jl` and delete `frules.jl`
+- [x] 1. Delete `simpletrans.jl`
+- [x] 2. Delete commented `_pfwd` block in `frules.jl`
+- [x] 3. Move live frule into `sparse_ace_basis.jl` and delete `frules.jl`
 - [ ] 4. Merge `NTtransformST` / `TransformST`, remove aliases
 - [ ] 5. Replace NB=1–4 copy-paste pullback! with `@generated`
 - [ ] 6. Fix GPU atomic writes in `SelectLinL`
