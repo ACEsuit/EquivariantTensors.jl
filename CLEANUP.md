@@ -12,9 +12,7 @@ Generated: 2026-02-28
 - [ ] 4. Merge `NTtransformST` / `TransformST`, remove aliases
 - [ ] 5. Replace NB=1–4 copy-paste pullback! with `@generated`
 - [ ] 6. Fix GPU atomic writes in `SelectLinL`
-- [ ] 7. Rename `ETGraph` fields `ii`/`jj`
-- [ ] 8. Replace `Meta.parse` string generation with `Expr` in `diffnt.jl`
-- [ ] 9. Document O3 module and extension stubs
+- [ ] 7. Replace `Meta.parse` string generation with `Expr` in `diffnt.jl`
 
 ---
 
@@ -134,19 +132,7 @@ the pullback on GPU and checks correctness.
 
 ---
 
-### 7. Rename `ETGraph` fields `ii` / `jj`
-
-**File:** `src/embed/graph.jl`
-
-The source and target index arrays of the graph are named `ii` and `jj` —
-cryptic single-letter names that give no hint of meaning.
-
-**Action:** Rename to `src` / `dst` (or `sources` / `targets`). Update all
-callers. The rename is mechanical but touches several files.
-
----
-
-### 8. Replace `Meta.parse` string generation with `Expr` in `diffnt.jl`
+### 7. Replace `Meta.parse` string generation with `Expr` in `diffnt.jl`
 
 **File:** `src/transforms/diffnt.jl`
 
@@ -158,23 +144,3 @@ runtime, not compile time, and the code is hard to read.
 `QuoteNode` directly. Behaviour should be identical; the result is more
 robust and inspectable.
 
----
-
-### 9. Document O3 module and extension stubs
-
-**Files:** `src/O3/`, `src/extensions/atoms.jl`, `README.md`
-
-- `src/extensions/atoms.jl` contains function stubs (`bond_len`,
-  `agnesi_transform`, `interaction_graph`, `nlist2graph`,
-  `forces_from_edge_grads`) with no docstrings and no explanation of when
-  to use the extension vs. direct calls.
-- The O3 module has no top-level doc explaining the relationship between
-  `coupling_coeffs`, `GCG`, `SYYVector`, and the transformation matrices in
-  `O3_transformations.jl`.
-- `README.md` is high-level only; no guide to module structure for
-  contributors.
-
-**Action:** Add docstrings to all public functions in `O3/` and
-`extensions/atoms.jl`. Add a short module-level docstring to `O3.jl`
-explaining its scope. Extend `README.md` with a "Repository structure"
-section.
