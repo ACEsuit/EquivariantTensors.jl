@@ -218,3 +218,66 @@ end
    i, j, k = @index(Global, NTuple)
    @inbounds @atomic dst[i, j, idx[k]] += src[i, j, k]
 end
+
+
+# ============================================================
+#  Fused-scatter: no intermediate arrays
+# ============================================================
+#
+# Same (ineig, inode, iA) parallelization as scatter/gather
+# but reads BB directly via idx — no materialized G or ∂G.
+# Forward: keeps the existing fused kernel (no atomics needed).
+# Backward: one atomic add per thread per factor.
+
+using EquivariantTensors: _static_prod_ed
+
+"""
+    fs_pullback(∂A, basis, BB; gidx, ...)
+
+Fused-scatter pullback: same parallelization as scatter/gather
+but without materializing intermediate arrays.
+"""
+function fs_pullback(
+      ∂A, basis::PooledSparseProduct{NB}, BB::TupTen3;
+      gidx = GatherIndices(basis, BB),
+      nneig = size(BB[1], 1),
+      nnodes = size(BB[1], 2),
+      ) where {NB}
+   ∂BB = ntuple(t -> similar(BB[t]), NB)
+   fs_pullback!(∂BB, ∂A, basis, BB;
+                gidx, nneig, nnodes)
+   return ∂BB
+end
+
+function fs_pullback!(
+      ∂BB, ∂A,
+      basis::PooledSparseProduct{NB}, BB::TupTen3;
+      gidx = GatherIndices(basis, BB),
+      nneig = size(BB[1], 1),
+      nnodes = size(BB[1], 2),
+      ) where {NB}
+   nA = gidx.nA
+   for t = 1:NB
+      fill!(∂BB[t], zero(eltype(∂BB[t])))
+   end
+   backend = KernelAbstractions.get_backend(∂A)
+   kernel! = _ka_pullback_fused_scatter!(backend)
+   kernel!(∂BB, ∂A, BB, gidx.idx, Val{NB}();
+           ndrange = (nneig, nnodes, nA))
+   return ∂BB
+end
+
+@kernel function _ka_pullback_fused_scatter!(
+      ∂BB, ∂A, BB, idx, ::Val{NB}) where {NB}
+   ineig, inode, iA = @index(Global, NTuple)
+   @inbounds begin
+      ∂A_val = ∂A[inode, iA]
+      # read factors directly from BB via idx
+      b = ntuple(t -> BB[t][ineig, inode, idx[t][iA]], NB)
+      _, g = _static_prod_ed(b)
+      for t = 1:NB
+         @atomic ∂BB[t][ineig, inode, idx[t][iA]] +=
+            ∂A_val * g[t]
+      end
+   end
+end

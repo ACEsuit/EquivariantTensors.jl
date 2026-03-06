@@ -114,4 +114,54 @@ for ntest = 1:10
 end
 println()
 
+# -------------------------------------------------------
+
+@info("Test fs_pullback vs ka_pullback (batched)")
+for ntest = 1:20
+   order = mod1(ntest, 4)
+   basis = _generate_basis(; order)
+   BB, nneig, nnodes = _make_batched(basis)
+
+   A = sg_evaluate(basis, BB; nneig, nnodes)
+   ∂A = randn(Float64, size(A))
+
+   ∂BB_ka = ka_pullback(∂A, basis, BB, basis.spec,
+                        nnodes, nneig)
+   ∂BB_fs = fs_pullback(∂A, basis, BB;
+                        nneig, nnodes)
+
+   ok = all(∂BB_ka[t] ≈ ∂BB_fs[t]
+            for t = 1:order)
+   print_tf(@test ok)
+end
+println()
+
+# -------------------------------------------------------
+
+@info("Test fs_pullback via finite differences")
+for ntest = 1:20
+   order = mod1(ntest, 4)
+   basis = _generate_basis(; order)
+   BB, nneig, nnodes = _make_batched(basis)
+
+   A = sg_evaluate(basis, BB; nneig, nnodes)
+   ∂A = randn(Float64, size(A))
+
+   UU = ntuple(
+      i -> randn(Float64, size(BB[i])), order)
+   _BB(t) = ntuple(
+      i -> BB[i] + t * UU[i], order)
+
+   F(t) = dot(∂A,
+      sg_evaluate(basis, _BB(t);
+                  nneig, nnodes))
+   dF(t) = begin
+      ∂BB = fs_pullback(∂A, basis, _BB(t);
+                        nneig, nnodes)
+      sum(dot(∂BB[i], UU[i]) for i = 1:order)
+   end
+   print_tf(@test fdtest(F, dF, 0.0; verbose = false))
+end
+println()
+
 println("\nAll tests passed.")
