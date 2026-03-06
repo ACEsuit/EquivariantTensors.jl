@@ -9,10 +9,10 @@ Generated: 2026-02-28
 - [x] 1. Delete `simpletrans.jl`
 - [x] 2. Delete commented `_pfwd` block in `frules.jl`
 - [x] 3. Move live frule into `sparse_ace_basis.jl` and delete `frules.jl`
-- [ ] 4. Merge `NTtransformST` / `TransformST`, remove aliases ([issue #87](https://github.com/ACEsuit/EquivariantTensors.jl/issues/87))
-- [ ] 5. Replace NB=1–4 copy-paste pullback! with `@generated` ([issue #88](https://github.com/ACEsuit/EquivariantTensors.jl/issues/88))
-- [ ] 6. Fix GPU atomic writes in `SelectLinL` ([issue #89](https://github.com/ACEsuit/EquivariantTensors.jl/issues/89))
-- [ ] 7. Replace `Meta.parse` string generation with `Expr` in `diffnt.jl`
+- [x] 4. Merge `NTtransformST` / `TransformST`, remove aliases ([issue #87](https://github.com/ACEsuit/EquivariantTensors.jl/issues/87))
+- [x] 5. Replace NB=1–4 copy-paste pullback! with `@generated` ([issue #88](https://github.com/ACEsuit/EquivariantTensors.jl/issues/88))
+- [x] 6. Fix GPU atomic writes in `SelectLinL` ([issue #89](https://github.com/ACEsuit/EquivariantTensors.jl/issues/89))
+- [~] 7. ~~Replace `Meta.parse` string generation with `Expr` in `diffnt.jl`~~ — won't fix (cosmetic, low priority)
 
 ---
 
