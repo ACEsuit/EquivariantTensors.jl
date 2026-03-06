@@ -13,8 +13,8 @@ Use it to set preferences, conventions, and constraints.
 - Do not add docstrings, comments, or type annotations to code you did not change.
 - Do not refactor surrounding code when fixing a bug or adding a feature — keep
   changes focused.
-- Do not add or remove any whitespaces except at those lines you are editing yourself.
-- Keep lines under 92 characters.
+- Do not add or remove any whitespaces except in the lines you are editing already.
+- Try to keep lines under 80 characters, with 92 characters the absolute maximum.
 
 <!-- Adjust the line length limit if the project has a preference: -->
 
