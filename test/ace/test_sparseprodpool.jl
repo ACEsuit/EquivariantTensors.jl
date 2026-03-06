@@ -165,6 +165,7 @@ println()
 @info("Trying to load a GPU device") 
 include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 
+##
 
 @info("Testing KA implementation of PooledSparseProduct") 
 

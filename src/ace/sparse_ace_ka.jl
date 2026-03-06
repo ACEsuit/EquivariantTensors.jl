@@ -34,8 +34,7 @@ end
 
 function _ka_pullback(∂𝔹, tensor::SparseACEbasis,
                       Rnl_3, Ylm_3, A, AA,
-                      aspec, aaspecs, A2Bmaps;
-                      aspec_idx = nothing)
+                      aspec, aaspecs, A2Bmaps)
    # 𝔹 is a tuple of bases, so ∂𝔹 is a tuple of tangents, which is 
    # managed as a ChainRulesCore.Tangent. (usually thunked) By 
    # extracting them as ∂𝔹[i] we get the tangent for the ith element 
@@ -49,8 +48,7 @@ function _ka_pullback(∂𝔹, tensor::SparseACEbasis,
    ∂𝔸 = sum( mul(∂𝔹[i], A2Bmaps[i], (a, b) -> sum(a .* b)) for i = 1:length(A2Bmaps) )
    ∂A = ka_pullback(∂𝔸, tensor.aabasis, A, aaspecs)
    ∂Rnl, ∂Ylm = ka_pullback(∂A, tensor.abasis,
-                             (Rnl_3, Ylm_3), aspec;
-                             idx = aspec_idx)
+                             (Rnl_3, Ylm_3), aspec)
    return ∂Rnl, ∂Ylm
 end
 

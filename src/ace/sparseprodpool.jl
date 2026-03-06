@@ -543,16 +543,8 @@ end
 initialparameters(rng::AbstractRNG, layer::PooledSparseProductLayer) = 
       NamedTuple() 
 
-function _spec_to_idx(
-      basis::PooledSparseProduct{NB}) where {NB}
-   spec = basis.spec
-   nA = length(spec)
-   return ntuple(
-      t -> [spec[iA][t] for iA in 1:nA], NB)
-end
-
 initialstates(rng::AbstractRNG, layer::PooledSparseProductLayer) =
-      (idx = _spec_to_idx(layer.basis),)
+      NamedTuple()
 
 (l::PooledSparseProductLayer)(BB, ps, st) = begin
    out = evaluate(l.basis, BB)

@@ -122,11 +122,9 @@ function ka_pullback(∂A, basis::PooledSparseProduct{NB},
                       BB::TupTen3,
                       spec = basis.spec,
                       nX = size(∂A, 1),
-                      nneig = size(BB[1], 1);
-                      idx = nothing) where {NB}
+                      nneig = size(BB[1], 1)) where {NB}
    ∂BB = similar.(BB)
-   ka_pullback!(∂BB, ∂A, basis, BB, spec, nX, nneig;
-                idx = idx)
+   ka_pullback!(∂BB, ∂A, basis, BB, spec, nX, nneig)
    return ∂BB
 end
 
@@ -135,8 +133,7 @@ function ka_pullback!(∂BB, ∂A,
                       BB::TupTen3,
                       spec = basis.spec,
                       nX = size(∂A, 1),
-                      nneig = size(BB[1], 1);
-                      idx = nothing) where {NB}
+                      nneig = size(BB[1], 1)) where {NB}
 
    @assert all(B -> size(B, 2) >= nX, BB)
    @assert all(B -> size(B, 1) >= nneig, BB)
@@ -156,17 +153,9 @@ function ka_pullback!(∂BB, ∂A,
               ndrange = (nX, nneig))
    else
       # GPU path: v2 fused-scatter kernel
-      if idx === nothing
-         idx_cpu = _spec_to_idx(basis)
-         idx = ntuple(t -> begin
-               g = similar(∂A, Int, length(idx_cpu[t]))
-               copyto!(g, idx_cpu[t])
-               g
-            end, NB)
-      end
       nA = length(spec)
       kernel! = _ka_pullback_PooledSparseProduct_v2!(backend)
-      kernel!(∂BB, ∂A, BB, idx, Val{NB}();
+      kernel!(∂BB, ∂A, BB, spec, Val{NB}();
               ndrange = (nneig, nX, nA))
    end
    return nothing
@@ -191,16 +180,16 @@ end
 
 # GPU kernel: 3D parallelization with atomics
 @kernel function _ka_pullback_PooledSparseProduct_v2!(
-                  ∂BB, ∂A, BB, idx, ::Val{NB}) where {NB}
+                  ∂BB, ∂A, BB, spec, ::Val{NB}) where {NB}
    ineig, inode, iA = @index(Global, NTuple)
    @inbounds begin
       ∂A_val = ∂A[inode, iA]
-      b = ntuple(t -> BB[t][ineig, inode, idx[t][iA]], NB)
+      idx_iA = spec[iA]
+      b = ntuple(t -> BB[t][ineig, inode, idx_iA[t]], NB)
       _, g = _static_prod_ed(b)
       for t = 1:NB
          KernelAbstractions.@atomic(
-            ∂BB[t][ineig, inode, idx[t][iA]] +=
-               ∂A_val * g[t])
+            ∂BB[t][ineig, inode, idx_iA[t]] += ∂A_val * g[t])
       end
    end
 end
