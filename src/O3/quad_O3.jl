@@ -1,27 +1,27 @@
 
 
+const _SO3_QUAD_DEGREES = sort(collect(keys(_SO3_QUAD_DATA)))
+
 """
-    QuadO3{T}
+    QuadSO3{T}
 
 Gauss-type quadrature rule for integration over SO(3) with respect to the
 normalized Haar measure. Data from Manuel Gräf's PhD thesis (TU Chemnitz, 2013).
 
 Iterating yields `(weight, node)` pairs where `node` is an `SMatrix{3,3}`.
-Calling `q(f)` computes `∫ f(R) dR ≈ ∑ wᵢ f(Rᵢ)`.
+Calling `q(f)` computes `∫_{SO(3)} f(R) dR ≈ ∑ wᵢ f(Rᵢ)`.
 """
-struct QuadO3{T}
+struct QuadSO3{T}
    nodes::Vector{SMatrix{3, 3, T, 9}}
    weights::Vector{T}
    degree::Int
 end
 
-const _SO3_QUAD_DEGREES = sort(collect(keys(_SO3_QUAD_DATA)))
-
-function QuadO3(N::Integer)
+function QuadSO3(N::Integer)
    # Find the smallest available degree >= N
    idx = findfirst(d -> d >= N, _SO3_QUAD_DEGREES)
    if idx === nothing
-      error("QuadO3: no quadrature rule available for degree $N " *
+      error("QuadSO3: no quadrature rule available for degree $N " *
             "(maximum available: $(_SO3_QUAD_DEGREES[end]))")
    end
    N_actual = _SO3_QUAD_DEGREES[idx]
@@ -34,7 +34,45 @@ function QuadO3(N::Integer)
    # Normalize weights to sum to 1
    wsum = sum(weights)
    weights ./= wsum
-   return QuadO3{Float64}(nodes, weights, Int(N_actual))
+   return QuadSO3{Float64}(nodes, weights, Int(N_actual))
+end
+
+Base.length(q::QuadSO3) = length(q.weights)
+Base.eltype(::QuadSO3{T}) where {T} = Tuple{T, SMatrix{3, 3, T, 9}}
+
+function Base.iterate(q::QuadSO3, i::Int=1)
+   i > length(q) && return nothing
+   return (q.weights[i], q.nodes[i]), i + 1
+end
+
+function (q::QuadSO3)(f)
+   return sum(w * f(R) for (w, R) in q)
+end
+
+# ---------------------------------------------------------------
+
+"""
+    QuadO3{T}
+
+Quadrature rule for integration over O(3) with respect to the normalized Haar
+measure. Constructed from a `QuadSO3` rule by averaging over inversion:
+for each SO(3) node R, the O(3) rule includes both R and -R with half the
+weight.
+
+Iterating yields `(weight, node)` pairs where `node` is an `SMatrix{3,3}`.
+Calling `q(f)` computes `∫_{O(3)} f(Q) dQ ≈ ∑ wᵢ f(Qᵢ)`.
+"""
+struct QuadO3{T}
+   nodes::Vector{SMatrix{3, 3, T, 9}}
+   weights::Vector{T}
+   degree::Int
+end
+
+function QuadO3(N::Integer)
+   qso3 = QuadSO3(N)
+   nodes = vcat(qso3.nodes, [SMatrix{3,3,Float64,9}(-R) for R in qso3.nodes])
+   weights = vcat(qso3.weights, qso3.weights) ./ 2
+   return QuadO3{Float64}(nodes, weights, qso3.degree)
 end
 
 Base.length(q::QuadO3) = length(q.weights)
