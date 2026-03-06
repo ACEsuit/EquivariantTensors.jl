@@ -1,6 +1,7 @@
 
-# interface to use the ka kernel if the output arrays is a GPU array 
-# This interface function is already provided elsewhere. Here we only 
+
+# interface to use the ka kernel if the output arrays is a GPU array
+# This interface function is already provided elsewhere. Here we only
 # implement the ka_*** versions
 # function evaluate!(A::AbstractGPUArray, 
 #                    basis::PooledSparseProduct{NB}, 
@@ -114,69 +115,89 @@ end
 end
 
 # ---------------------------------
-#  pullback
-function ka_pullback(∂A, basis::PooledSparseProduct{NB}, 
-                      BB::TupTen3, 
-                      spec = basis.spec, nX = size(∂A, 1), nneig = size(BB[1], 1)
-                      ) where {NB}
+#  pullback (fused-scatter: 3D parallelization over
+#  (nneig, nX, nA) for better GPU occupancy)
+
+function ka_pullback(∂A, basis::PooledSparseProduct{NB},
+                      BB::TupTen3,
+                      spec = basis.spec,
+                      nX = size(∂A, 1),
+                      nneig = size(BB[1], 1);
+                      idx = nothing) where {NB}
    ∂BB = similar.(BB)
-   ka_pullback!(∂BB, ∂A, basis, BB, spec, nX, nneig)
+   ka_pullback!(∂BB, ∂A, basis, BB, spec, nX, nneig;
+                idx = idx)
    return ∂BB
 end
 
-function ka_pullback!(∂BB, ∂A, basis::PooledSparseProduct{NB}, BB::TupTen3, 
-                      spec = basis.spec, nX = size(∂A, 1), 
-                      nneig = size(BB[1], 1)) where {NB}
+function ka_pullback!(∂BB, ∂A,
+                      basis::PooledSparseProduct{NB},
+                      BB::TupTen3,
+                      spec = basis.spec,
+                      nX = size(∂A, 1),
+                      nneig = size(BB[1], 1);
+                      idx = nothing) where {NB}
 
    @assert all(B -> size(B, 2) >= nX, BB)
    @assert all(B -> size(B, 1) >= nneig, BB)
-   @assert size(∂A, 1) >= nX 
+   @assert size(∂A, 1) >= nX
    @assert size(∂A, 2) >= length(spec)
 
-   for t = 1:NB 
+   for t = 1:NB
       fill!(∂BB[t], zero(eltype(∂BB[t])))
    end
 
    backend = KernelAbstractions.get_backend(∂A)
-   kernel! = _ka_pullback_PooledSparseProduct_v1!(backend)
-   kernel!(∂BB, ∂A, BB, spec, nX, nneig, Val{NB}();
-           ndrange = (nX, nneig))
+
+   if idx === nothing
+      idx_cpu = _spec_to_idx(basis)
+      idx = ntuple(t -> begin
+            g = similar(∂A, Int, length(idx_cpu[t]))
+            copyto!(g, idx_cpu[t])
+            g
+         end, NB)
+   end
+
+   nA = length(spec)
+   kernel! = _ka_pullback_PooledSparseProduct_v2!(backend)
+   kernel!(∂BB, ∂A, BB, idx, Val{NB}();
+           ndrange = (nneig, nX, nA))
    return nothing
 end
 
-#
-# TODO: rewrite this with scatter/gather
-#
-@kernel function _ka_pullback_PooledSparseProduct_v1!(
-                  ∂BB, ∂A, BB, spec, nX, nneig, ::Val{NB}) where {NB}
-   inode, ineig = @index(Global, NTuple) 
-   for iA = 1:length(spec) 
-      ϕ = spec[iA]
-      b = ntuple(t -> BB[t][ineig, inode, ϕ[t]], NB)
-      p, ∇prod = _static_prod_ed(b)
-      # A[inode, iA] += p
+# Fused-scatter pullback: each thread handles one
+# (ineig, inode, iA) triple, reads BB via idx, and
+# does one atomic add per factor.
+@kernel function _ka_pullback_PooledSparseProduct_v2!(
+                  ∂BB, ∂A, BB, idx, ::Val{NB}) where {NB}
+   ineig, inode, iA = @index(Global, NTuple)
+   @inbounds begin
+      ∂A_val = ∂A[inode, iA]
+      b = ntuple(t -> BB[t][ineig, inode, idx[t][iA]], NB)
+      _, g = _static_prod_ed(b)
       for t = 1:NB
-         ∂BB[t][ineig, inode, ϕ[t]] += ∂A[inode, iA] * ∇prod[t]
+         KernelAbstractions.@atomic ∂BB[t][ineig, inode, idx[t][iA]] +=
+            ∂A_val * g[t]
       end
    end
-   nothing 
-end 
+end
 
 
 
-function rrule(::typeof(ka_evaluate), 
-               basis::PooledSparseProduct{NB}, 
-               BB::TupTen3, 
-               spec = basis.spec, 
-               nX = size(BB[1], 2), nneig = size(BB[1], 1)
-               ) where {NB}
+function rrule(::typeof(ka_evaluate),
+               basis::PooledSparseProduct{NB},
+               BB::TupTen3,
+               spec = basis.spec,
+               nX = size(BB[1], 2),
+               nneig = size(BB[1], 1)) where {NB}
 
    A = ka_evaluate(basis, BB, spec, nX, nneig)
 
    function _pb_ka_evaluate(_Δ)
       Δ = unthunk(_Δ)
       ∂BB = ka_pullback(Δ, basis, BB, spec, nX, nneig)
-      return NoTangent(), NoTangent(), ∂BB, NoTangent(), NoTangent(), NoTangent()
+      return NoTangent(), NoTangent(), ∂BB,
+             NoTangent(), NoTangent(), NoTangent()
    end
 
    return A, _pb_ka_evaluate

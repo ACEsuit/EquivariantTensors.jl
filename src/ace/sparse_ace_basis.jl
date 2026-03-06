@@ -51,9 +51,10 @@ end
 initialparameters(rng::AbstractRNG, bas::SparseACEbasis) = 
          NamedTuple() 
 
-initialstates(rng::AbstractRNG, bas::SparseACEbasis) = 
-         ( aspec = bas.abasis.spec, 
-            aaspecs = bas.aabasis.specs, 
+initialstates(rng::AbstractRNG, bas::SparseACEbasis) =
+         ( aspec = bas.abasis.spec,
+            aspec_idx = _spec_to_idx(bas.abasis),
+            aaspecs = bas.aabasis.specs,
             A2Bmaps = SparseMatCSX.(bas.A2Bmaps), )
 
 
@@ -211,10 +212,16 @@ function rrule(::typeof(evaluate), tensor::SparseACEbasis,
                           st.aspec, st.aaspecs, st.A2Bmaps)
 
    function pb_3d(∂out)
-      ∂𝔹 = ∂out[1]  # gradient w.r.t. 𝔹 (∂out[2] is for st which is NoTangent)
-      ∂Rnl, ∂Ylm = _ka_pullback(∂𝔹, tensor, Rnl, Ylm, A, 𝔸,
-                                st.aspec, st.aaspecs, st.A2Bmaps)
-      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm, NoTangent(), NoTangent()
+      ∂𝔹 = ∂out[1]
+      aspec_idx = hasproperty(st, :aspec_idx) ?
+                  st.aspec_idx : nothing
+      ∂Rnl, ∂Ylm = _ka_pullback(∂𝔹, tensor, Rnl, Ylm,
+                                A, 𝔸,
+                                st.aspec, st.aaspecs,
+                                st.A2Bmaps;
+                                aspec_idx = aspec_idx)
+      return NoTangent(), NoTangent(), ∂Rnl, ∂Ylm,
+             NoTangent(), NoTangent()
    end
 
    return (𝔹, st), pb_3d

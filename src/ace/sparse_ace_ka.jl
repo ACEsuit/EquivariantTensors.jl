@@ -12,28 +12,30 @@ import ChainRulesCore: rrule
 #    which is supposed to be returned as a tuple. But for initial testing,  
 #    this is ok. 
 
-function ka_evaluate(tensor::SparseACEbasis, Rnl_3, Ylm_3, ps, st)
-   # out = _ka_evaluate(tensor, Rnl_3, Ylm_3, 
-   #                        st.aspec, st.aaspecs, st.A2Bmaps)
-   𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl_3, Ylm_3, 
+function ka_evaluate(tensor::SparseACEbasis,
+                     Rnl_3, Ylm_3, ps, st)
+   𝔹, A, 𝔸 = _ka_evaluate(tensor, Rnl_3, Ylm_3,
                           st.aspec, st.aaspecs, st.A2Bmaps)
-   return 𝔹, st 
-end                           
+   return 𝔹, st
+end
 
-function _ka_evaluate(tensor::SparseACEbasis, Rnl_3, Ylm_3, 
+function _ka_evaluate(tensor::SparseACEbasis,
+                      Rnl_3, Ylm_3,
                       aspec, aaspecs, A2Bmaps)
    # A = #nodes x #features
    A = ka_evaluate(tensor.abasis, (Rnl_3, Ylm_3), aspec)
-   # AA = #nodes x #features 
+   # AA = #nodes x #features
    AA = ka_evaluate(tensor.aabasis, A, aaspecs)
    # BB = #nodes x #features (TODO: undo the double-transpose!!!)
    BB = permutedims.( mul.(A2Bmaps, Ref(transpose(AA))) )
    return BB, A, AA
-end 
+end
 
 
-function _ka_pullback(∂𝔹, tensor::SparseACEbasis, Rnl_3, Ylm_3, A, AA, 
-                      aspec, aaspecs, A2Bmaps)
+function _ka_pullback(∂𝔹, tensor::SparseACEbasis,
+                      Rnl_3, Ylm_3, A, AA,
+                      aspec, aaspecs, A2Bmaps;
+                      aspec_idx = nothing)
    # 𝔹 is a tuple of bases, so ∂𝔹 is a tuple of tangents, which is 
    # managed as a ChainRulesCore.Tangent. (usually thunked) By 
    # extracting them as ∂𝔹[i] we get the tangent for the ith element 
@@ -46,9 +48,11 @@ function _ka_pullback(∂𝔹, tensor::SparseACEbasis, Rnl_3, Ylm_3, A, AA,
 
    ∂𝔸 = sum( mul(∂𝔹[i], A2Bmaps[i], (a, b) -> sum(a .* b)) for i = 1:length(A2Bmaps) )
    ∂A = ka_pullback(∂𝔸, tensor.aabasis, A, aaspecs)
-   ∂Rnl, ∂Ylm = ka_pullback(∂A, tensor.abasis, (Rnl_3, Ylm_3), aspec)
+   ∂Rnl, ∂Ylm = ka_pullback(∂A, tensor.abasis,
+                             (Rnl_3, Ylm_3), aspec;
+                             idx = aspec_idx)
    return ∂Rnl, ∂Ylm
-end 
+end
 
 
 
