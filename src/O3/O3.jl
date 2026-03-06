@@ -11,6 +11,8 @@ export coupling_coeffs
 include("O3_utils.jl")
 include("yyvector.jl")
 include("O3_transformations.jl")
+include("quad_O3_data.jl")
+include("quad_O3.jl")
 
 
 
