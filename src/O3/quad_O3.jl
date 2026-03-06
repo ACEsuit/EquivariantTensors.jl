@@ -15,8 +15,17 @@ struct QuadO3{T}
    degree::Int
 end
 
+const _SO3_QUAD_DEGREES = sort(collect(keys(_SO3_QUAD_DATA)))
+
 function QuadO3(N::Integer)
-   data = _SO3_QUAD_DATA[N]
+   # Find the smallest available degree >= N
+   idx = findfirst(d -> d >= N, _SO3_QUAD_DEGREES)
+   if idx === nothing
+      error("QuadO3: no quadrature rule available for degree $N " *
+            "(maximum available: $(_SO3_QUAD_DEGREES[end]))")
+   end
+   N_actual = _SO3_QUAD_DEGREES[idx]
+   data = _SO3_QUAD_DATA[N_actual]
    nodes = [SMatrix{3, 3, Float64, 9}(
                d[1], d[4], d[7],   # column-major: col1 = row1,row2,row3 of entry
                d[2], d[5], d[8],
@@ -25,7 +34,7 @@ function QuadO3(N::Integer)
    # Normalize weights to sum to 1
    wsum = sum(weights)
    weights ./= wsum
-   return QuadO3{Float64}(nodes, weights, Int(N))
+   return QuadO3{Float64}(nodes, weights, Int(N_actual))
 end
 
 Base.length(q::QuadO3) = length(q.weights)

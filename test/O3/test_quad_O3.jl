@@ -20,9 +20,9 @@ println()
 # D⁰₀₀ = 1, so its integral is 1.
 # For l ≥ 1, all matrix elements of Dˡ should integrate to 0.
 
-for N in [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 14]
+for N in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
    q = O3.QuadO3(N)
-   for l in 0:N
+   for l in 0:q.degree
       val = q(R -> begin
          θ = RotZYZ(R)
          # D_from_angles returns conj(wignerD) so that y∘Q = D*y.
@@ -46,7 +46,7 @@ println()
 # (This isn't guaranteed for every single rule due to symmetry, but should hold
 # for most. We check a weaker condition: the error is above 1e-14.)
 
-for N in [2, 3, 4, 5, 6, 7, 8, 9, 11, 14]
+for N in [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
    q = O3.QuadO3(N)
    # test at l = N+1 and l = N+2 — at least one should show non-zero integral
    maxerr = 0.0
@@ -59,4 +59,10 @@ for N in [2, 3, 4, 5, 6, 7, 8, 9, 11, 14]
    end
    print_tf(@test maxerr > 1e-14)
 end
+println()
+
+##
+
+@info("Test QuadO3: error for unavailable degree")
+print_tf(@test_throws ErrorException O3.QuadO3(15))
 println()
