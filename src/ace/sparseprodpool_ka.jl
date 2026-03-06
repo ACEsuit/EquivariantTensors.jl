@@ -149,25 +149,47 @@ function ka_pullback!(∂BB, ∂A,
 
    backend = KernelAbstractions.get_backend(∂A)
 
-   if idx === nothing
-      idx_cpu = _spec_to_idx(basis)
-      idx = ntuple(t -> begin
-            g = similar(∂A, Int, length(idx_cpu[t]))
-            copyto!(g, idx_cpu[t])
-            g
-         end, NB)
+   if backend == KernelAbstractions.CPU()
+      # CPU path: v1 kernel (serial loop, no atomics)
+      kernel! = _ka_pullback_PooledSparseProduct_v1!(backend)
+      kernel!(∂BB, ∂A, BB, spec, nX, nneig, Val{NB}();
+              ndrange = (nX, nneig))
+   else
+      # GPU path: v2 fused-scatter kernel
+      if idx === nothing
+         idx_cpu = _spec_to_idx(basis)
+         idx = ntuple(t -> begin
+               g = similar(∂A, Int, length(idx_cpu[t]))
+               copyto!(g, idx_cpu[t])
+               g
+            end, NB)
+      end
+      nA = length(spec)
+      kernel! = _ka_pullback_PooledSparseProduct_v2!(backend)
+      kernel!(∂BB, ∂A, BB, idx, Val{NB}();
+              ndrange = (nneig, nX, nA))
    end
-
-   nA = length(spec)
-   kernel! = _ka_pullback_PooledSparseProduct_v2!(backend)
-   kernel!(∂BB, ∂A, BB, idx, Val{NB}();
-           ndrange = (nneig, nX, nA))
    return nothing
 end
 
-# Fused-scatter pullback: each thread handles one
-# (ineig, inode, iA) triple, reads BB via idx, and
-# does one atomic add per factor.
+# CPU kernel: serial loop over iA, no atomics needed
+@kernel function _ka_pullback_PooledSparseProduct_v1!(
+                  ∂BB, ∂A, BB, spec, nX, nneig,
+                  ::Val{NB}) where {NB}
+   inode, ineig = @index(Global, NTuple)
+   for iA = 1:length(spec)
+      ϕ = spec[iA]
+      b = ntuple(t -> BB[t][ineig, inode, ϕ[t]], NB)
+      _, ∇prod = _static_prod_ed(b)
+      for t = 1:NB
+         ∂BB[t][ineig, inode, ϕ[t]] +=
+            ∂A[inode, iA] * ∇prod[t]
+      end
+   end
+   nothing
+end
+
+# GPU kernel: 3D parallelization with atomics
 @kernel function _ka_pullback_PooledSparseProduct_v2!(
                   ∂BB, ∂A, BB, idx, ::Val{NB}) where {NB}
    ineig, inode, iA = @index(Global, NTuple)
@@ -176,8 +198,9 @@ end
       b = ntuple(t -> BB[t][ineig, inode, idx[t][iA]], NB)
       _, g = _static_prod_ed(b)
       for t = 1:NB
-         KernelAbstractions.@atomic ∂BB[t][ineig, inode, idx[t][iA]] +=
-            ∂A_val * g[t]
+         KernelAbstractions.@atomic(
+            ∂BB[t][ineig, inode, idx[t][iA]] +=
+               ∂A_val * g[t])
       end
    end
 end
