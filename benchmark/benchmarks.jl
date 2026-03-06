@@ -1,81 +1,60 @@
-using Polynomials4ML
 using BenchmarkTools
-using LuxCore, Random, Zygote
-
-const P4ML = Polynomials4ML
-
+using EquivariantTensors
+using EquivariantTensors: PooledSparseProduct, evaluate, pullback,
+   _generate_input, ka_evaluate, ka_evaluate!, ka_pullback, ka_pullback!
+using Random, LuxCore
 
 SUITE = BenchmarkGroup()
 
+# ============================================================
+#  PooledSparseProduct benchmarks
+# ============================================================
 
-## Test polynomials
+function _make_basis(; order = 3, nspec = 200)
+   NN = [rand(20:40) for _ = 1:order]
+   spec = sort([ntuple(t -> rand(1:NN[t]), order) for _ = 1:nspec])
+   return PooledSparseProduct(spec)
+end
 
-SUITE["Polynomials"] = BenchmarkGroup()
+function _make_ten3_input(basis::PooledSparseProduct{NB};
+                          nneig = 24, nnodes = 64) where {NB}
+   bBB = _generate_input(basis; nX = nneig * nnodes)
+   BB = ntuple(i -> reshape(bBB[i], (nneig, nnodes, :)), NB)
+   return BB, nneig, nnodes
+end
 
-N = 100
-Np = 10
-r = 2*rand(N) .- 1
-tmp = zeros(N,N)
-tmp_d = similar(tmp)
-tmp_d2 = similar(tmp)
+SUITE["ProdPool"] = BenchmarkGroup()
 
-# Chebyshev
-ch_basis = ChebBasis(Np)
+# --- CPU: pooled (2D) ---
+SUITE["ProdPool"]["cpu"] = BenchmarkGroup()
 
-SUITE["Polynomials"]["Chebyshev"] = BenchmarkGroup()
-SUITE["Polynomials"]["Chebyshev"]["evaluation"] = @benchmarkable evaluate!($tmp, $ch_basis, $r)
-SUITE["Polynomials"]["Chebyshev"]["derivative"] = @benchmarkable evaluate_ed!($tmp, $tmp_d, $ch_basis, $r)
-SUITE["Polynomials"]["Chebyshev"]["2nd derivative"] = @benchmarkable evaluate_ed2!($tmp, $tmp_d, $tmp_d2, $ch_basis, $r)
+for order in [2, 3]
+   basis = _make_basis(; order, nspec = 200)
+   bBB = _generate_input(basis; nX = 64)
+   SUITE["ProdPool"]["cpu"]["fwd ord=$order nX=64"] =
+      @benchmarkable evaluate($basis, $bBB)
+end
 
-# OrthPolyBasis1D3T
+# --- KA: batched 3D (forward + backward) ---
+SUITE["ProdPool"]["ka"] = BenchmarkGroup()
 
-op_basis = OrthPolyBasis1D3T(randn(Np), randn(Np), randn(Np))
+for (order, nspec, nneig, nnodes) in [
+      (2, 200, 24, 64),
+      (3, 200, 24, 64),
+      (3, 500, 32, 128),
+   ]
+   basis = _make_basis(; order, nspec)
+   BB, nneig, nnodes = _make_ten3_input(basis;
+                                         nneig, nnodes)
+   spec = basis.spec
+   A = ka_evaluate(basis, BB, spec, nnodes, nneig)
+   ∂A = randn(eltype(A), size(A))
 
-SUITE["Polynomials"]["OrtoPoly1d3"] = BenchmarkGroup()
-SUITE["Polynomials"]["OrtoPoly1d3"]["evaluation"] = @benchmarkable evaluate!($tmp, $op_basis, $r)
-SUITE["Polynomials"]["OrtoPoly1d3"]["derivative"] = @benchmarkable evaluate_ed!($tmp, $tmp_d, $op_basis, $r)
-SUITE["Polynomials"]["OrtoPoly1d3"]["2nd derivative"] = @benchmarkable evaluate_ed2!($tmp, $tmp_d, $tmp_d2, $op_basis, $r)
-
-
-## ACE pooling
-# this is a copy from profile/ace/profile_sparseprodpool.jl
-
-# Helpers
-function _generate_basis(; order=3, len = 50)
-    NN = [ rand(10:30) for _ = 1:order ]
-    spec = sort([ ntuple(t -> rand(1:NN[t]), order) for _ = 1:len])
-    return PooledSparseProduct(spec)
- end
- 
- function _rand_input1(basis::PooledSparseProduct{ORDER}) where {ORDER} 
-    NN = [ maximum(b[i] for b in basis.spec) for i = 1:ORDER ]
-    BB = ntuple(i -> randn(NN[i]), ORDER)
- end
- 
- function _rand_input(basis::PooledSparseProduct{ORDER}; nX = 10) where {ORDER} 
-    NN = [ maximum(b[i] for b in basis.spec) for i = 1:ORDER ]
-    BB = ntuple(i -> randn(nX, NN[i]), ORDER)
- end
-
-# 
-
-SUITE["ACE"] = BenchmarkGroup()
-SUITE["ACE"]["SparceProduct"] = BenchmarkGroup()
-
-order = 4
-basis1 = _generate_basis(; order=order)
-BB = _rand_input1(basis1)
-
-nX = 64
-order = 3
-basis2 = _generate_basis(; order=order)
-bBB = _rand_input(basis2; nX = nX)
-
-SUITE["ACE"]["SparceProduct"]["no pooling"] = @benchmarkable evaluate($basis1, $BB)
-SUITE["ACE"]["SparceProduct"]["pooling"]    = @benchmarkable evaluate($basis2, $bBB)
-
-l = Polynomials4ML.lux(basis2)
-ps, st = LuxCore.setup(MersenneTwister(1234), l)
-
-SUITE["ACE"]["SparceProduct"]["lux evaluation"]  = @benchmarkable l($bBB, $ps, $st)
-SUITE["ACE"]["SparceProduct"]["Zygote gradient"] = @benchmarkable Zygote.gradient(x -> sum($l(x, $ps, $st)[1]), $bBB)
+   tag = "ord=$order n=$nspec ng=$nneig nd=$nnodes"
+   SUITE["ProdPool"]["ka"]["fwd $tag"] =
+      @benchmarkable ka_evaluate($basis, $BB, $spec,
+                                 $nnodes, $nneig)
+   SUITE["ProdPool"]["ka"]["bwd $tag"] =
+      @benchmarkable ka_pullback($∂A, $basis, $BB,
+                                 $spec, $nnodes, $nneig)
+end
