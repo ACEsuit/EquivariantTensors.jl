@@ -149,5 +149,5 @@ function agnesi_transform(categories, rins, reqs, rcuts,
       end   
    end
     
-   return NTtransformST(f_agnesi, st; sym = :GeneralizedAgnesi)
+   return DPTransform(f_agnesi, st)
 end

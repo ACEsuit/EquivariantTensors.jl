@@ -227,187 +227,73 @@ end
 
 
 
-# the next few method definitions ensure that we can use the 
-# WithAlloc stuff with the pullback! function.
-# TODO: this should probably be replaced with a loop that generates  
-# the code up to a large-ish NB. 
+# Unpack positional ∂B args into a tuple for WithAlloc interface.
+# Generated for NB = 1..8.
+for _NB in 1:8
+   _∂Bs = [Symbol("∂B$i") for i in 1:_NB]
+   @eval pullback!($(Expr.(:(::), _∂Bs,
+                     :AbstractMatrix)...),
+                   ∂A, basis::PooledSparseProduct{$_NB},
+                   BB::TupMat) =
+      pullback!(($(Expr.(:tuple, _∂Bs...))), ∂A, basis, BB)
+end
 
-pullback!(∂B1::AbstractMatrix, ∂A, basis::PooledSparseProduct{1}, BB::TupMat) = 
-         pullback!((∂B1,), ∂A, basis, BB)
+@generated function pullback!(
+      ∂BB::Tuple, ∂A,
+      basis::PooledSparseProduct{NB}, BB::TupMat,
+      ) where {NB}
 
-pullback!(∂B1, ∂B2, ∂A, basis::PooledSparseProduct{2}, BB::TupMat) = 
-         pullback!((∂B1, ∂B2,), ∂A, basis, BB)
+   # unpack BB and ∂BB into local variables
+   unpack_BB = [:($(Symbol("B$i")) = BB[$i]) for i in 1:NB]
+   unpack_∂BB = [:($(Symbol("∂B$i")) = ∂BB[$i])
+                  for i in 1:NB]
 
-pullback!(∂B1, ∂B2, ∂B3, ∂A, basis::PooledSparseProduct{3}, BB::TupMat) = 
-         pullback!((∂B1, ∂B2, ∂B3,), ∂A, basis, BB)
+   # extract spec indices
+   unpack_ϕ = [:($(Symbol("ϕ$i")) = ϕ[$i]) for i in 1:NB]
 
-pullback!(∂B1, ∂B2, ∂B3, ∂B4, ∂A, basis::PooledSparseProduct{4}, BB::TupMat) = 
-         pullback!((∂B1, ∂B2, ∂B3, ∂B4,), ∂A, basis, BB)
+   # read b values from BB
+   read_b = [:($(Symbol("b$i")) =
+               $(Symbol("B$i"))[j, $(Symbol("ϕ$i"))])
+             for i in 1:NB]
 
-
-function pullback!(∂BB::Tuple, # output 
-                   ∂A, basis::PooledSparseProduct{NB}, BB::TupMat # inputs 
-                   ) where {NB}
-   nX = size(BB[1], 1)
-   @assert all(nX <= size(BB[i], 1) for i = 1:NB)
-   @assert all(nX <= size(∂BB[i], 1) for i = 1:NB)
-   @assert all(size(∂BB[i], 2) >= size(BB[i], 2) for i = 1:NB)
-   @assert length(∂A) == length(basis)
-   @assert length(BB) == NB 
-   @assert length(∂BB) == NB 
-   
-   @inbounds for (iA, ϕ) in enumerate(basis.spec)
-      ∂A_iA = ∂A[iA]
-      @simd ivdep for j = 1:nX 
-         b = ntuple(Val(NB)) do i 
-            BB[i][j, ϕ[i]] 
-         end 
-         a, g = _static_prod_ed(b)
-         for i = 1:NB 
-            ϕi = ϕ[i]
-            ∂BB[i][j, ϕi] = muladd(∂A_iA, g[i], ∂BB[i][j, ϕi])
+   # gradient accumulation expressions
+   if NB == 1
+      grad_exprs = [:(∂B1[j, ϕ1] += ∂A_iA)]
+   else
+      grad_exprs = Expr[]
+      for i in 1:NB
+         others = [Symbol("b$k") for k in 1:NB if k != i]
+         prod_ex = others[1]
+         for k in 2:length(others)
+            prod_ex = :($prod_ex * $(others[k]))
          end
-      end 
+         ∂Bi = Symbol("∂B$i")
+         ϕi = Symbol("ϕ$i")
+         push!(grad_exprs,
+            :($∂Bi[j, $ϕi] = muladd(
+               ∂A_iA, $prod_ex, $∂Bi[j, $ϕi])))
+      end
    end
-   return ∂BB 
-end
 
-# TODO: interestingly the generic code above does not perform well 
-#       in a production setting and we may want to return to 
-#       a cruder code generation strategy. This specialized code 
-#       confirms this. 
-
-# NB = 1 for correctness 
-function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{1}, BB::TupMat)
-   nX = size(BB[1], 1)
-   NB = 1
-   @assert length(∂A) == length(basis)
-   @assert length(BB) == length(∂BB) == NB 
-   @assert all(nX <= size(BB[i], 1) for i = 1:NB)
-   @assert all(nX <= size(∂BB[i], 1) for i = 1:NB)
-   @assert all(size(∂BB[i], 2) >= size(BB[i], 2) for i = 1:NB)
-   BB1 = BB[1]
-   ∂BB1 = ∂BB[1]
-
-   fill!(∂BB1, zero(eltype(∂BB1)))
-   
-   @inbounds for (iA, ϕ) in enumerate(basis.spec)
-      ∂A_iA = ∂A[iA]
-      ϕ1 = ϕ[1]
-      @simd ivdep for j = 1:nX 
-         # A[iA] += b1 
-         ∂BB1[j, ϕ1] += ∂A_iA
-      end 
-   end
-   return ∂BB 
-end
-
-function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{2}, BB::TupMat)
-   nX = size(BB[1], 1)
-   NB = 2 
-   @assert length(∂A) == length(basis)
-   @assert length(BB) == length(∂BB) == 2
-   @assert all(nX <= size(BB[i], 1) for i = 1:NB)
-   @assert all(nX <= size(∂BB[i], 1) for i = 1:NB)
-   @assert all(size(∂BB[i], 2) >= size(BB[i], 2) for i = 1:NB)
-   BB1, BB2 = BB
-   ∂BB1, ∂BB2 = ∂BB
-
-   for i = 1:length(∂BB)
-      fill!(∂BB[i], zero(eltype(∂BB[i])))
-   end
-   
-   @inbounds for (iA, ϕ) in enumerate(basis.spec)
-      ∂A_iA = ∂A[iA]
-      ϕ1 = ϕ[1]
-      ϕ2 = ϕ[2]
-      @simd ivdep for j = 1:nX 
-         b1 = BB1[j, ϕ1]
-         b2 = BB2[j, ϕ2]
-         ∂BB1[j, ϕ1] = muladd(∂A_iA, b2, ∂BB1[j, ϕ1])
-         ∂BB2[j, ϕ2] = muladd(∂A_iA, b1, ∂BB2[j, ϕ2])
-      end 
-   end
-   return ∂BB 
-end
-
-function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{3}, BB::TupMat; 
-                              sizecheck = true)
-   nX = size(BB[1], 1)
-   NB = 3 
-
-   if sizecheck 
-      @assert all(nX <= size(BB[i], 1) for i = 1:NB)
-      @assert all(nX <= size(∂BB[i], 1) for i = 1:NB)
-      @assert all(size(∂BB[i], 2) >= size(BB[i], 2) for i = 1:NB)
+   quote
+      nX = size(BB[1], 1)
       @assert length(∂A) == length(basis)
-      @assert length(BB) == NB 
-      @assert length(∂BB) == NB 
+      @assert length(BB) == length(∂BB) == $NB
+      $(unpack_BB...)
+      $(unpack_∂BB...)
+      for i = 1:$NB
+         fill!(∂BB[i], zero(eltype(∂BB[i])))
+      end
+      @inbounds for (iA, ϕ) in enumerate(basis.spec)
+         ∂A_iA = ∂A[iA]
+         $(unpack_ϕ...)
+         @simd ivdep for j = 1:nX
+            $(read_b...)
+            $(grad_exprs...)
+         end
+      end
+      return ∂BB
    end
-
-   for i = 1:length(∂BB)
-      fill!(∂BB[i], zero(eltype(∂BB[i])))
-   end
-   
-   B1 = BB[1]; B2 = BB[2]; B3 = BB[3]
-   ∂B1 = ∂BB[1]; ∂B2 = ∂BB[2]; ∂B3 = ∂BB[3]
-   
-   @inbounds for (iA, ϕ) in enumerate(basis.spec)
-      ∂A_iA = ∂A[iA]
-      ϕ1 = ϕ[1]
-      ϕ2 = ϕ[2]
-      ϕ3 = ϕ[3]
-      @simd ivdep for j = 1:nX 
-         b1 = B1[j, ϕ1]
-         b2 = B2[j, ϕ2]
-         b3 = B3[j, ϕ3]
-         ∂B1[j, ϕ1] = muladd(∂A_iA, b2*b3, ∂B1[j, ϕ1])
-         ∂B2[j, ϕ2] = muladd(∂A_iA, b1*b3, ∂B2[j, ϕ2])
-         ∂B3[j, ϕ3] = muladd(∂A_iA, b1*b2, ∂B3[j, ϕ3])
-      end 
-   end
-   return ∂BB 
-end
-
-function pullback!(∂BB::Tuple, ∂A, basis::PooledSparseProduct{4}, BB::TupMat; 
-                              sizecheck = true)
-   nX = size(BB[1], 1)
-   NB = 4 
-
-   if sizecheck 
-      @assert all(nX <= size(BB[i], 1) for i = 1:NB)
-      @assert all(nX <= size(∂BB[i], 1) for i = 1:NB)
-      @assert all(size(∂BB[i], 2) >= size(BB[i], 2) for i = 1:NB)
-      @assert length(∂A) == length(basis)
-      @assert length(BB) == NB 
-      @assert length(∂BB) == NB 
-   end
-
-   for i = 1:length(∂BB)
-      fill!(∂BB[i], zero(eltype(∂BB[i])))
-   end
-   
-   B1 = BB[1]; B2 = BB[2]; B3 = BB[3]; B4 = BB[4]
-   ∂B1 = ∂BB[1]; ∂B2 = ∂BB[2]; ∂B3 = ∂BB[3]; ∂B4 = ∂BB[4]
-   
-   @inbounds for (iA, ϕ) in enumerate(basis.spec)
-      ∂A_iA = ∂A[iA]
-      ϕ1 = ϕ[1]
-      ϕ2 = ϕ[2]
-      ϕ3 = ϕ[3]
-      ϕ4 = ϕ[4]
-      @simd ivdep for j = 1:nX 
-         b1 = B1[j, ϕ1]
-         b2 = B2[j, ϕ2]
-         b3 = B3[j, ϕ3]
-         b4 = B4[j, ϕ4]
-         ∂B1[j, ϕ1] = muladd(∂A_iA, b2*b3*b4, ∂B1[j, ϕ1])
-         ∂B2[j, ϕ2] = muladd(∂A_iA, b1*b3*b4, ∂B2[j, ϕ2])
-         ∂B3[j, ϕ3] = muladd(∂A_iA, b1*b2*b4, ∂B3[j, ϕ3])
-         ∂B4[j, ϕ4] = muladd(∂A_iA, b1*b2*b3, ∂B4[j, ϕ4])
-      end 
-   end
-   return ∂BB 
 end
 
 
@@ -433,17 +319,15 @@ end
 # end
 
 
-pullback2!(∇_∂A, ∇_BB1::AbstractMatrix, ∂∂BB, ∂A, basis::PooledSparseProduct{1}, BB) = 
-      pullback2!(∇_∂A, (∇_BB1,), ∂∂BB, ∂A, basis, BB) 
-
-pullback2!(∇_∂A, ∇_BB1, ∇_BB2, ∂∂BB, ∂A, basis::PooledSparseProduct{2}, BB) = 
-      pullback2!(∇_∂A, (∇_BB1, ∇_BB2), ∂∂BB, ∂A, basis, BB) 
-
-pullback2!(∇_∂A, ∇_BB1, ∇_BB2, ∇_BB3, ∂∂BB, ∂A, basis::PooledSparseProduct{3}, BB) = 
-      pullback2!(∇_∂A, (∇_BB1, ∇_BB2, ∇_BB3), ∂∂BB, ∂A, basis, BB) 
-
-pullback2!(∇_∂A, ∇_BB1, ∇_BB2, ∇_BB3, ∇_BB4, ∂∂BB, ∂A, basis::PooledSparseProduct{4}, BB) = 
-      pullback2!(∇_∂A, (∇_BB1, ∇_BB2, ∇_BB3, ∇_BB4), ∂∂BB, ∂A, basis, BB) 
+# Unpack positional ∇_BB args into a tuple for WithAlloc.
+for _NB in 1:8
+   _∇s = [Symbol("∇_BB$i") for i in 1:_NB]
+   _typed = [Expr(:(::), s, :AbstractMatrix) for s in _∇s]
+   @eval pullback2!(∇_∂A, $(_typed...), ∂∂BB, ∂A,
+                    basis::PooledSparseProduct{$_NB}, BB) =
+      pullback2!(∇_∂A, ($(Expr.(:tuple, _∇s...))),
+                 ∂∂BB, ∂A, basis, BB)
+end
 
 
 function pullback2!(∇_∂A, ∇_BB::Tuple,  # outputs 

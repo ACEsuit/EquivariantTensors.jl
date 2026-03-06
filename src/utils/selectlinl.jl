@@ -72,40 +72,54 @@ end
 
 
 # ------------------------------------------------------------
-#  pullback and rrule 
+#  pullback and rrule
 #
-# TODO: write tests for this 
-#       these are likely wrong when multi-threaded or with GPU 
-#       since they write asynchronously to ∂W; need reordering of 
-#       operations or atomic adds
+# Two separate kernels to avoid data races on GPU:
+#  - ∂P kernel parallelizes over (nX, in_dim) — unique output
+#  - ∂W kernel parallelizes over (out_dim, in_dim, ncat) — unique output
 
-function _pullback_selectlinl(∂B, l, P, X::AbstractArray, W) 
+function _pullback_selectlinl(∂B, l, P, X::AbstractArray, W)
    TB = promote_type(eltype(∂B), eltype(W))
    ∂P = similar(P, TB, size(P))
    ∂W = similar(W, TB, size(W))
-   fill!(∂P, zero(TB))
-   fill!(∂W, zero(TB))
 
-   kernel! = _ka_pullback_selectlinl!(KernelAbstractions.get_backend(X))
+   backend = KernelAbstractions.get_backend(X)
 
-   # P : nbatch x nfeat 
-   # W : nout x nfeat(in) x ncategories 
-   kernel!(∂P, ∂W, ∂B, P, X, W, l.selector; ndrange = size(P))
+   # P : nbatch x nfeat
+   # W : nout x nfeat(in) x ncategories
+   k_∂P! = _ka_pb_selectlinl_∂P!(backend)
+   k_∂P!(∂P, ∂B, X, W, l.selector; ndrange = size(P))
+
+   k_∂W! = _ka_pb_selectlinl_∂W!(backend)
+   k_∂W!(∂W, ∂B, P, X, l.selector; ndrange = size(W))
 
    return ∂P, ∂W
 end
 
-@kernel function _ka_pullback_selectlinl!(∂P, ∂W, ∂B, P, X, W, selector)
-   # iX indexes into the "batch" and iP into the P features 
+# ∂P[iX, iP] = Σ_iout W[iout, iP, cat(iX)] * ∂B[iX, iout]
+# Parallelized over (nX, in_dim) — each thread owns its output.
+@kernel function _ka_pb_selectlinl_∂P!(∂P, ∂B, X, W, selector)
    iX, iP = @index(Global, NTuple)
-   # i_x selects the category of the input X[iX] 
    i_x = selector(X[iX])
-
+   s = zero(eltype(∂P))
    for iout = 1:size(W, 1)
-      # B[iX, iout] = ∑_k W[iout, k, i_x] * P[iX, k]    // k ≡ iP 
-      ∂P[iX, iP] += W[iout, iP, i_x] * ∂B[iX, iout]
-      ∂W[iout, iP, i_x] += P[iX, iP] * ∂B[iX, iout]
+      s += W[iout, iP, i_x] * ∂B[iX, iout]
    end
+   ∂P[iX, iP] = s
+   nothing
+end
+
+# ∂W[iout, iP, icat] = Σ_{iX : cat(iX)==icat} P[iX, iP] * ∂B[iX, iout]
+# Parallelized over (out_dim, in_dim, ncat) — each thread owns its output.
+@kernel function _ka_pb_selectlinl_∂W!(∂W, ∂B, P, X, selector)
+   iout, iP, icat = @index(Global, NTuple)
+   s = zero(eltype(∂W))
+   for iX = 1:size(P, 1)
+      if selector(X[iX]) == icat
+         s += P[iX, iP] * ∂B[iX, iout]
+      end
+   end
+   ∂W[iout, iP, icat] = s
    nothing
 end
 
