@@ -1,13 +1,30 @@
 using EquivariantTensors
 using EquivariantTensors: SparseSymmProd, evaluate, pullback,
    ka_evaluate, ka_pullback
-using EquivariantTensors.Test_ACE: generate_SO2_spec
+using LinearAlgebra: norm
+
+function _generate_SO2_spec(order, M, p=1)
+   i2m(i) = (-1)^(isodd(i-1)) * (i ÷ 2)
+   spec = Vector{Int}[]
+   function append_N!(::Val{N}) where {N}
+      for ci in CartesianIndices(ntuple(_ -> 1:2*M+1, N))
+         mm = i2m.(ci.I)
+         if (sum(mm) == 0) && (norm(mm, p) <= M) && issorted(ci.I)
+            push!(spec, [ci.I...,])
+         end
+      end
+   end
+   for N = 1:order
+      append_N!(Val(N))
+   end
+   return spec
+end
 
 SUITE["SymmProd"] = BenchmarkGroup()
 SUITE["SymmProd"]["ka"] = BenchmarkGroup()
 
-for (ORD, M, nX) in [(2, 30, 64), (3, 25, 64), (3, 25, 128)]
-   spec = generate_SO2_spec(ORD, 2*M)
+for (ORD, M, nX) in [(2, 40, 1024), (3, 40, 1024), (4, 40, 1024)]
+   spec = _generate_SO2_spec(ORD, 2*M)
    basis = SparseSymmProd(spec)
    A = randn(Float32, nX, 2*M+1)
    AA = ka_evaluate(basis, A, basis.specs)
