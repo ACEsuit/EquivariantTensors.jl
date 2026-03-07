@@ -37,7 +37,7 @@ if !isdefined(Main, :___EQT_UTILS_GPU___)
       end
    end 
 
-   if !__has_roc
+   if !__has_roc && !__has_cuda
       try
          using Metal
          if Metal.functional()

@@ -543,7 +543,7 @@ end
 initialparameters(rng::AbstractRNG, layer::PooledSparseProductLayer) = 
       NamedTuple() 
 
-initialstates(rng::AbstractRNG, layer::PooledSparseProductLayer) = 
+initialstates(rng::AbstractRNG, layer::PooledSparseProductLayer) =
       NamedTuple()
 
 (l::PooledSparseProductLayer)(BB, ps, st) = begin
