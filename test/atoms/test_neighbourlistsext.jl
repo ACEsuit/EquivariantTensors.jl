@@ -1,22 +1,20 @@
 
-# using Pkg; Pkg.activate(@__DIR__() * "/../..")
-# using TestEnv; TestEnv.activate() 
+using Pkg; Pkg.activate(@__DIR__() * "/../..")
+using TestEnv; TestEnv.activate() 
 
 ##
 
+# need to load NeighbourLists to trigger the atoms extension 
 using EquivariantTensors, NeighbourLists, AtomsBase, AtomsBuilder, Unitful, 
       Test, ACEbase
 
 using ACEbase.Testing: println_slim, print_tf      
+import EquivariantTensors as ET
 
 ##
 
 
 @info("Convert a structure to an ETGraph + basic consistency tests")
-
-# need to load NeighbourLists to trigger the atoms extension 
-using AtomsBuilder, NeighbourLists, Unitful 
-import EquivariantTensors as ET
 
 sys = rattle!(bulk(:Si, cubic=true) * (3,3,2), 0.1u"Å")
 rcut = 5.0u"Å"
