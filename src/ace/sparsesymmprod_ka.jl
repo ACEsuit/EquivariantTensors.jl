@@ -31,16 +31,15 @@ function _ka_evaluate_launcher!(AA::AbstractVector,
                                 basis::SparseSymmProd{ORD}, 
                                 A::AbstractVector, 
                                 specs, ) where {ORD}
-   fill!(AA, zero(eltype(AA)))
-   @assert length(specs) == ORD   # spec = tuple of sub-specs 
+   @assert length(specs) == ORD   # spec = tuple of sub-specs
    @assert !(basis.hasconst)     # not implemented
    offsets = first.(basis.ranges)
-   
+
    backend = KernelAbstractions.get_backend(AA)
    kernel! = _ka_evaluate_SparseSymmProd_v1!(backend)
 
-   # @nexprs $ORD N -> 
-   for N = 1:ORD 
+   # @nexprs $ORD N ->
+   for N = 1:ORD
       kernel!(AA, specs[N], A, Val{N}(), offsets[N]; ndrange = length(specs[N]))
    end
    
@@ -69,11 +68,10 @@ function _ka_evaluate_launcher!(AA::AbstractMatrix,
                                 basis::SparseSymmProd{ORD}, 
                                 A::AbstractMatrix, 
                                 specs, nX = size(A, 1) ) where {ORD}
-   fill!(AA, zero(eltype(AA)))
-   @assert size(A, 1) >= nX 
-   @assert size(AA, 1) >= nX 
-   @assert size(AA, 2) >= sum(length, specs) 
-   @assert length(specs) == ORD   # spec = tuple of sub-specs 
+   @assert size(A, 1) >= nX
+   @assert size(AA, 1) >= nX
+   @assert size(AA, 2) >= sum(length, specs)
+   @assert length(specs) == ORD   # spec = tuple of sub-specs
    @assert !(basis.hasconst)      # not implemented
    offsets = first.(basis.ranges)
 
@@ -118,36 +116,55 @@ function ka_pullback!(∂A, ∂AA, basis::SparseSymmProd{ORD}, A,
    offsets = first.(basis.ranges)
 
    backend = KernelAbstractions.get_backend(∂AA)
-   kernel! = _ka_pullback_SparseSymmProd_v1!(backend)
 
    fill!(∂A, zero(eltype(∂A)))
 
-   @assert ORD <= 10   # cf. the "10" in @nexprs below 
-   @nexprs 10 N -> begin 
-      if N <= ORD 
-         kernel!(∂A, ∂AA, A, specs[N], Val{N}(), offsets[N]; 
-                 ndrange = (nX, ))
+   @assert ORD <= 10   # cf. the "10" in @nexprs below
+   @nexprs 10 N -> begin
+      if N <= ORD
+         if backend == KernelAbstractions.CPU()
+            kernel_v1! = _ka_pullback_SparseSymmProd_v1!(backend)
+            kernel_v1!(∂A, ∂AA, A, specs[N], Val{N}(), offsets[N];
+                       ndrange = (nX,))
+         else
+            kernel_v2! = _ka_pullback_SparseSymmProd_v2!(backend)
+            kernel_v2!(∂A, ∂AA, A, specs[N], Val{N}(), offsets[N];
+                       ndrange = (nX, length(specs[N])))
+         end
       end
    end
    return ∂A
 end
 
-#
-# TODO: must replace this with an optimized scatter/gather operation!!!
-#
-@kernel function _ka_pullback_SparseSymmProd_v1!(∂A, ∂AA, A, 
+# CPU kernel: serial loop over spec entries, no atomics needed
+@kernel function _ka_pullback_SparseSymmProd_v1!(∂A, ∂AA, A,
                                               spec, ::Val{N}, offset) where {N}
    iX = @index(Global)
    for iAA = 1:length(spec)
       ∂AA_cur = ∂AA[iX, offset+iAA-1]
-      ϕ = spec[iAA]   # NTuple{N, Int}                                       
+      ϕ = spec[iAA]   # NTuple{N, Int}
       aa = ntuple(t -> A[iX, ϕ[t]], N)  # extract values from A
-      _, ∇prod = _static_prod_ed(aa) 
-      for j = 1:N 
+      _, ∇prod = _static_prod_ed(aa)
+      for j = 1:N
          ∂A[iX, ϕ[j]] += ∂AA_cur * ∇prod[j]
       end
    end
-   nothing 
+   nothing
+end
+
+# GPU kernel: fused-scatter with 2D parallelization + atomics
+@kernel function _ka_pullback_SparseSymmProd_v2!(
+                     ∂A, ∂AA, A, spec, ::Val{N}, offset) where {N}
+   iX, iAA = @index(Global, NTuple)
+   @inbounds begin
+      ∂AA_cur = ∂AA[iX, offset+iAA-1]
+      ϕ = spec[iAA]
+      aa = ntuple(t -> A[iX, ϕ[t]], N)
+      _, ∇prod = _static_prod_ed(aa)
+      for j = 1:N
+         KernelAbstractions.@atomic ∂A[iX, ϕ[j]] += ∂AA_cur * ∇prod[j]
+      end
+   end
 end
 
 # --------------------------------------------------------
@@ -169,43 +186,57 @@ function _jacobian_X_N!(
    @assert length(iiAA) == length(spec)
 
    backend = KernelAbstractions.get_backend(AA)
-   kernel! = _jacobian_X_N_sparsesymmprod_kernel!(backend)
-   kernel!(AA, ∂AA, iiAA, spec, A, ∂A, Val{N}(); 
-           ndrange = (nnodes, length(iiAA)))
+
+   if backend == KernelAbstractions.CPU()
+      kernel_v1! = _jacobian_X_N_sparsesymmprod_kernel_v1!(backend)
+      kernel_v1!(AA, ∂AA, iiAA, spec, A, ∂A, Val{N}();
+                 ndrange = (nnodes, length(iiAA)))
+   else
+      kernel_v2! = _jacobian_X_N_sparsesymmprod_kernel_v2!(backend)
+      kernel_v2!(AA, ∂AA, iiAA, spec, A, ∂A, Val{N}();
+                 ndrange = (maxneigs, nnodes, length(iiAA)))
+   end
 end
 
-
-# @generated function __write_AA_jac(
-#                   ::Val{N}, ∂AA, ∇aa, ∂A, j, iX, iAA, i) 
-#    quote                   
-#       @nexprs $N t -> (
-#          ∂AA[j, iX, iAA] += ∇aa[t] * ∂A[j, i, ϕ[t]]
-#       ) 
-#    end
-# end
-
-@kernel function _jacobian_X_N_sparsesymmprod_kernel!(
+# CPU kernel: serial loop over maxneigs
+@kernel function _jacobian_X_N_sparsesymmprod_kernel_v1!(
                AA, ∂AA, iiAA, spec, A, ∂A, ::Val{N}) where {N}
 
    (iX, i_iiAA) = @index(Global, NTuple)
    iAA = iiAA[i_iiAA]
    ϕ = spec[i_iiAA]
-   maxneigs = size(∂AA, 1) 
+   maxneigs = size(∂AA, 1)
 
-   # aa = prod(A[iX, ϕ[t]] for t = 1:length(ϕ); init = one(eltype(A)))
    Avals = ntuple(t -> A[iX, ϕ[t]], N)
-   # aa = ∏ₜ Aⁱₜ 
-   # ∇aa[t] = ∂aa / ∂A_{ϕ[t]}
-   aa, ∇aa = _static_prod_ed(Avals) 
-   AA[iX, iAA] = aa 
+   aa, ∇aa = _static_prod_ed(Avals)
+   AA[iX, iAA] = aa
 
    for j = 1:maxneigs, t = 1:N
-      # NOTE: could unroll the loop over t here 
-      #       cf. above? 
-      ∂AA[j, iX, iAA] += ∇aa[t] * ∂A[j, iX, ϕ[t]] 
+      ∂AA[j, iX, iAA] += ∇aa[t] * ∂A[j, iX, ϕ[t]]
    end
 
-   nothing 
+   nothing
+end
+
+# GPU kernel: 3D parallelization over (maxneigs, nnodes, nspec)
+@kernel function _jacobian_X_N_sparsesymmprod_kernel_v2!(
+               AA, ∂AA, iiAA, spec, A, ∂A, ::Val{N}) where {N}
+
+   (j, iX, i_iiAA) = @index(Global, NTuple)
+   iAA = iiAA[i_iiAA]
+   ϕ = spec[i_iiAA]
+
+   Avals = ntuple(t -> A[iX, ϕ[t]], N)
+   aa, ∇aa = _static_prod_ed(Avals)
+   if j == 1
+      AA[iX, iAA] = aa
+   end
+
+   a = zero(eltype(∂AA))
+   for t = 1:N
+      a += ∇aa[t] * ∂A[j, iX, ϕ[t]]
+   end
+   ∂AA[j, iX, iAA] = a
 end
 
 
