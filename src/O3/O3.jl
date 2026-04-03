@@ -257,7 +257,7 @@ function mm_generate(L::Int, ll::T, nn::T;
     error("Unknown basis type: $basis")
 end
 
-function gram(X::Matrix{SVector{N,T}}) where {N,T}
+function gram(X::AbstractMatrix{SVector{N,T}}) where {N,T}
     G = zeros(T, size(X,1), size(X,1))
     for i = 1:size(X,1)
        for j = i:size(X,1)
@@ -268,7 +268,7 @@ function gram(X::Matrix{SVector{N,T}}) where {N,T}
     return G
  end
 
-gram(X::Matrix{<:Number}) = X * X'
+gram(X::AbstractMatrix{<:Number}) = X * X'
 
 function lexi_ord(nn, ll)
    N = length(nn)
@@ -374,33 +374,35 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             end 
             return UMatrix, [mm[inv_perm] for mm in MM]
         else
-            # permutation blocks - within which the nn and ll are identical
-            S = Sn(nn,ll)
-            permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
+            # # permutation blocks - within which the nn and ll are identical
+            # S = Sn(nn,ll)
+            # permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
 
-            MM = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
-            MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM ] # sort the mm's within the permutable blocks
-            MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
-            D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
+            # MM = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
+            # MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM ] # sort the mm's within the permutable blocks
+            # MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
+            # D_MM_reduced = Dict(MM_reduced[i] => i for i in 1:length(MM_reduced))
         
-            FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
+            # FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
 
-            for (j,mm) in enumerate(MM)
-                col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
-                for i in 1:r
-                    FMatrix[i,col] += GCG(ll,mm,Lset[i];vectorize=(L!=0),basis=basis)
-                end
-            end 
+            # for (j,mm) in enumerate(MM)
+            #     col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
+            #     for i in 1:r
+            #         FMatrix[i,col] += GCG(ll,mm,Lset[i];vectorize=(L!=0),basis=basis)
+            #     end
+            # end 
         
-            # Linear dependence
-            U, S, V = svd(gram(FMatrix))
-            # Somehow rank is not working properly here, might be a relative  
-            # tolerance issue.
-            # original code: rank(Diagonal(S); rtol =  1e-12) 
-            rk = findall(x -> x > 1e-12, S) |> length 
-            # return the RE-PI coupling coeffs
-            return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
-                [ mm[inv_perm] for mm in MM_reduced ]
+            # # Linear dependence
+            # U, S, V = svd(gram(FMatrix))
+            # # Somehow rank is not working properly here, might be a relative  
+            # # tolerance issue.
+            # # original code: rank(Diagonal(S); rtol =  1e-12) 
+            # rk = findall(x -> x > 1e-12, S) |> length 
+            # # return the RE-PI coupling coeffs
+            # return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
+            #     [ mm[inv_perm] for mm in MM_reduced ]
+            C, MM = coupling_coeffs_new(L, ll, nn)
+            return C, [ mm[inv_perm] for mm in MM ]
         end
     elseif basis === real 
         MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
@@ -453,5 +455,392 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     end
     error("Unknown basis type: $basis")
 end
+
+## Codes for the new construction
+
+# convert a vector of counts to a feasible mm
+function vec2mm(v::Vector{Int})
+    L = Int((length(v) - 1)/2)
+    N = sum(v) # total number of eggs - correlation order
+    mm = Vector{Int}(undef, N)
+    idx   = 1
+    for (i, count) in enumerate(v)
+        val = i - L - 1
+        for _ in 1:count
+            mm[idx] = val
+            idx += 1
+        end
+    end
+    return mm
+end
+
+# make a feasible mm to a counting of elements in the vector
+function mm2vec(mm::AbstractVector{<:Integer}, L::Integer)
+    v = zeros(Int, 2L+1)
+    @inbounds for m in mm
+        v[m+L+1] += 1
+    end
+    return v
+end
+
+# the value of derivative wrt beta at the origin for certain l,m,μ
+db(l::Int,m::Int,μ::Int) = m - μ == 1 ? -1/2*((l-μ)*(l+m))^(1/2) : m - μ == -1 ? 1/2*((l+μ)*(l-m))^(1/2) : 0
+
+function right_shift_neighbors(A::AbstractVector{<:Integer})
+    m = length(A)
+    l = Int((m-1)/2)
+
+    # number of neighbours - only those position n so that A[n] ≥ 1 can be shifted to the right
+    k = count(@view(A[1:end-1])) do x
+                 x ≥ 1
+             end
+
+    neighbors = Vector{Vector{eltype(A)}}(undef, k)   # pre-allocate
+    val = Vector{Float64}(undef, k)
+
+    j = 1
+    @inbounds for n in 1:m-1
+        if A[n] ≥ 1
+            B = copy(A) # make a copy of A
+            B[n] -= 1
+            B[n+1] += 1
+            neighbors[j] = B
+            val[j] = B[n+1] * db(l, n-l-1, n-l)
+            j += 1
+        end
+    end
+    return neighbors, val
+end
+
+function left_shift_neighbors(A::AbstractVector{<:Integer})
+    m = length(A)
+    l = Int((m-1)/2)
+
+    # number of neighbours
+    k = count(@view(A[2:end])) do x
+                 x ≥ 1
+             end
+
+    neighbors = Vector{Vector{eltype(A)}}(undef, k)   # pre-allocate neighboring vectors
+    val = Vector{Float64}(undef, k) # pre-allocate matrix elements 
+
+    j = 1
+    @inbounds for n in 2:m
+        if A[n] ≥ 1
+            B = copy(A) # make a copy of A
+            B[n] -= 1
+            B[n-1] += 1
+            neighbors[j] = B
+            val[j] = B[n-1] * db(l, n-l-1, n-l-2)
+            j += 1
+        end
+    end
+    return neighbors, val
+end
+
+function efficient_cartesian_concat(mmset_sep::Vector{Vector{Vector{Int}}})
+    len = length(mmset_sep) # number of blocks
+    sizes = map(length, mmset_sep)
+    total = prod(sizes) # predict the final length
+    
+    # Precompute block sizes for indexing
+    block_sizes = [prod(sizes[i+1:end]) for i in 1:len]
+    
+    # Precompute result vector lengths
+    block_lengths = map(v -> length(v[1]), mmset_sep)  # assuming uniform length within each block
+    total_length = sum(block_lengths)
+
+    mmset = Vector{Vector{Int}}(undef, total)
+
+    for i in 0:total-1
+        temp = Vector{Int}(undef, total_length)
+        pos = 1
+        idx = i
+        for d in 1:len
+            q, r = divrem(idx, block_sizes[d])
+            vec = mmset_sep[d][q+1]
+            for v in vec
+                temp[pos] = v
+                pos += 1
+            end
+            idx = r
+        end
+        mmset[i+1] = temp
+    end
+
+    return mmset
+end
+
+# TODO: I guess I should swap mm and μμ to make the notation more consistent as before
+# In addition, in the function mat, the matrix is defined row-wise (Fig (1) in the manuscript). 
+function mat(K::Int,ll::AbstractVector{Int},nn::AbstractVector{Int})
+    idx = Sn(nn,ll) # separable blocks
+    lset = ll[idx[1:end-1]] # l's of the blocks
+    nset = [ idx[i] - idx[i-1] for i in 2:length(idx) ] # lengths of the blocks
+
+    len = length(lset) # number of blocks
+    @assert length(lset) == length(nset)
+    
+    # @time mmset_sep = [ vec2mm.(sep(lset[i],nset[i])) for i in 1:len ] # separated mm's for each l and N
+    mmset_sep = [all_mm(lset[i], nset[i]) for i in 1:length(lset)]  # separated mm's for each l and N - equivalent to the above but is faster
+    mmset = efficient_cartesian_concat(mmset_sep) # cartesian product of mmset_sep
+
+    μμset = mmset[findall(x -> abs(sum(x)) <= K, mmset)]
+    # mmset = K != 0 ? mmset[findall(x -> abs(sum(x)) <= K + 1, mmset)] : mmset[findall(x -> abs(sum(x)) == K + 1, mmset)]
+    mmset = K != 0 ? mmset[findall(x -> ((-K <= sum(x) <= K - 1)||(sum(x) == K + 1)), mmset)] : mmset[findall(x -> sum(x) == K + 1, mmset)]
+
+    # μμset = sort(μμset, by = x -> (sum(x), x)) # Sort μμset by the sum of elements in μμ, and then lexicographically
+    # mmset = sort(mmset, by = x -> (sum(x), x)) # Sort mmset by the sum of elements in mm, and then lexicographically
+    # μμset = blockwise_sort(μμset, nset) # Sort μμset by the sum of elements in μμ, and then the sum of each block, and finally lexicographically
+    # mmset = blockwise_sort(mmset, nset) # Sort mmset by the sum of elements in mm, and then the sum of each block, and finally lexicographically
+    sort!(μμset, by = sum) # Sort μμset by the sum of elements in μμ, and then lexicographically
+    sort!(mmset, by = sum) # Sort mmset by the sum of elements in mm, and then lexicographically
+
+    dict_μμ = Dict{Vector{Int}, Int}(μμset[i] => i for i in 1:length(μμset))
+
+    # r = 0 # Number of rows in the matrix
+    # for mm in mmset
+    #     r += 1
+    #     # push!(mmset_aug, mm)
+    #     if sum(mm) >= -K + 1 && sum(mm) <= K - 1 # mm within this range produces two rows
+    #         r += 1
+    #     end
+    # end
+    # r = Int(r/2)
+
+    a = 0 # Calculating the number of possible rows and compare in the end
+
+    # triplets to generate the sparse matrix M
+    mm_idx = Int[]
+    μμ_idx = Int[]
+    vals = Float64[]
+
+    # NOTE: r is the exact column that we know; for each mm in mmset, 
+    # based on left right shifts, we can have at most 2K μμ's, and including 
+    # mm itself, we can have at most 2K+1 non-zero entries in each column
+    # sizehint!(mm_idx, (2K+1)*r) 
+    # sizehint!(μμ_idx, (2K+1)*r)
+    # sizehint!(vals, (2K+1)*r)
+    # But this estimation is loose.
+
+    μμ = similar(mmset[1]) # allocate μμ once
+    for mm in mmset
+        S = sum(mm)
+        if -K <= S <= K-1
+            a += 1
+            I = S + 1
+            block_end = 0
+            for (len_loop, l) in enumerate(lset)
+                block_start = block_end + 1
+                block_end  += nset[len_loop] # indices for the current ll block
+                @views mm_loc = mm[block_start:block_end]
+                vec_mm_loc = mm2vec(mm_loc,l)
+                vec_μμset_loc, val = right_shift_neighbors(vec_mm_loc)
+
+                copy!(μμ,mm) # create a copy of mm to modify it
+                j = dict_μμ[μμ]
+                push!(mm_idx, a)
+                push!(μμ_idx, j)
+                push!(vals, -db(K, I-1, I))
+
+                for (t,vec_μμ_loc) in enumerate(vec_μμset_loc)
+                    μμ[block_start:block_end] = vec2mm(vec_μμ_loc) # modify the μμ copy
+                    j = dict_μμ[μμ]
+
+                    push!(mm_idx, a)
+                    push!(μμ_idx, j)
+                    push!(vals, val[t])
+                end
+            end
+        elseif S == K + 1
+            # This B^+ matrix is independent of the above system (bottom right single block
+            # in Fig (1) of the manuscript), so the sign of this is actually not important. 
+            # And since this is the only part that call db in the first case, 
+            # the sign in db doesn't matter for the correctness of the code, 
+            # but we should keep it to be the correct one.
+            a += 1
+            I = K
+            block_end = 0
+            for (len_loop, l) in enumerate(lset)
+                block_start = block_end + 1
+                block_end  += nset[len_loop] # indices for the current ll block
+                @views mm_loc = mm[block_start:block_end]
+                vec_mm_loc = mm2vec(mm_loc,l)
+
+                vec_μμset_loc, val = left_shift_neighbors(vec_mm_loc)
+
+                copy!(μμ,mm)
+                for (t,vec_μμ_loc) in enumerate(vec_μμset_loc)
+                    μμ[block_start:block_end] = vec2mm(vec_μμ_loc) # modify the μμ copy
+                    j = dict_μμ[μμ]
+
+                    push!(mm_idx, a)
+                    push!(μμ_idx, j)
+                    push!(vals, val[t])
+                end
+            end
+        else
+            continue
+        end               
+    end
+
+    @assert a == length(mmset) # Check that the number of rows is equal to the number of filtered mm's
+    triplets = unique(zip(mm_idx, μμ_idx, vals))
+    mm_idx = [i for (i, j, v) in triplets]
+    μμ_idx = [j for (i, j, v) in triplets]
+    vals = [v for (i, j, v) in triplets]
+
+    mat = sparse(μμ_idx, mm_idx, vals, length(μμset), a) # Create a sparse matrix from the indices and values
+    # mat = sparse(mm_idx, μμ_idx, vals, a, length(μμset)) # Create a sparse matrix from the indices and values
+
+    return mat, μμset, mmset # mat[1:a,:] # [mat; mat_minus; mat_plus]
+end
+
+function nullspace_upper_sparse(U::AbstractMatrix{T}) where T<:Number
+    m, n = size(U)
+    @assert m ≤ n # U must have at least as many columns as rows
+    r = n - m # rank of the null
+    r == 0 && return zeros(T, n, 0) # full column rank → trivial nullspace
+
+    # [ U_square; U_reduced ] dot [X I] = 0 <=> U_square X + U_reduced = 0
+    RHS = -Matrix(U[1:m, m+1:n])
+    X = UpperTriangular(U[1:m, 1:m]) \ RHS   # dense or sparse, Julia picks the right solver
+
+    # [X; I] is the basis of the null space
+    N = zeros(T, n, r)
+    N[1:m, :] .= X
+    @inbounds for j in 1:r
+        N[m + j, j] = one(T)
+    end
+    return N ./ norm(N)
+end
+
+function solver_inner(M::AbstractMatrix{T}, mmset::Vector{Vector{Int}}, μμset::Vector{Vector{Int}}) where T<:Number
+    M = sparse(M')
+    C = zeros(Float64, size(M, 2), size(M, 2) - size(M, 1))
+
+    row_sum = sum.(mmset)
+    column_sum = sum.(μμset)
+
+    row_range = findall(i -> i == 1 || row_sum[i] ≠ row_sum[i-1], 1:length(mmset))
+    column_range = findall(i -> i == 1 || column_sum[i] ≠ column_sum[i-1], 1:length(μμset))
+    push!(row_range, length(mmset) + 1)
+    push!(column_range, length(μμset) + 1)
+
+    # The lowest block
+    row_block = row_range[end-1]:row_range[end]-1
+    prev_col_block = column_range[end-1]:column_range[end]-1
+
+    # resolution to its kernel
+    if length(row_range) == length(column_range)
+        B = M[row_block, prev_col_block]
+        F = lu(B')
+        invp = invperm(F.p)
+        sparse_ns = nullspace_upper_sparse(sparse(F.L'))
+        C[prev_col_block, :] .= Matrix((F.Rs .* sparse_ns[invp,:])')'
+
+
+        # Back-substitution
+        for t in length(row_range)-2:-1:1
+            row_block = row_range[t]:row_range[t+1]-1
+            curr_col_block = column_range[t]:column_range[t+1]-1
+            
+            B = M[row_block, prev_col_block] # B matrix for the current block row and the previous column block
+            C_prev = @view C[prev_col_block, :] # The block we computed in the previous iteration
+            C_curr  = @view C[curr_col_block, :]  # The block we are computing right now
+            
+            # The scalar from A
+            a = M[row_block[1], curr_col_block[1]] 
+            
+            # C_curr = B * C_prev / a + 0
+            mul!(C_curr, B, C_prev, -1.0/a, 0.0)
+            
+            # Shift column
+            prev_col_block = curr_col_block
+        end
+    else # the case where \sum ll = L
+        for (i, col_idx) in enumerate(prev_col_block)
+            C[col_idx, i] = 1.0
+        end
+
+
+        # Back-substitution
+        for t in length(row_range)-1:-1:1
+            row_block = row_range[t]:row_range[t+1]-1
+            curr_col_block = column_range[t]:column_range[t+1]-1
+            
+            B = M[row_block, prev_col_block] # B matrix for the current block row and the previous column block
+            C_prev = @view C[prev_col_block, :] # The block we computed in the previous iteration
+            C_curr  = @view C[curr_col_block, :]  # The block we are computing right now
+            
+            # The scalar from A
+            a = M[row_block[1], curr_col_block[1]] 
+            
+            # C_curr = B * C_prev / a + 0
+            mul!(C_curr, B, C_prev, -1.0/a, 0.0)
+            
+            # Shift column
+            prev_col_block = curr_col_block
+        end
+    end
+    return C
+end
+
+function coupling_coeffs_new(K::Int, ll::AbstractVector{<:Int}, nn::AbstractVector{<:Int})
+    @assert length(ll) == length(nn)
+    if K > sum(ll) # if the matrix is square, we can use the nullspace function
+        # return null_return(Val(K),μμset) # Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
+        return Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
+    end
+    
+    M, μμset, mmset = mat(K, ll, nn) # The matrix that we will use to compute the RPI basis
+
+    if size(M,1) == size(M,2) # if the matrix is square, we return 0 - but this can only happen when K > sum(ll), which is already handled in the beginning of the function, so this is just for safety
+        # return null_return(Val(K),μμset) # Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
+        return Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
+    end
+
+    # method I: find the null space of the matrix M using nullspace
+    # C = Matrix(transpose(nullspace(M))) # Use the full matrix to compute the null space
+
+    # method II: use QR decomposition to find the null space
+    # F = qr(M)
+    # C = Matrix(F.Q[invperm(F.prow), end-(size(M,1)-size(M,2))+1:end]') # we know the rank already :)
+    
+    # method III: use lu factorization to find the null space - cf old code
+    # F = lu(M)
+    # invp = invperm(F.p)
+    # sparse_ns = nullspace_upper_sparse(sparse(F.L'))
+    # C = Matrix((F.Rs .* sparse_ns[invp,:])')
+
+    # method IV: the new solver fully corresponds to the paper - back-substitution!
+    C = solver_inner(M, mmset, μμset)
+    
+    if K == 0
+        return C', μμset
+    end
+
+    return embed_in_onehot(C', μμset, K), μμset # embed the null space in one-hot vectors
+end
+
+function embed_in_onehot(C::AbstractMatrix,mmset::AbstractVector, K::Integer)
+    m, n = size(C)
+    T = eltype(C)
+    Vec = SVector{2K+1, T}
+
+    # one-hot vectors for every column
+    colvec = Vector{Vec}(undef, n)
+    z = zeros(Vec)
+    for j in 1:n
+        idx = sum(mmset[j]) + K + 1
+        # colvec[j] = Vec(ntuple(k -> (k == idx ? one(T) : zero(T)), 2K + 1))
+        colvec[j] = setindex(z, one(T), idx)
+    end
+
+    # broadcast the multiplication
+    return broadcast(*, C, reshape(colvec, 1, n))::Matrix{Vec}
+end
+
+all_mm(l::Int, N::Int) = collect(with_replacement_combinations(-l:l, N))
 
 end
