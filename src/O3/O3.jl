@@ -423,12 +423,8 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         else
             S = Sn(nn,ll)
             MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
-            permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
-            MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM_r ] # sort the mm's within the permutable blocks
-            MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
-
-            Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex)
-            C_r2c = rAA2cAA_PI(SVector{N, Int}.(MM_c),MM_reduced,MM_r,ll,nn) 
+            Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex) # cSH-based couplings
+            C_r2c, MM_reduced = rAA2cAA_PI(SVector{N, Int}.(MM_c),MM_r,ll,nn) # r2c map and the ordered mm set
             # TODO: coupling_coeffs and mm_generate return different 
             #       format of MM's which may need to be fixed
             
