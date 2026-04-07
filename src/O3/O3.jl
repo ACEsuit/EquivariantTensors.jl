@@ -806,10 +806,15 @@ function coupling_coeffs_new(K::Int, ll::AbstractVector{<:Int}, nn::AbstractVect
     T = K == 0 ? Float64 : SVector{2K+1,Float64}
     N = length(ll)
     @assert length(ll) == length(nn)
+
     if K > sum(ll) # if the matrix is square, we can use the nullspace function
         # return null_return(Val(K),μμset) # Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
         # return Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
         return zeros(T, 0, 0), SVector{N, Int}[]
+    end
+
+    if all(iszero, ll) && K == 0 # Only in this trivial case we don't have the following matrix
+        return [1;;], [SVector{N, Int}(zeros(N)), ]
     end
     
     M, μμset, mmset = mat(K, ll, nn) # The matrix that we will use to compute the RPI basis
