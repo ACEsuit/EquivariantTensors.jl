@@ -801,17 +801,23 @@ function solver_inner(M::AbstractMatrix{T}, mmset::Vector{Vector{Int}}, μμset:
 end
 
 function coupling_coeffs_new(K::Int, ll::AbstractVector{<:Int}, nn::AbstractVector{<:Int})
+    # TODO: notation inconsistency: K and L both represent the order of equivariance
+    # TODO: reconsider if ll and nn here should be made to be SVector{N, Int}
+    T = K == 0 ? Float64 : SVector{2K+1,Float64}
+    N = length(ll)
     @assert length(ll) == length(nn)
     if K > sum(ll) # if the matrix is square, we can use the nullspace function
         # return null_return(Val(K),μμset) # Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
-        return Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
+        # return Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
+        return zeros(T, 0, 0), SVector{N, Int}[]
     end
     
     M, μμset, mmset = mat(K, ll, nn) # The matrix that we will use to compute the RPI basis
 
     if size(M,1) == size(M,2) # if the matrix is square, we return 0 - but this can only happen when K > sum(ll), which is already handled in the beginning of the function, so this is just for safety
         # return null_return(Val(K),μμset) # Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
-        return Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
+        # return Matrix{SVector{2K+1, Float64}}(undef, 0, length(μμset)), μμset
+        return zeros(T, 0, 0), SVector{N, Int}[]
     end
 
     # method I: find the null space of the matrix M using nullspace
