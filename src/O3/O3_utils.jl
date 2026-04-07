@@ -112,6 +112,45 @@ function rAA2cAA(MM_c, MM_r)
    return sparse(rows, cols, vals, length(MM_c), length(MM_r))
 end
 
+function rAA2cAA_PI(MM_c_ordered, MM_r_ordered, MM_r, ll, nn)
+   # Same grouping logic
+   classes_map = Dict(m => i for (i, m) in enumerate(MM_r_ordered))
+   group_c_ordered = group_by_abs(MM_c_ordered)
+   group_r = group_by_abs(MM_r)
+
+   S = Sn(nn,ll)
+   permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
+
+   rows = Int[]; cols = Int[]; vals = ComplexF64[]
+
+   for (key, c_inds) in group_c_ordered
+        # Use get() safely in case a key exists in c_ordered but not in r
+        # r_inds = get(group_r, key, Int[]) 
+        r_inds = group_r[key]
+        if isempty(r_inds)
+            continue
+        end
+
+        for k in r_inds
+            # Compute 'j' ONCE per 'k' instead of inside the 'i' loop
+            j = classes_map[_sort(MM_r[k], permutable_blocks)]
+            
+            for i in c_inds
+               val = Ctran(MM_c_ordered[i], MM_r[k], real) 
+               
+               # Only store non-zero values to keep the builder arrays lean
+               if abs(val) > 1e-12 
+                  push!(rows, i)
+                  push!(cols, j)
+                  push!(vals, val)
+               end
+            end
+         end
+      end
+
+   # return CC
+   return sparse(rows, cols, vals, length(MM_c_ordered), length(MM_r_ordered))
+end
 
 # -----------------------------------------------------------------
 #  complex and real Clebsch-Gordan coefficients

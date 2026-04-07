@@ -405,52 +405,66 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             return C, [ mm[inv_perm] for mm in MM ]
         end
     elseif basis === real 
-        MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
-        Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, basis=complex)
-        C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r) 
-        # TODO: coupling_coeffs and mm_generate return different 
-        #       format of MM's which may need to be fixed
-        
-        # Do the transformation to the complex coupling 
-        # because it has a smaller size compared to the real one
-        if L != 0
-            CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
-            Ure_c = map(u -> CL * u, Ure_c)
-        end
-        Ure_r = real(Ure_c * C_r2c)
-        
         if !PI
+            MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
+            Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, basis=complex)
+            C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r) 
+            # TODO: coupling_coeffs and mm_generate return different 
+            #       format of MM's which may need to be fixed
+            
+            # Do the transformation to the complex coupling 
+            # because it has a smaller size compared to the real one
+            if L != 0
+                CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
+                Ure_c = map(u -> CL * u, Ure_c)
+            end
+            Ure_r = real(Ure_c * C_r2c)
             return Ure_r, [ mm[inv_perm] for mm in MM_r ]
         else
             S = Sn(nn,ll)
+            MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
             permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
             MM_sorted = [ _sort(mm, permutable_blocks) for mm in MM_r ] # sort the mm's within the permutable blocks
             MM_reduced = unique(MM_sorted) # ordered mm's - representatives of the equivalent classes
 
-            # NOTE: this block has a type instability; unclear why.
-            D_MM_reduced = Dict{eltype(MM_reduced), Int}() 
-            for i in 1:length(MM_reduced)
-                D_MM_reduced[MM_reduced[i]] = i
+            Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex)
+            C_r2c = rAA2cAA_PI(SVector{N, Int}.(MM_c),MM_reduced,MM_r,ll,nn) 
+            # TODO: coupling_coeffs and mm_generate return different 
+            #       format of MM's which may need to be fixed
+            
+            # Do the transformation to the complex coupling 
+            # because it has a smaller size compared to the real one
+            if L != 0
+                CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
+                Urpe_c = map(u -> CL * u, Urpe_c)
             end
-        
-            FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
+            Urpe_r = real.(Urpe_c * C_r2c)
+            return Urpe_r, [ mm[inv_perm] for mm in MM_reduced ]
 
-            for (j,mm) in enumerate(MM_r)
-                col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
-                for i in 1:r
-                    FMatrix[i,col] += Ure_r[i,j]
-                end
-            end 
+            # NOTE: this block has a type instability; unclear why.
+            # D_MM_reduced = Dict{eltype(MM_reduced), Int}() 
+            # for i in 1:length(MM_reduced)
+            #     D_MM_reduced[MM_reduced[i]] = i
+            # end
         
-            # Linear dependence
-            U, S, V = svd(gram(FMatrix))
-            # Somehow rank is not working properly here, might be a relative  
-            # tolerance issue.
-            # original code: rank(Diagonal(S); rtol =  1e-12) 
-            rk = findall(x -> x > 1e-12, S) |> length 
-            # return the RE-PI coupling coeffs
-            return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
-                [ mm[inv_perm] for mm in MM_reduced ]
+            # FMatrix=zeros(T, r, length(MM_reduced)) # Matrix containing f(m,i)
+
+            # for (j,mm) in enumerate(MM_r)
+            #     col = D_MM_reduced[MM_sorted[j]] # avoid looking up the dictionary repeatedly
+            #     for i in 1:r
+            #         FMatrix[i,col] += Ure_r[i,j]
+            #     end
+            # end 
+        
+            # # Linear dependence
+            # U, S, V = svd(gram(FMatrix))
+            # # Somehow rank is not working properly here, might be a relative  
+            # # tolerance issue.
+            # # original code: rank(Diagonal(S); rtol =  1e-12) 
+            # rk = findall(x -> x > 1e-12, S) |> length 
+            # # return the RE-PI coupling coeffs
+            # return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
+            #     [ mm[inv_perm] for mm in MM_reduced ]
         end
     end
     error("Unknown basis type: $basis")
