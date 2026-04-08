@@ -902,7 +902,7 @@ function coupling_coeffs_new(K::Int, ll::AbstractVector{<:Int}, nn::AbstractVect
     end
 
     if all(iszero, ll) && K == 0 # Only in this trivial case we don't have the following matrix
-        return [1;;], [SVector{N, Int}(zeros(N)), ]
+        return [1.0;;], [SVector{N, Int}(zeros(N)), ]
     end
     
     M, μμset, mmset = mat(K, ll, nn) # The matrix that we will use to compute the RPI basis
