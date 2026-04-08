@@ -73,12 +73,16 @@ Ctran(mm1::Vector{Int}, mm2::Vector{Int}, basis = real) =
 
 # grouping those MM's that has the same abs value
 function group_by_abs(MM::Vector{SVector{N,Int}}) where N
-   abs_map = Dict{NTuple{N, Int}, Vector{Int}}()
-   for (idx, v) in enumerate(MM)
-       key = Tuple(abs.(v))  # use tuple as a hashable key
-       push!(get!(abs_map, key, Int[]), idx)
-   end
-   return abs_map
+    abs_map = Dict{SVector{N, Int}, Vector{Int}}()
+    for (idx, v) in enumerate(MM)
+        key = abs.(v)
+        if haskey(abs_map, key)
+            push!(abs_map[key], idx)
+        else
+            abs_map[key] = [idx]
+        end
+    end    
+    return abs_map
 end
 
 function rAA2cAA(MM_c, MM_r)
@@ -121,7 +125,7 @@ function rAA2cAA_PI(MM_c_ordered, MM_r, ll, nn)
 
    rows = Int[]; cols = Int[]; vals = ComplexF64[]
    MM_r_ordered = SVector{length(ll), Int}[]
-   classes_map = Dict(m => i for (i, m) in enumerate(MM_r_ordered))
+   classes_map = Dict{SVector{length(ll), Int}, Int}()
 
    for (key, c_inds) in group_c_ordered
         r_inds = group_r[key]
