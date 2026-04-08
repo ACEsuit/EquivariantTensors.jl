@@ -132,18 +132,30 @@ end
 
 SetLl(ll::SVector{N,Int64}) where N = union([SetLl(ll, L) for L in 0:sum(ll)]...)
 
-function Sn(nn,ll)
-    # should assert that lexicographical order
-    N = length(ll)
-    @assert length(ll) == length(nn)
-    perm_indices = [1]
-    for i in 2:N
-        if ll[i] != ll[perm_indices[end]] || nn[i] != nn[perm_indices[end]]
-            push!(perm_indices,i)
+# A new structure for efficiently constructing PermutableBlocks
+struct PermutableBlocks{N, T1, T2}
+    nn::SVector{N, T1}
+    ll::SVector{N, T2}
+end
+
+# iterate over PermutableBlocks
+function Base.iterate(iter::PermutableBlocks{N}, state=1) where N
+    state > N && return nothing
+    
+    start_idx = state
+    
+    # find block ends
+    @inbounds for i in (start_idx + 1):N
+        if iter.ll[i] != iter.ll[start_idx] || iter.nn[i] != iter.nn[start_idx]
+            # return the UnitRange and pass i as the state for the next iteration
+            return (start_idx:(i - 1), i)
         end
     end
-    return [perm_indices;N+1]
+    
+    # return when reaching the very end
+    return (start_idx:N, N+1)
 end
+get_permutable_blocks(nn::SVector{N,T}, ll::SVector{N,T}) where {N,T} = PermutableBlocks(nn, ll)
 
 # The set of integers that has the same absolute value as m
 signed_m(m::T) where T = unique([m,-m])::Vector{T}
@@ -255,9 +267,14 @@ function mm_generate(L::Int, ll::T, nn::T;
             end
         end
     elseif PI
-        idx = Sn(nn,ll) # separable blocks
-        lset = ll[idx[1:end-1]] # l's of the blocks
-        nset = [ idx[i] - idx[i-1] for i in 2:length(idx) ] # lengths of the blocks
+        permutable_blocks = get_permutable_blocks(nn, ll)
+        lset = Int[] # l's of the blocks
+        nset = Int[] # lengths of the blocks
+
+        for block in permutable_blocks
+            push!(lset, ll[first(block)])
+            push!(nset, length(block))
+        end
 
         len = length(lset) # number of blocks
         @assert length(lset) == length(nset)
@@ -353,14 +370,16 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
     return _coupling_coeffs(_L, _ll, _nn; PI = PI, basis = basis, )
 end
 
-function _sort(x::T, permutable_blocks::Vector{Vector{Int}}) where T
+function _sort(x::SVector{N,T}, permutable_blocks::PermutableBlocks) where {N,T}
     # Sorts the vector x according to the indices in permutable_blocks
     # This is used to sort the equivalent classes of m's
-    x = Vector{eltype(x)}(x)
+    x = MVector(x)
+    
     for block in permutable_blocks
-        x[block] = sort(x[block])
+        @views sort!(x[block])
     end
-    return T(x)
+    
+    return SVector{N,T}(x)
 end
 
 
@@ -443,7 +462,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             Ure_r = real(Ure_c * C_r2c)
             return Ure_r, [ mm[inv_perm] for mm in MM_r ]
         else
-            S = Sn(nn,ll)
+            # S = Sn(nn,ll)
             MM_r = mm_generate(L, ll, nn; basis=basis, PI = true) # all admissible mm's wrt ordered cSH mm's
             Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex) # cSH-based couplings
             C_r2c, MM_reduced = rAA2cAA_PI(SVector{N, Int}.(MM_c),SVector{N, Int}.(MM_r),ll,nn) # r2c map and the ordered mm set
@@ -675,9 +694,14 @@ end
 # TODO: I guess I should swap mm and μμ to make the notation more consistent as before
 # In addition, in the function mat, the matrix is defined row-wise (Fig (1) in the manuscript). 
 function mat(K::Int,ll::AbstractVector{Int},nn::AbstractVector{Int})
-    idx = Sn(nn,ll) # separable blocks
-    lset = ll[idx[1:end-1]] # l's of the blocks
-    nset = [ idx[i] - idx[i-1] for i in 2:length(idx) ] # lengths of the blocks
+    permutable_blocks = get_permutable_blocks(nn, ll)
+    lset = Int[] # l's of the blocks
+    nset = Int[] # lengths of the blocks
+
+    for block in permutable_blocks
+        push!(lset, ll[first(block)])
+        push!(nset, length(block))
+    end
 
     len = length(lset) # number of blocks
     @assert length(lset) == length(nset)

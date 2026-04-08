@@ -117,8 +117,7 @@ function rAA2cAA_PI(MM_c_ordered, MM_r, ll, nn)
    group_c_ordered = group_by_abs(MM_c_ordered)
    group_r = group_by_abs(MM_r)
 
-   S = Sn(nn,ll)
-   permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
+   permutable_blocks = get_permutable_blocks(nn,ll)
 
    rows = Int[]; cols = Int[]; vals = ComplexF64[]
    MM_r_ordered = SVector{length(ll), Int}[]
