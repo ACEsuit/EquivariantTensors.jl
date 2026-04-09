@@ -246,7 +246,7 @@ mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64,
 # Generate mm depending on PI, for !PI this fcn always generates all admissible mm's
 # and if PI, it generates ordered mm wrt input ll and nn for basis = complex
 # and for basis = real, it generates all mm s.t. abs.(mm) in abs.(MM_c)
-# ordering with be done in rAA2cAA_PI to avoid duplicate sorting
+# ordering will be done in rAA2cAA_PI to avoid duplicate sorting
 # NOTE: this line seems not to be the bottleneck in the code anymore
 
 function mm_generate(L::Int, ll::T, nn::T; 
@@ -289,7 +289,7 @@ function mm_generate(L::Int, ll::T, nn::T;
         return MM_c
     elseif basis === real 
         # NOTE: lots of allocations here that could be improved if needed
-        # LIWEI: This seems to be improved
+        # LIWEI: This seems to have been improved
         MM_abs = unique([ abs.(mm) for mm in MM_c ])
         return signed_mmset(MM_abs)
     end
