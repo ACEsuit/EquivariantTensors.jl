@@ -309,14 +309,13 @@ function gram(X::AbstractMatrix{SVector{N,T}}) where {N,T}
 
 gram(X::AbstractMatrix{<:Number}) = X * X'
 
-function lexi_ord(nn, ll)
-   N = length(nn)
+function lexi_ord(nn::SVector{N, Int}, ll::SVector{N, Int}) where N
    bb = [ (ll[i], nn[i]) for i = 1:N ]
    p = sortperm(bb)
    bb_sorted = bb[p]
    return SVector{N, Int}(ntuple(i -> bb_sorted[i][2], N)), 
           SVector{N, Int}(ntuple(i -> bb_sorted[i][1], N)), 
-          invperm(p)
+          SVector{N, Int}(invperm(p))
 end
 
 """
@@ -773,7 +772,7 @@ end
 
 function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμset::Vector{SVector{N,Int}}) where {N,T<:Number}
     M = sparse(M')
-    C = zeros(Float64, size(M, 2), size(M, 2) - size(M, 1))
+    C = zeros(Float64, size(M, 2) - size(M, 1), size(M, 2))
 
     row_sum = sum.(mmset)
     column_sum = sum.(μμset)
@@ -788,57 +787,60 @@ function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμs
     prev_col_block = column_range[end-1]:column_range[end]-1
 
     # resolution to its kernel
+    # Solving for the last block, cf Fig 1 (b,c)
     if length(row_range) == length(column_range)
         B = M[row_block, prev_col_block]
         F = lu(B')
         invp = invperm(F.p)
         sparse_ns = nullspace_upper_sparse(sparse(F.L'))
-        C[prev_col_block, :] .= Matrix((F.Rs .* sparse_ns[invp,:])')'
-
-
-        # Back-substitution
-        for t in length(row_range)-2:-1:1
-            row_block = row_range[t]:row_range[t+1]-1
-            curr_col_block = column_range[t]:column_range[t+1]-1
-            
-            B = M[row_block, prev_col_block] # B matrix for the current block row and the previous column block
-            C_prev = @view C[prev_col_block, :] # The block we computed in the previous iteration
-            C_curr  = @view C[curr_col_block, :]  # The block we are computing right now
-            
-            # The scalar from A
-            a = M[row_block[1], curr_col_block[1]] 
-            
-            # C_curr = B * C_prev / a + 0
-            mul!(C_curr, B, C_prev, -1.0/a, 0.0)
-            
-            # Shift column
-            prev_col_block = curr_col_block
-        end
-    else # the case where \sum ll = L
+        C[:, prev_col_block] .= (Diagonal(F.Rs) * sparse_ns[invp, :])'
+        t_start = length(row_range)-2
+    else
         for (i, col_idx) in enumerate(prev_col_block)
-            C[col_idx, i] = 1.0
+            C[i, col_idx] = 1.0
         end
-
-
-        # Back-substitution
-        for t in length(row_range)-1:-1:1
-            row_block = row_range[t]:row_range[t+1]-1
-            curr_col_block = column_range[t]:column_range[t+1]-1
-            
-            B = M[row_block, prev_col_block] # B matrix for the current block row and the previous column block
-            C_prev = @view C[prev_col_block, :] # The block we computed in the previous iteration
-            C_curr  = @view C[curr_col_block, :]  # The block we are computing right now
-            
-            # The scalar from A
-            a = M[row_block[1], curr_col_block[1]] 
-            
-            # C_curr = B * C_prev / a + 0
-            mul!(C_curr, B, C_prev, -1.0/a, 0.0)
-            
-            # Shift column
-            prev_col_block = curr_col_block
-        end
+        t_start = length(row_range)-1
     end
+
+    # Back-substitution
+    for t in t_start:-1:1
+        row_block = row_range[t]:row_range[t+1]-1
+        curr_col_block = column_range[t]:column_range[t+1]-1
+        
+        a = -1/M[row_block[1], curr_col_block[1]] 
+        
+        # Extract the internal sparse arrays for maximum speed
+        colptr = M.colptr
+        rowval = M.rowval
+        nzval  = M.nzval
+        
+        # Perform C_curr = B * C_prev directly without allocating B!
+        # Because we are using C_T, curr_col_block and prev_col_block are COLUMNS
+        for (j_idx, j_global) in enumerate(prev_col_block)
+            
+            # Loop only over the non-zeros in column j_global of M_sparse
+            for p in colptr[j_global]:(colptr[j_global+1]-1)
+                i_global = rowval[p]
+                
+                # If this non-zero falls inside our row_block, do the math
+                if i_global >= row_block[1] && i_global <= row_block[end]
+                    i_idx = i_global - row_block[1] + 1
+                    
+                    val = nzval[p] * a
+                    
+                    # Multiply into our contiguous C_T array
+                    # This replaces mul! and is 100% allocation-free
+                    for k in 1:size(M, 2) - size(M, 1)
+                        C[k, curr_col_block[i_idx]] += val * C[k, prev_col_block[j_idx]]
+                    end
+                end
+            end
+        end
+        
+        prev_col_block = curr_col_block
+    end
+    
+    # Transpose back at the very end to return your expected dimensions!
     return C
 end
 
@@ -884,28 +886,28 @@ function coupling_coeffs_new(K::Int, ll::AbstractVector{<:Int}, nn::AbstractVect
     C = solver_inner(M, mmset, μμset)
     
     if K == 0
-        return C', μμset
+        return C, μμset
     end
 
-    return embed_in_onehot(C', μμset, K), μμset # embed the null space in one-hot vectors
+    return embed_in_onehot(C, μμset, Val(K)), μμset # embed the null space in one-hot vectors
 end
 
-function embed_in_onehot(C::AbstractMatrix,mmset::AbstractVector, K::Integer)
+function embed_in_onehot(C::AbstractMatrix{T}, mmset::AbstractVector, ::Val{K}) where {T, K}
     m, n = size(C)
-    T = eltype(C)
-    Vec = SVector{2K+1, T}
-
-    # one-hot vectors for every column
-    colvec = Vector{Vec}(undef, n)
+    Vec = SVector{2K+1, T} 
+    
+    # Allocate the final matrix of vectors - the memory cost here seems to be unavoidable
+    C_vec = Matrix{Vec}(undef, m, n)
     z = zeros(Vec)
+    
     for j in 1:n
         idx = sum(mmset[j]) + K + 1
-        # colvec[j] = Vec(ntuple(k -> (k == idx ? one(T) : zero(T)), 2K + 1))
-        colvec[j] = setindex(z, one(T), idx)
+        for i in 1:m
+            C_vec[i, j] = setindex(z, C[i,j], idx)
+        end
     end
-
-    # broadcast the multiplication
-    return broadcast(*, C, reshape(colvec, 1, n))::Matrix{Vec}
+    
+    return C_vec
 end
 
 all_mm(l::Int, N::Int) = collect(with_replacement_combinations(-l:l, N))
