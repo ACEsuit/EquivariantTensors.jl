@@ -578,85 +578,8 @@ end
 
 ## Codes for the new construction
 
-# convert a vector of counts to a feasible mm
-function vec2mm(v::Vector{Int})
-    L = Int((length(v) - 1)/2)
-    N = sum(v) # total number of eggs - correlation order
-    mm = Vector{Int}(undef, N)
-    idx   = 1
-    for (i, count) in enumerate(v)
-        val = i - L - 1
-        for _ in 1:count
-            mm[idx] = val
-            idx += 1
-        end
-    end
-    return mm
-end
-
-# make a feasible mm to a counting of elements in the vector
-function mm2vec(mm::AbstractVector{<:Integer}, L::Integer)
-    v = zeros(Int, 2L+1)
-    @inbounds for m in mm
-        v[m+L+1] += 1
-    end
-    return v
-end
-
 # the value of derivative wrt beta at the origin for certain l,m,μ
-db(l::Int,m::Int,μ::Int) = m - μ == 1 ? -1/2*((l-μ)*(l+m))^(1/2) : m - μ == -1 ? 1/2*((l+μ)*(l-m))^(1/2) : 0
-
-function right_shift_neighbors(A::AbstractVector{<:Integer})
-    m = length(A)
-    l = Int((m-1)/2)
-
-    # number of neighbours - only those position n so that A[n] ≥ 1 can be shifted to the right
-    k = count(@view(A[1:end-1])) do x
-                 x ≥ 1
-             end
-
-    neighbors = Vector{Vector{eltype(A)}}(undef, k)   # pre-allocate
-    val = Vector{Float64}(undef, k)
-
-    j = 1
-    @inbounds for n in 1:m-1
-        if A[n] ≥ 1
-            B = copy(A) # make a copy of A
-            B[n] -= 1
-            B[n+1] += 1
-            neighbors[j] = B
-            val[j] = B[n+1] * db(l, n-l-1, n-l)
-            j += 1
-        end
-    end
-    return neighbors, val
-end
-
-function left_shift_neighbors(A::AbstractVector{<:Integer})
-    m = length(A)
-    l = Int((m-1)/2)
-
-    # number of neighbours
-    k = count(@view(A[2:end])) do x
-                 x ≥ 1
-             end
-
-    neighbors = Vector{Vector{eltype(A)}}(undef, k)   # pre-allocate neighboring vectors
-    val = Vector{Float64}(undef, k) # pre-allocate matrix elements 
-
-    j = 1
-    @inbounds for n in 2:m
-        if A[n] ≥ 1
-            B = copy(A) # make a copy of A
-            B[n] -= 1
-            B[n-1] += 1
-            neighbors[j] = B
-            val[j] = B[n-1] * db(l, n-l-1, n-l-2)
-            j += 1
-        end
-    end
-    return neighbors, val
-end
+db(l::Int,m::Int,μ::Int) = m - μ == 1 ? -0.5 * sqrt((l-μ) * (l+m)) : m - μ == -1 ? 0.5 * sqrt((l+μ) * (l-m)) : 0.0
 
 function efficient_cartesian_concat(mmset_sep::Vector{Vector{Vector{Int}}})
     len = length(mmset_sep) # number of blocks
@@ -755,27 +678,35 @@ function mat(K::Int,ll::AbstractVector{Int},nn::AbstractVector{Int})
         if -K <= S <= K-1
             a += 1
             I = S + 1
-            block_end = 0
-            for (len_loop, l) in enumerate(lset)
+
+            copy!(μμ,mm) # create a copy of mm to modify it
+            j = dict_μμ[μμ]
+            push!(mm_idx, a)
+            push!(μμ_idx, j)
+            push!(vals, -db(K, I-1, I)) # Element in A^-
+            
+            block_end = 0            
+            for (l, n) in zip(lset, nset)
                 block_start = block_end + 1
-                block_end  += nset[len_loop] # indices for the current ll block
+                block_end  += n # indices for the current ll block
                 @views mm_loc = mm[block_start:block_end]
-                vec_mm_loc = mm2vec(mm_loc,l)
-                vec_μμset_loc, val = right_shift_neighbors(vec_mm_loc)
+    
+                # Iterate backwards to easily find the LAST occurrence of each unique state
+                for i in length(mm_loc):-1:1
+                    m = mm_loc[i]
+                    
+                    if m < l && (i == length(mm_loc) || m < mm_loc[i+1]) # where we can add by 1
+                        copy!(μμ,mm) # create a copy of mm to modify it
+                        μμ[block_start+i-1] += 1
+                        j = dict_μμ[μμ]
 
-                copy!(μμ,mm) # create a copy of mm to modify it
-                j = dict_μμ[μμ]
-                push!(mm_idx, a)
-                push!(μμ_idx, j)
-                push!(vals, -db(K, I-1, I))
+                        λ = count(==(μμ[block_start+i-1]), view(μμ, block_start:block_end))
+                        val = λ * db(l, μμ[block_start+i-1]-1, μμ[block_start+i-1])
 
-                for (t,vec_μμ_loc) in enumerate(vec_μμset_loc)
-                    μμ[block_start:block_end] = vec2mm(vec_μμ_loc) # modify the μμ copy
-                    j = dict_μμ[μμ]
-
-                    push!(mm_idx, a)
-                    push!(μμ_idx, j)
-                    push!(vals, val[t])
+                        push!(mm_idx, a)
+                        push!(μμ_idx, j)
+                        push!(vals, val) # element in B^-
+                    end
                 end
             end
         elseif S == K + 1
@@ -787,22 +718,26 @@ function mat(K::Int,ll::AbstractVector{Int},nn::AbstractVector{Int})
             a += 1
             I = K
             block_end = 0
-            for (len_loop, l) in enumerate(lset)
+            for (l, n) in zip(lset, nset)
                 block_start = block_end + 1
-                block_end  += nset[len_loop] # indices for the current ll block
+                block_end  += n # indices for the current ll block
                 @views mm_loc = mm[block_start:block_end]
-                vec_mm_loc = mm2vec(mm_loc,l)
+                
+                for i in 1:length(mm_loc)
+                    m = mm_loc[i]
+                    
+                    if m > -l && (i == 1 || m > mm_loc[i-1]) # where we can subtract by 1
+                        copy!(μμ,mm) # create a copy of mm to modify it
+                        μμ[block_start+i-1] -= 1
+                        j = dict_μμ[μμ]
 
-                vec_μμset_loc, val = left_shift_neighbors(vec_mm_loc)
+                        λ = count(==(μμ[block_start+i-1]), view(μμ, block_start:block_end))
+                        val = λ * db(l, μμ[block_start+i-1]+1, μμ[block_start+i-1])
 
-                copy!(μμ,mm)
-                for (t,vec_μμ_loc) in enumerate(vec_μμset_loc)
-                    μμ[block_start:block_end] = vec2mm(vec_μμ_loc) # modify the μμ copy
-                    j = dict_μμ[μμ]
-
-                    push!(mm_idx, a)
-                    push!(μμ_idx, j)
-                    push!(vals, val[t])
+                        push!(mm_idx, a)
+                        push!(μμ_idx, j)
+                        push!(vals, val)  # element in B^+
+                    end
                 end
             end
         else
@@ -811,11 +746,6 @@ function mat(K::Int,ll::AbstractVector{Int},nn::AbstractVector{Int})
     end
 
     @assert a == length(mmset) # Check that the number of rows is equal to the number of filtered mm's
-    triplets = unique(zip(mm_idx, μμ_idx, vals))
-    mm_idx = [i for (i, j, v) in triplets]
-    μμ_idx = [j for (i, j, v) in triplets]
-    vals = [v for (i, j, v) in triplets]
-
     mat = sparse(μμ_idx, mm_idx, vals, length(μμset), a) # Create a sparse matrix from the indices and values
     # mat = sparse(mm_idx, μμ_idx, vals, a, length(μμset)) # Create a sparse matrix from the indices and values
 
