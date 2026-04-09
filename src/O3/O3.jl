@@ -132,18 +132,30 @@ end
 
 SetLl(ll::SVector{N,Int64}) where N = union([SetLl(ll, L) for L in 0:sum(ll)]...)
 
-function Sn(nn,ll)
-    # should assert that lexicographical order
-    N = length(ll)
-    @assert length(ll) == length(nn)
-    perm_indices = [1]
-    for i in 2:N
-        if ll[i] != ll[perm_indices[end]] || nn[i] != nn[perm_indices[end]]
-            push!(perm_indices,i)
+# A new structure for efficiently constructing PermutableBlocks
+struct PermutableBlocks{N, T1, T2}
+    nn::SVector{N, T1}
+    ll::SVector{N, T2}
+end
+
+# iterate over PermutableBlocks
+function Base.iterate(iter::PermutableBlocks{N}, state=1) where N
+    state > N && return nothing
+    
+    start_idx = state
+    
+    # find block ends
+    @inbounds for i in (start_idx + 1):N
+        if iter.ll[i] != iter.ll[start_idx] || iter.nn[i] != iter.nn[start_idx]
+            # return the UnitRange and pass i as the state for the next iteration
+            return (start_idx:(i - 1), i)
         end
     end
-    return [perm_indices;N+1]
+    
+    # return when reaching the very end
+    return (start_idx:N, N+1)
 end
+get_permutable_blocks(nn::SVector{N,T}, ll::SVector{N,T}) where {N,T} = PermutableBlocks(nn, ll)
 
 # The set of integers that has the same absolute value as m
 signed_m(m::T) where T = unique([m,-m])::Vector{T}
@@ -183,23 +195,29 @@ function Base.iterate(it::LazySignedMMset{N, T}, i::Int) where {N, T}
     return newmm, i
 end 
 
+function signed_mmset(MM_abs::AbstractArray{SVector{N,Int}}, prune=true) where N
+    MM = SVector{N,Int}[]
+    for mm in MM_abs
 
-function signed_mmset(mm::T, prune=true) where {T}
-    N = length(mm); len = 2^N
-    MM = Vector{T}(undef, len)
-    σ = zeros(Bool, N)
-    for i in 1:(2^N)
-       digits!(σ, i-1, base=2)
-       newmm = [ ((2*σ[j]-1) * (mm[j] != 0) + (mm[j] == 0)) * mm[j]
-                 for j = 1:N ] 
-       MM[i] = newmm
+        if prune
+            idx = findall(!iszero, mm) # index for nonzero entries
+        else
+            idx = 1:N # when !prune, all position is allowed to flip
+        end
+
+        for k in 1:2^(length(idx)) # all possibilities - this is the prune case as before
+            μμ = copy(mm)
+            # flip (or not) the allowed positions
+            for (i, j) in pairs(idx)
+                if div(k-1, 2^(i-1)) % 2 == 1 # determine whether to flip
+                    μμ = setindex(μμ, -μμ[j], j)
+                end
+            end
+            push!(MM, μμ)
+        end
     end
-    if prune
-        return unique(MM)
-    else
-        return MM 
-    end
- end
+    return MM
+end
 
 mm_filter_single(mm::Union{Vector{Int64},SVector{N,Int64}}, k::Int64, 
                 basis::typeof(complex)) where {N} = (sum(mm) == k)
@@ -225,34 +243,55 @@ mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64,
 #
 # NB: This function assumes lexicographical ordering
 
+# Generate mm depending on PI, for !PI this fcn always generates all admissible mm's
+# and if PI, it generates ordered mm wrt input ll and nn for basis = complex
+# and for basis = real, it generates all mm s.t. abs.(mm) in abs.(MM_c)
+# ordering will be done in rAA2cAA_PI to avoid duplicate sorting
+# NOTE: this line seems not to be the bottleneck in the code anymore
+
 function mm_generate(L::Int, ll::T, nn::T; 
-                     basis = complex) where {T}
+                     basis = complex, PI = false) where {T}
     N = length(ll)
     @assert length(ll) == length(nn)
 
-    # No matter PI or not, this fcn always generates all admissible mm's
-    # and if PI, they are just filtered in _coupling_coeffs
-    # NOTE: this line is the bottleneck in the code, because it generates 
-    #       the signed mm set which requires a lot of small allocations.
-
     # the generator version seems to be type unstable.
     # MM_c = ([ T(I.I) for I in ci if mm_filter(T(I.I), L, basis) ])::Vector{T}
-    ci = CartesianIndices(ntuple(t -> -ll[t]:ll[t], N))
-    MM_c = T[] 
-    for I in ci
-        x = T(I.I)
-        if mm_filter(x, L, basis)
-            push!(MM_c, x)
+    if !PI
+        # LIWEI: I think there might be a faster way to do this, but the !PI case in not my focus
+        ci = CartesianIndices(ntuple(t -> -ll[t]:ll[t], N))
+        MM_c = T[] 
+        for I in ci
+            x = T(I.I)
+            if mm_filter(x, L, basis)
+                push!(MM_c, x)
+            end
         end
+    elseif PI
+        permutable_blocks = get_permutable_blocks(nn, ll)
+        lset = Int[] # l's of the blocks
+        nset = Int[] # lengths of the blocks
+
+        for block in permutable_blocks
+            push!(lset, ll[first(block)])
+            push!(nset, length(block))
+        end
+
+        len = length(lset) # number of blocks
+        @assert length(lset) == length(nset)
+        
+        # @time mmset_sep = [ vec2mm.(sep(lset[i],nset[i])) for i in 1:len ] # separated mm's for each l and N
+        mmset_sep = [all_mm(lset[i], nset[i]) for i in 1:length(lset)]  # separated mm's for each l and N - equivalent to the above but is faster
+        MM_c = efficient_cartesian_concat(mmset_sep) # cartesian product of mmset_sep
+        MM_c = SVector{N,Int}.(MM_c)
     end
 
     if basis === complex
         return MM_c
     elseif basis === real 
         # NOTE: lots of allocations here that could be improved if needed
+        # LIWEI: This seems to have been improved
         MM_abs = unique([ abs.(mm) for mm in MM_c ])
-        MM_r = reduce(vcat, signed_mmset(mm, false) for mm in MM_abs)
-        return unique(MM_r)
+        return signed_mmset(MM_abs)
     end
     error("Unknown basis type: $basis")
 end
@@ -331,14 +370,16 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
     return _coupling_coeffs(_L, _ll, _nn; PI = PI, basis = basis, )
 end
 
-function _sort(x::T, permutable_blocks::Vector{Vector{Int}}) where T
+function _sort(x::SVector{N,T}, permutable_blocks::PermutableBlocks) where {N,T}
     # Sorts the vector x according to the indices in permutable_blocks
     # This is used to sort the equivalent classes of m's
-    x = Vector{eltype(x)}(x)
+    x = MVector(x)
+    
     for block in permutable_blocks
-        x[block] = sort(x[block])
+        @views sort!(x[block])
     end
-    return T(x)
+    
+    return SVector{N,T}(x)
 end
 
 
@@ -421,20 +462,19 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             Ure_r = real(Ure_c * C_r2c)
             return Ure_r, [ mm[inv_perm] for mm in MM_r ]
         else
-            S = Sn(nn,ll)
-            MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
+            # S = Sn(nn,ll)
+            MM_r = mm_generate(L, ll, nn; basis=basis, PI = true) # all admissible mm's wrt ordered cSH mm's
             Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex) # cSH-based couplings
-            C_r2c, MM_reduced = rAA2cAA_PI(SVector{N, Int}.(MM_c),MM_r,ll,nn) # r2c map and the ordered mm set
+            C_r2c, MM_reduced = rAA2cAA_PI(SVector{N, Int}.(MM_c),SVector{N, Int}.(MM_r),ll,nn) # r2c map and the ordered mm set
             # TODO: coupling_coeffs and mm_generate return different 
             #       format of MM's which may need to be fixed
             
             # Do the transformation to the complex coupling 
             # because it has a smaller size compared to the real one
-            if L != 0
-                CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
-                Urpe_c = map(u -> CL * u, Urpe_c)
-            end
-            Urpe_r = real.(Urpe_c * C_r2c)
+            
+            # Combine the two operations 
+            CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
+            Urpe_r = assemble_U(Urpe_c, CL, C_r2c)
             return Urpe_r, [ mm[inv_perm] for mm in MM_reduced ]
 
             # NOTE: this block has a type instability; unclear why.
@@ -465,6 +505,76 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     end
     error("Unknown basis type: $basis")
 end
+
+function assemble_U(U::AbstractMatrix{SVector{L, Float64}}, 
+                          CL::SMatrix{L, L, ComplexF64}, 
+                          C::SparseMatrixCSC{ComplexF64, Int}) where L
+    a, b = size(U)
+    _, c = size(C)
+    
+    # Preallocate the final matrix (we know its real)
+    R = zeros(SVector{L, Float64}, a, c)
+    
+    # Allocate a small workspace for a single column
+    W = zeros(SVector{L, ComplexF64}, a)
+    
+    # Extract real and imaginary parts of CL
+    # to skip calculating the imaginary part of (CL * W), which we know is 0
+    CL_R = real.(CL)
+    CL_I = imag.(CL)
+    
+    rows = rowvals(C)
+    vals = nonzeros(C)  
+    
+    for j in 1:c
+        fill!(W, zero(SVector{L, ComplexF64}))
+        
+        # W = U * C[:, j]
+        for p in nzrange(C, j)
+            k = rows[p]
+            v = vals[p]
+            
+            for i in 1:a
+                W[i] += U[i, k] * v
+            end
+        end
+        
+        # Multiply CL and extract real part: R[:, j] = Re(CL * W)
+        # We use Re(CL * W) = CL_R * Re(W) - CL_I * Im(W) to halve the operations
+        for i in 1:a
+            w = W[i]
+            R[i, j] = CL_R * real(w) - CL_I * imag(w)
+        end
+    end
+    
+    return R
+end
+
+# Case L = 0
+function assemble_U(U::AbstractMatrix{Float64}, 
+                          CL::AbstractMatrix,
+                          C::SparseMatrixCSC{ComplexF64, Int})
+    a, b = size(U)
+    _, c = size(C)
+    
+    R = zeros(Float64, a, c)
+    
+    rows = rowvals(C)
+    vals = nonzeros(C)
+    
+    for j in 1:c
+        for p in nzrange(C, j)
+            k = rows[p]
+            vr = real(vals[p]) 
+            for i in 1:a
+                R[i, j] += U[i, k] * vr
+            end
+        end
+    end
+    
+    return R
+end
+
 
 ## Codes for the new construction
 
@@ -584,16 +694,22 @@ end
 # TODO: I guess I should swap mm and μμ to make the notation more consistent as before
 # In addition, in the function mat, the matrix is defined row-wise (Fig (1) in the manuscript). 
 function mat(K::Int,ll::AbstractVector{Int},nn::AbstractVector{Int})
-    idx = Sn(nn,ll) # separable blocks
-    lset = ll[idx[1:end-1]] # l's of the blocks
-    nset = [ idx[i] - idx[i-1] for i in 2:length(idx) ] # lengths of the blocks
+    permutable_blocks = get_permutable_blocks(nn, ll)
+    lset = Int[] # l's of the blocks
+    nset = Int[] # lengths of the blocks
+
+    for block in permutable_blocks
+        push!(lset, ll[first(block)])
+        push!(nset, length(block))
+    end
 
     len = length(lset) # number of blocks
     @assert length(lset) == length(nset)
     
-    # @time mmset_sep = [ vec2mm.(sep(lset[i],nset[i])) for i in 1:len ] # separated mm's for each l and N
-    mmset_sep = [all_mm(lset[i], nset[i]) for i in 1:length(lset)]  # separated mm's for each l and N - equivalent to the above but is faster
-    mmset = efficient_cartesian_concat(mmset_sep) # cartesian product of mmset_sep
+    # # @time mmset_sep = [ vec2mm.(sep(lset[i],nset[i])) for i in 1:len ] # separated mm's for each l and N
+    # mmset_sep = [all_mm(lset[i], nset[i]) for i in 1:length(lset)]  # separated mm's for each l and N - equivalent to the above but is faster
+    # mmset = efficient_cartesian_concat(mmset_sep) # cartesian product of mmset_sep
+    mmset = mm_generate(K, ll, nn; basis = complex, PI = true)
 
     μμset = mmset[findall(x -> abs(sum(x)) <= K, mmset)]
     # mmset = K != 0 ? mmset[findall(x -> abs(sum(x)) <= K + 1, mmset)] : mmset[findall(x -> abs(sum(x)) == K + 1, mmset)]
@@ -725,7 +841,7 @@ function nullspace_upper_sparse(U::AbstractMatrix{T}) where T<:Number
     return N ./ norm(N)
 end
 
-function solver_inner(M::AbstractMatrix{T}, mmset::Vector{Vector{Int}}, μμset::Vector{Vector{Int}}) where T<:Number
+function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμset::Vector{SVector{N,Int}}) where {N,T<:Number}
     M = sparse(M')
     C = zeros(Float64, size(M, 2), size(M, 2) - size(M, 1))
 
@@ -810,7 +926,7 @@ function coupling_coeffs_new(K::Int, ll::AbstractVector{<:Int}, nn::AbstractVect
     end
 
     if all(iszero, ll) && K == 0 # Only in this trivial case we don't have the following matrix
-        return [1;;], [SVector{N, Int}(zeros(N)), ]
+        return [1.0;;], [SVector{N, Int}(zeros(N)), ]
     end
     
     M, μμset, mmset = mat(K, ll, nn) # The matrix that we will use to compute the RPI basis
