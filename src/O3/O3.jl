@@ -132,7 +132,10 @@ end
 
 SetLl(ll::SVector{N,Int64}) where N = union([SetLl(ll, L) for L in 0:sum(ll)]...)
 
-# A new structure for efficiently constructing PermutableBlocks
+# A new structure for efficiently constructing PermutableBlocks for ordered (nn,ll)
+# E.g., for nn = [1,2,1,1,2], ll = [1,1,2,2,2], the permutable blocks
+# are 1:1, 2:2, 3:4, 5:5.
+# To see that, run: for pb in PermutableBlocks(nn,ll); @show pb; end
 struct PermutableBlocks{N, T1, T2}
     nn::SVector{N, T1}
     ll::SVector{N, T2}
@@ -249,19 +252,16 @@ mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64,
 # ordering will be done in rAA2cAA_PI to avoid duplicate sorting
 # NOTE: this line seems not to be the bottleneck in the code anymore
 
-function mm_generate(L::Int, ll::T, nn::T; 
-                     basis = complex, PI = false) where {T}
-    N = length(ll)
-    @assert length(ll) == length(nn)
-
+function mm_generate(L::Int, ll::SVector{N,Int}, nn::SVector{N,Int}; 
+                     basis = complex, PI = false) where {N}
     # the generator version seems to be type unstable.
     # MM_c = ([ T(I.I) for I in ci if mm_filter(T(I.I), L, basis) ])::Vector{T}
     if !PI
         # LIWEI: I think there might be a faster way to do this, but the !PI case in not my focus
         ci = CartesianIndices(ntuple(t -> -ll[t]:ll[t], N))
-        MM_c = T[] 
+        MM_c = SVector{N,Int}[] 
         for I in ci
-            x = T(I.I)
+            x = SVector{N,Int}(I.I)
             if mm_filter(x, L, basis)
                 push!(MM_c, x)
             end
@@ -278,11 +278,8 @@ function mm_generate(L::Int, ll::T, nn::T;
 
         len = length(lset) # number of blocks
         @assert length(lset) == length(nset)
-        
-        # @time mmset_sep = [ vec2mm.(sep(lset[i],nset[i])) for i in 1:len ] # separated mm's for each l and N
-        mmset_sep = [all_mm(lset[i], nset[i]) for i in 1:length(lset)]  # separated mm's for each l and N - equivalent to the above but is faster
-        MM_c = efficient_cartesian_concat(mmset_sep) # cartesian product of mmset_sep
-        MM_c = SVector{N,Int}.(MM_c)
+
+        MM_c = all_mm_blocks(lset,nset,Val(N))
     end
 
     if basis === complex
@@ -391,12 +388,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
     nn, ll, inv_perm = lexi_ord(nn, ll)
-
-    Lset = SetLl(ll,L)
-    r = length(Lset)
     T = L == 0 ? Float64 : SVector{2L+1,Float64}
-
-    if r == 0; return zeros(T, 0, 0), SVector{N, Int}[]; end
 
     # there can only be non-trivial coupling coeffs if ∑ᵢ lᵢ + L is even
     if isodd(sum(ll)+L) 
@@ -405,6 +397,13 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
      
     if basis === complex 
         if !PI
+            # TODO: The function SetLl is not type stable.
+            # If we implement the !PI case also with the new method,
+            # it be removed entirely.
+            Lset = SetLl(ll,L)
+            r = length(Lset)
+            if r == 0; return zeros(T, 0, 0), SVector{N, Int}[]; end
+
             MM = mm_generate(L, ll, nn; basis=basis) # all m's
             UMatrix = zeros(T, r, length(MM)) # Matrix containing the coupling coefs D
             for (j,mm) in enumerate(MM)
@@ -414,6 +413,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             end 
             return UMatrix, [mm[inv_perm] for mm in MM]
         else
+            # Old method is commented out
             # # permutation blocks - within which the nn and ll are identical
             # S = Sn(nn,ll)
             # permutable_blocks = [ Vector([S[i]:S[i+1]-1]...) for i in 1:length(S)-1]
@@ -580,42 +580,9 @@ end
 # the value of derivative wrt beta at the origin for certain l,m,μ
 db(l::Int,m::Int,μ::Int) = m - μ == 1 ? -0.5 * sqrt((l-μ) * (l+m)) : m - μ == -1 ? 0.5 * sqrt((l+μ) * (l-m)) : 0.0
 
-function efficient_cartesian_concat(mmset_sep::Vector{Vector{Vector{Int}}})
-    len = length(mmset_sep) # number of blocks
-    sizes = map(length, mmset_sep)
-    total = prod(sizes) # predict the final length
-    
-    # Precompute block sizes for indexing
-    block_sizes = [prod(sizes[i+1:end]) for i in 1:len]
-    
-    # Precompute result vector lengths
-    block_lengths = map(v -> length(v[1]), mmset_sep)  # assuming uniform length within each block
-    total_length = sum(block_lengths)
-
-    mmset = Vector{Vector{Int}}(undef, total)
-
-    for i in 0:total-1
-        temp = Vector{Int}(undef, total_length)
-        pos = 1
-        idx = i
-        for d in 1:len
-            q, r = divrem(idx, block_sizes[d])
-            vec = mmset_sep[d][q+1]
-            for v in vec
-                temp[pos] = v
-                pos += 1
-            end
-            idx = r
-        end
-        mmset[i+1] = temp
-    end
-
-    return mmset
-end
-
 # TODO: I guess I should swap mm and μμ to make the notation more consistent as before
 # In addition, in the function mat, the matrix is defined row-wise (Fig (1) in the manuscript). 
-function mat(K::Int,ll::AbstractVector{Int},nn::AbstractVector{Int})
+function mat(K::Int,ll::SVector{N,Int},nn::SVector{N,Int}) where N
     permutable_blocks = get_permutable_blocks(nn, ll)
     lset = Int[] # l's of the blocks
     nset = Int[] # lengths of the blocks
@@ -644,7 +611,7 @@ function mat(K::Int,ll::AbstractVector{Int},nn::AbstractVector{Int})
     sort!(μμset, by = sum) # Sort μμset by the sum of elements in μμ, and then lexicographically
     sort!(mmset, by = sum) # Sort mmset by the sum of elements in mm, and then lexicographically
 
-    dict_μμ = Dict{Vector{Int}, Int}(μμset[i] => i for i in 1:length(μμset))
+    dict_μμ = Dict{SVector{N,Int}, Int}(μμset[i] => i for i in 1:length(μμset))
 
     # r = 0 # Number of rows in the matrix
     # for mm in mmset
@@ -844,11 +811,11 @@ function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμs
     return C
 end
 
-function coupling_coeffs_new(K::Int, ll::AbstractVector{<:Int}, nn::AbstractVector{<:Int})
+# Core function that generates the L-equivariant CCs for ordered (nn,ll)
+function coupling_coeffs_new(K::Int, ll::SVector{N,Int}, nn::SVector{N,Int}) where N
     # TODO: notation inconsistency: K and L both represent the order of equivariance
     # TODO: reconsider if ll and nn here should be made to be SVector{N, Int}
     T = K == 0 ? Float64 : SVector{2K+1,Float64}
-    N = length(ll)
     @assert length(ll) == length(nn)
 
     if K > sum(ll) # if the matrix is square, we can use the nullspace function
@@ -910,6 +877,50 @@ function embed_in_onehot(C::AbstractMatrix{T}, mmset::AbstractVector, ::Val{K}) 
     return C_vec
 end
 
-all_mm(l::Int, N::Int) = collect(with_replacement_combinations(-l:l, N))
+@inline function _fill_mm!(out, current, lset, nset, block, local_depth, global_depth, min_val, idx)
+    # 1. Base Case: The vector is completely filled
+    if global_depth > length(current)
+        @inbounds out[idx] = SVector(current)
+        return idx + 1
+    end
+
+    # 2. Block Transition: Current block is full, jump to the next block
+    if local_depth > @inbounds nset[block]
+        next_l = @inbounds lset[block + 1]
+        return _fill_mm!(out, current, lset, nset, block + 1, 1, global_depth, -next_l, idx)
+    end
+
+    # 3. Recursive Step: Iterate valid numbers and dive deeper
+    l = @inbounds lset[block]
+    for v in min_val:l
+        @inbounds current[global_depth] = v
+        idx = _fill_mm!(out, current, lset, nset, block, local_depth + 1, global_depth + 1, v, idx)
+    end
+
+    return idx
+end
+"""
+all_mm_blocks(lset::AbstractVector{Int}, nset::AbstractVector{Int}, ::Val{N}) where N
+
+Generate the set of equivalent classes given ll with minimal partition
+[ repeat(lset[i], nset[i]) for i = 1:Nblock ]
+
+N = sum(nset) should be given to make the size of the output explicit.
+"""
+# A version that gets rid of the Cartesian product, avoiding type
+# instablity in _coupling_coeffs.
+function all_mm_blocks(lset::AbstractVector{Int},nset::AbstractVector{Int},::Val{N}) where N
+    @assert length(lset) == length(nset)
+    @assert sum(nset) == N
+
+    # pre-allocate since we know the size
+    total = prod(binomial(2*l+n, n) for (l,n) in zip(lset,nset))
+    out = Vector{SVector{N, Int}}(undef, total)
+    current = MVector{N, Int}(undef)
+
+    _fill_mm!(out, current, lset, nset, 1, 1, 1, -lset[1], 1)
+    # _fill_blocks!(out, current, lset, nset, 1, 0, 1)
+    return out
+end
 
 end
