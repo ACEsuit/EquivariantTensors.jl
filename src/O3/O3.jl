@@ -638,15 +638,13 @@ function mat(K::Int,ll::SVector{N,Int},nn::SVector{N,Int}) where N
     # sizehint!(vals, (2K+1)*r)
     # But this estimation is loose.
 
-    μμ = similar(mmset[1]) # allocate μμ once
     for mm in mmset
         S = sum(mm)
         if -K <= S <= K-1
             a += 1
             I = S + 1
 
-            copy!(μμ,mm) # create a copy of mm to modify it
-            j = dict_μμ[μμ]
+            j = dict_μμ[mm]
             push!(mm_idx, a)
             push!(μμ_idx, j)
             push!(vals, -db(K, I-1, I)) # Element in A^-
@@ -655,19 +653,17 @@ function mat(K::Int,ll::SVector{N,Int},nn::SVector{N,Int}) where N
             for (l, n) in zip(lset, nset)
                 block_start = block_end + 1
                 block_end  += n # indices for the current ll block
-                @views mm_loc = mm[block_start:block_end]
     
                 # Iterate backwards to easily find the LAST occurrence of each unique state
-                for i in length(mm_loc):-1:1
-                    m = mm_loc[i]
+                for i in block_end:-1:block_start
+                    m = mm[i]
                     
-                    if m < l && (i == length(mm_loc) || m < mm_loc[i+1]) # where we can add by 1
-                        copy!(μμ,mm) # create a copy of mm to modify it
-                        μμ[block_start+i-1] += 1
+                    if m < l && (i == block_end || m < mm[i+1]) # where we can add by 1
+                        μμ = setindex(mm,m+1,i)
                         j = dict_μμ[μμ]
 
-                        λ = count(==(μμ[block_start+i-1]), view(μμ, block_start:block_end))
-                        val = λ * db(l, μμ[block_start+i-1]-1, μμ[block_start+i-1])
+                        λ = count(==(μμ[i]), view(μμ, block_start:block_end))
+                        val = λ * db(l, μμ[i]-1, μμ[i])
 
                         push!(mm_idx, a)
                         push!(μμ_idx, j)
@@ -687,18 +683,16 @@ function mat(K::Int,ll::SVector{N,Int},nn::SVector{N,Int}) where N
             for (l, n) in zip(lset, nset)
                 block_start = block_end + 1
                 block_end  += n # indices for the current ll block
-                @views mm_loc = mm[block_start:block_end]
-                
-                for i in 1:length(mm_loc)
-                    m = mm_loc[i]
+
+                for i in block_start:block_end
+                    m = mm[i]
                     
-                    if m > -l && (i == 1 || m > mm_loc[i-1]) # where we can subtract by 1
-                        copy!(μμ,mm) # create a copy of mm to modify it
-                        μμ[block_start+i-1] -= 1
+                    if m > -l && (i == block_start || m > mm[i-1]) # where we can subtract by 1
+                        μμ = setindex(mm,mm[i]-1,i)
                         j = dict_μμ[μμ]
 
-                        λ = count(==(μμ[block_start+i-1]), view(μμ, block_start:block_end))
-                        val = λ * db(l, μμ[block_start+i-1]+1, μμ[block_start+i-1])
+                        λ = count(==(μμ[i]), view(μμ, block_start:block_end))
+                        val = λ * db(l, μμ[i]+1, μμ[i])
 
                         push!(mm_idx, a)
                         push!(μμ_idx, j)
@@ -712,10 +706,9 @@ function mat(K::Int,ll::SVector{N,Int},nn::SVector{N,Int}) where N
     end
 
     @assert a == length(mmset) # Check that the number of rows is equal to the number of filtered mm's
-    mat = sparse(μμ_idx, mm_idx, vals, length(μμset), a) # Create a sparse matrix from the indices and values
-    # mat = sparse(mm_idx, μμ_idx, vals, a, length(μμset)) # Create a sparse matrix from the indices and values
+    M = sparse(μμ_idx, mm_idx, vals, length(μμset), a) # Create a sparse matrix from the indices and values
 
-    return mat, μμset, mmset # mat[1:a,:] # [mat; mat_minus; mat_plus]
+    return M, μμset, mmset
 end
 
 function nullspace_upper_sparse(U::AbstractMatrix{T}) where T<:Number
