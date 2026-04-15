@@ -316,8 +316,8 @@ function lexi_ord(nn::SVector{N, Int}, ll::SVector{N, Int}) where N
 end
 
 """
-    O3.coupling_coeffs(L, ll, nn; PI, basis)
-    O3.coupling_coeffs(L, ll; PI, basis)
+    O3.coupling_coeffs(L, ll, nn; PI, basis, refl_sym)
+    O3.coupling_coeffs(L, ll; PI, basis, refl_sym)
 
 Compute coupling coefficients for the spherical harmonics basis, where 
 - `L` must be an `Integer`;
@@ -327,10 +327,15 @@ corresponding tensor symmetric); default is `true` when `nn` is provided
 and `false` when `nn` is not provided.
 - `basis`: which basis is being coupled, default is `complex`, alternative
 choice is `real`, which is compatible with the `SpheriCart.jl` convention.  
+- `refl_sym`: behaviour of the basis under reflection, options are Symbols
+`:sym` and `:asym`, which indicate reflection symmetry and anti-symmetry, resp.
+default is `nothing`, which will later be assigned as `sym` for even `L` and 
+`asym` for odd `L`.  
 """
 function coupling_coeffs(L::Integer, ll, nn = nothing; 
                          PI = !(isnothing(nn)), 
-                         basis = complex)
+                         basis = complex,
+                         refl_sym::Union{Symbol,Nothing} = nothing)
 
     # convert L into the format required internally 
     _L = Int(L) 
@@ -363,7 +368,7 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
         end
     end 
     
-    return _coupling_coeffs(_L, _ll, _nn; PI = PI, basis = basis, )
+    return _coupling_coeffs(_L, _ll, _nn; PI = PI, basis = basis, refl_sym = refl_sym)
 end
 
 function _sort(x::SVector{N,T}, permutable_blocks::PermutableBlocks) where {N,T}
@@ -382,8 +387,15 @@ end
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
 function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
-                          PI = true, basis = complex) where N
-
+                          PI = true, basis = complex, refl_sym::Union{Symbol,Nothing} = nothing) where N
+    refl_sym === nothing && (refl_sym = iseven(L) ? :sym : :asym)
+    if refl_sym == :sym
+        ll_filter = iseven
+    elseif refl_sym == :asym
+        ll_filter = isodd
+    else
+        error("Unknown reflection symmetry type: $refl_sym")
+    end
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
@@ -391,7 +403,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     T = L == 0 ? Float64 : SVector{2L+1,Float64}
 
     # there can only be non-trivial coupling coeffs if ∑ᵢ lᵢ + L is even
-    if isodd(sum(ll)+L) 
+    if !ll_filter(sum(ll)) 
         return zeros(T, 0, 0), SVector{N, Int}[]
     end
      
