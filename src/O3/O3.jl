@@ -775,7 +775,6 @@ function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμs
         nzval  = M.nzval
         
         # Perform C_curr = B * C_prev directly without allocating B!
-        # Because we are using C_T, curr_col_block and prev_col_block are COLUMNS
         for (j_idx, j_global) in enumerate(prev_col_block)
             
             # Loop only over the non-zeros in column j_global of M_sparse
@@ -788,7 +787,6 @@ function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμs
                     
                     val = nzval[p] * a
                     
-                    # Multiply into our contiguous C_T array
                     # This replaces mul! and is 100% allocation-free
                     for k in 1:size(M, 2) - size(M, 1)
                         C[k, curr_col_block[i_idx]] += val * C[k, prev_col_block[j_idx]]
@@ -800,8 +798,8 @@ function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμs
         prev_col_block = curr_col_block
     end
     
-    # Transpose back at the very end to return your expected dimensions!
-    return C
+    # Ensure that the output is orthonormal
+    return cholesky(Symmetric(C * C')).L \ C
 end
 
 # Core function that generates the L-equivariant CCs for ordered (nn,ll)
