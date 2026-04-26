@@ -466,21 +466,10 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             
             # Do the transformation to the complex coupling 
             # because it has a smaller size compared to the real one
-            if L != 0
-                CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
-                Ure_c = map(u -> CL * u, Ure_c)
-            end
 
-            Ure_r = Ure_c * C_r2c
-            if all(u -> isapprox(imag(u), 0; atol=1e-12),Iterators.flatten(Ure_r))
-                @show refl_sym, (iseven(L) ? :sym : :asym)
-                Ure_r = real.(Ure_r)
-            elseif all(u -> isapprox(real(u), 0; atol=1e-12),Iterators.flatten(Ure_r))
-                # @show refl_sym, (iseven(L) ? :sym : :asym)
-                Ure_r = imag.(Ure_r)
-            else
-                @warn("Non-real couplings for L = $L, ll = $ll, nn = $nn, refl_sym = $refl_sym")
-            end
+            # Combine the two operations 
+            CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
+            Ure_r = assemble_U(Ure_c, CL, C_r2c)
             return Ure_r, [ mm[inv_perm] for mm in MM_r ]
         else
             # S = Sn(nn,ll)
@@ -533,19 +522,41 @@ function assemble_U(U::AbstractMatrix{SVector{L, Float64}},
     a, b = size(U)
     _, c = size(C)
     
-    # Preallocate the final matrix (we know its real)
+    # Preallocate the final matrix (we know it's real)
     R = zeros(SVector{L, Float64}, a, c)
     
     # Allocate a small workspace for a single column
     W = zeros(SVector{L, ComplexF64}, a)
     
     # Extract real and imaginary parts of CL
-    # to skip calculating the imaginary part of (CL * W), which we know is 0
+    # to skip calculating the imaginary part (or real part) of (CL * W), which we know is 0
     CL_R = real.(CL)
     CL_I = imag.(CL)
     
     rows = rowvals(C)
     vals = nonzeros(C)  
+
+    # check the first non-zero element in the output 
+    # to see if the result is real or purely imaginary
+    is_real = true
+    for j in 1:c
+        if nzrange(C, j).start <= nzrange(C, j).stop
+            # Compute W[1] exactly for this first valid column
+            w1 = zero(SVector{L, ComplexF64})
+            for p in nzrange(C, j)
+                w1 += U[1, rows[p]] * vals[p]
+            end
+            
+            # CL multiplication
+            test_val = CL * w1
+
+            # if non-zero decision the type
+            if maximum(abs, test_val) > 1e-12
+                is_real = maximum(abs, imag.(test_val)) < 1e-12
+                break
+            end
+        end
+    end
     
     for j in 1:c
         fill!(W, zero(SVector{L, ComplexF64}))
@@ -560,11 +571,20 @@ function assemble_U(U::AbstractMatrix{SVector{L, Float64}},
             end
         end
         
-        # Multiply CL and extract real part: R[:, j] = Re(CL * W)
-        # We use Re(CL * W) = CL_R * Re(W) - CL_I * Im(W) to halve the operations
-        for i in 1:a
-            w = W[i]
-            R[i, j] = CL_R * real(w) - CL_I * imag(w)
+        if is_real
+            # Multiply CL and extract real part: R[:, j] = Re(CL * W)
+            # We use Re(CL * W) = CL_R * Re(W) - CL_I * Im(W) to halve the operations
+            for i in 1:a
+                w = W[i]
+                R[i, j] = CL_R * real(w) - CL_I * imag(w)
+            end
+        else
+            # or imaginary part R[:, j] = Im(CL * W)
+            # We use Im(CL * W) = CL_R * Im(W) - CL_I * Re(W)
+            for i in 1:a
+                w = W[i]
+                R[i, j] = CL_R * imag(w) + CL_I * real(w)
+            end
         end
     end
     
@@ -582,13 +602,31 @@ function assemble_U(U::AbstractMatrix{Float64},
     
     rows = rowvals(C)
     vals = nonzeros(C)
+
+    # check the first non-zero
+    is_real = true
+    for j in 1:c
+        if nzrange(C, j).start <= nzrange(C, j).stop
+            w1 = zero(ComplexF64)
+            for p in nzrange(C, j)
+                w1 += U[1, rows[p]] * vals[p]
+            end
+            
+            test_val = w1 
+
+            if abs(test_val) > 1e-12
+                is_real = abs(imag(test_val)) < 1e-12
+                break
+            end
+        end
+    end
     
     for j in 1:c
         for p in nzrange(C, j)
             k = rows[p]
-            vr = real(vals[p]) 
+            v = is_real ? real(vals[p]) : imag(vals[p]) 
             for i in 1:a
-                R[i, j] += U[i, k] * vr
+                R[i, j] += U[i, k] * v
             end
         end
     end
