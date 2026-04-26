@@ -459,7 +459,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     elseif basis === real 
         if !PI
             MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
-            Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, basis=complex)
+            Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, basis=complex, refl_sym = refl_sym)
             C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r) 
             # TODO: coupling_coeffs and mm_generate return different 
             #       format of MM's which may need to be fixed
@@ -470,12 +470,17 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
                 CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
                 Ure_c = map(u -> CL * u, Ure_c)
             end
-            Ure_r = real(Ure_c * C_r2c)
+            if norm(real(Ure_c * C_r2c) - Ure_c * C_r2c)≤1e-12
+                Ure_r = real(Ure_c * C_r2c) 
+            else
+                Ure_r = Ure_c * C_r2c 
+                @warn("Non-real couplings for L = $L, ll = $ll, nn = $nn, refl_sym = $refl_sym, nob = $(size(Ure_c,1))")
+            end
             return Ure_r, [ mm[inv_perm] for mm in MM_r ]
         else
             # S = Sn(nn,ll)
             MM_r = mm_generate(L, ll, nn; basis=basis, PI = true) # all admissible mm's wrt ordered cSH mm's
-            Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex) # cSH-based couplings
+            Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex, refl_sym = refl_sym) # cSH-based couplings
             C_r2c, MM_reduced = rAA2cAA_PI(SVector{N, Int}.(MM_c),SVector{N, Int}.(MM_r),ll,nn) # r2c map and the ordered mm set
             # TODO: coupling_coeffs and mm_generate return different 
             #       format of MM's which may need to be fixed
