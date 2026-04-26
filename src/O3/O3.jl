@@ -470,11 +470,16 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
                 CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
                 Ure_c = map(u -> CL * u, Ure_c)
             end
-            if norm(real(Ure_c * C_r2c) - Ure_c * C_r2c)≤1e-12
-                Ure_r = real(Ure_c * C_r2c) 
+
+            Ure_r = Ure_c * C_r2c
+            if all(u -> isapprox(imag(u), 0; atol=1e-12),Iterators.flatten(Ure_r))
+                @show refl_sym, (iseven(L) ? :sym : :asym)
+                Ure_r = real.(Ure_r)
+            elseif all(u -> isapprox(real(u), 0; atol=1e-12),Iterators.flatten(Ure_r))
+                # @show refl_sym, (iseven(L) ? :sym : :asym)
+                Ure_r = imag.(Ure_r)
             else
-                Ure_r = Ure_c * C_r2c 
-                @warn("Non-real couplings for L = $L, ll = $ll, nn = $nn, refl_sym = $refl_sym, nob = $(size(Ure_c,1))")
+                @warn("Non-real couplings for L = $L, ll = $ll, nn = $nn, refl_sym = $refl_sym")
             end
             return Ure_r, [ mm[inv_perm] for mm in MM_r ]
         else
