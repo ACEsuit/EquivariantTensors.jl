@@ -29,174 +29,113 @@ elseif ___O3_TESTS___ == :large
    ORDmax = 5 
 end
 
-# nnll_set has nothing to do with L - move outside the loop
-nnll_list = [] 
-
-for ORD = 2:ORDmax
-   for ll in with_replacement_combinations(1:lmax, ORD) 
-      # 0 or 1 above ?
-      if sum(ll) > 2 * lmax; continue; end 
-      for Inn in CartesianIndices( ntuple(_->1:nmax, ORD) )
-         nn = [ Inn.I[α] for α = 1:ORD ]
-         if sum(nn) > sum(1:nmax); continue; end
-         nnll = [ (ll[α], nn[α]) for α = 1:ORD ]
-         if !issorted(nnll); continue; end
-         push!(nnll_list, (SVector(nn...), SVector(ll...)))
-      end
-   end
-end
-
-long_nnll_list = nnll_list 
-short_nnll_list = nnll_list[1:10:end]
-ultra_short_nnll_list = nnll_list[1:100:end]
-
-verbose = true  # So that we write explicitly what each tests for
 
 @info("Equivariance and Linear Independence of coupled cSH & rSH based basis")
 
-nnll_list = ultra_short_nnll_list
+for L = 0:Lmax 
+   global Lmax, lmax, nmax, ORDmax
+   local θ, ll, Ure, Ure_r, U_rpe, U_rpe_r, Mll, Mll_r 
+   local X, Q, B1, B2, B3, B4, B5, B6, B7, B8
+   local rk, rk_r, ntest
+   local BB, BB_r, BB_sym, BB_sym_r
 
-# Unified test code for L, ll and nn
-function equivariant_test(L, ll, nn = nothing )
-   default_sym = iseven(L) ? :sym : :asym
-   ll = shuffle(ll)
-   # @show nn, ll
-   N = length(ll)
-   if nn!= nothing 
-      nn = shuffle(nn)
-      @assert length(ll) == length(nn)
+   # generate an nnll list for each L for testing
+   nnll_list = [] 
+
+   for ORD = 2:ORDmax
+      for ll in with_replacement_combinations(1:lmax, ORD) 
+         # 0 or 1 above ?
+         if sum(ll) > 2 * lmax; continue; end 
+         for Inn in CartesianIndices( ntuple(_->1:nmax, ORD) )
+            nn = [ Inn.I[α] for α = 1:ORD ]
+            if sum(nn) > sum(1:nmax); continue; end
+            nnll = [ (ll[α], nn[α]) for α = 1:ORD ]
+            if !issorted(nnll); continue; end
+            push!(nnll_list, (SVector(nn...), SVector(ll...)))
+         end
+      end
    end
 
-   # coupling coeffs with default reflection symmetry
-   Ure_default, Mll_default = coupling_coeffs(L, ll, nn; PI = false) # cSH based re_basis
-   Ure_r_default, Mll_r_default = coupling_coeffs(L, ll, nn; PI = false, basis = real) # rSH based re_basis
-   Urpe_default, Mll_rpe_default = coupling_coeffs(L, ll, nn) # cSH based rpe_basis
-   Urpe_r_default, Mll_r_rpe_default = coupling_coeffs(L, ll, nn; basis = real) # rSH based rpe_basis
-   
-   for refl_sym in [:sym, :asym]
-      ll_filter = refl_sym == :sym ? iseven : isodd
-      pow = refl_sym == :sym ? 0 : 1 # if :sym, F(R) = det(Q)^0 D(Q)F(QR); if :asym F(R) = det(Q)^1 D(Q)F(QR)
-      
-      Ure, Mll = coupling_coeffs(L, ll, nn; PI = false, refl_sym = refl_sym) # cSH based re_basis
-      Ure_r, Mll_r = coupling_coeffs(L, ll, nn; PI = false, basis = real, refl_sym = refl_sym) # rSH based re_basis
-      Urpe, Mll_rpe = coupling_coeffs(L, ll, nn; refl_sym = refl_sym) # cSH based rpe_basis
-      Urpe_r, Mll_r_rpe = coupling_coeffs(L, ll, nn; basis = real, refl_sym = refl_sym) # rSH based rpe_basis
-      
-      if !ll_filter(sum(ll))
-         # println()
-         # @info("Checking that inadmissible nnll just return empty bases")
+   long_nnll_list = nnll_list 
+   short_nnll_list = nnll_list[1:10:end]
+   ultra_short_nnll_list = nnll_list[1:100:end]
+
+   verbose = true 
+
+   @info("Using ultra short nnll list for testing the case L = $L")
+   nnll_list = ultra_short_nnll_list
+
+   for (itest, (nn, ll)) in enumerate(nnll_list)
+      local N 
+      nn = shuffle(nn)
+      ll = shuffle(ll)
+      # @show nn, ll
+      N = length(ll)
+      @assert length(ll) == length(nn)
+
+      Ure, Mll = coupling_coeffs(L, ll, nn; PI = false) # cSH based re_basis
+      Ure_r, Mll_r = coupling_coeffs(L, ll, nn; PI = false, basis = real) # rSH based re_basis
+      Urpe, Mll_rpe = coupling_coeffs(L, ll, nn) # cSH based rpe_basis
+      Urpe_r, Mll_r_rpe = coupling_coeffs(L, ll, nn; basis = real) # rSH based rpe_basis
+
+      # do a quick check that inadmissible nnll just return empty bases
+      if isodd(L + sum(ll))
          print_tf(@test length(Ure) == length(Ure_r) == 0)
          print_tf(@test length(Urpe) == length(Urpe_r) == 0)
+         continue 
       end
 
-      if refl_sym == default_sym
-         # println()
-         # @info("Checking the behaviour of the default coupling coeffs")
-         # do a quick check that inadmissible nnll just return empty bases
-         if !ll_filter(sum(ll))
-            print_tf(@test length(Ure) == length(Ure_r) == length(Ure_default) == length(Ure_r_default) == 0)
-            print_tf(@test length(Urpe) == length(Urpe_r) == length(Urpe_default) == length(Urpe_r_default) == 0)
-            
-            continue
-         else
-            # check if the default couplings are equal to the one with specified refl_sym
-            print_tf(@test (Ure_default, Mll_default) == (Ure, Mll))
-            print_tf(@test (Ure_r_default, Mll_r_default) == (Ure_r, Mll_r))
-            print_tf(@test (Urpe_default, Mll_rpe_default) == (Urpe, Mll_rpe))
-            print_tf(@test (Urpe_r_default, Mll_r_rpe_default) == (Urpe_r, Mll_r_rpe))
-         end
-      else
-         # do a quick check that inadmissible nnll just return empty bases
-         if !ll_filter(sum(ll))
-            print_tf(@test length(Ure) == length(Ure_r) == 0)
-            print_tf(@test length(Urpe) == length(Urpe_r) == 0)
-            continue
-         end
-      end
-
-      # start equivariant tests
       rk = rank(gram(Ure), rtol = 1e-12)
       rk_r = rank(gram(Ure_r), rtol = 1e-12)
       rk_rpe = rank(gram(Urpe), rtol = 1e-12)
-      rk_rpe_r = rank(gram(Urpe_r), rtol = 1e-12)
+      rk_r_rpe = rank(gram(Urpe_r), rtol = 1e-12)
       
       # Check that the two rpe bases, generated by rSH and cSH, have the same 
       # dimensionality
-      # println()
-      # @info "Checking basis dimension consistency (cSH vs rSH)"
       print_tf(@test rk == rk_r)
-      print_tf(@test rk_rpe == rk_rpe_r)
+      # NOTE: re_basis and rpe_basis share the same Mll / Mll_r
 
-      
       # This would mean that both the bases are empty; 
-      if size(Ure,1) == size(Ure_r,1) == 0 ; continue; end 
+      if norm(Ure) == norm(Ure_r) == 0 ; continue; end 
       # Check that the Ure and Ure_r basis span the spaces that have the 
       # same dimension, and the dimensionality is the same as the size of Ure 
-      # and Ure_r (full rank), and so for rpe
+      # and Ure_r (full rank)
       print_tf(@test ( size(Ure, 1) == size(Ure_r, 1) 
-                     == rank(gram(Ure), rtol = 1e-12) 
-                     == rank(gram(Ure_r), rtol = 1e-12) ) )
-      print_tf(@test ( size(Urpe, 1) == size(Urpe_r, 1) 
-                     == rank(gram(Urpe), rtol = 1e-12) 
-                     == rank(gram(Urpe_r), rtol = 1e-12) ) )
+                       == rank(gram(Ure), rtol = 1e-12) 
+                       == rank(gram(Ure_r), rtol = 1e-12) ) )
 
-      # println()
-      # @info "Checking equivariance"
-      for n_test = 1:10
+      for ntest in 1:10
          X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
          θ = rand(3) * 2pi
          Q = RotZYZ(θ...)
          rand_refl = rand([1,-1])
          Q = rand_refl * Q
-         if nn != nothing
-            B1 = eval_basis(X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
-            B2 = eval_basis(Ref(Q) .* X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
-            B3 = eval_basis(X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
-            B4 = eval_basis(Ref(Q) .* X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
-            if size(Urpe,1) != 0 # we can test rpe
-               B5 = eval_sym_basis(X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
-               B6 = eval_sym_basis(Ref(Q) .* X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
-               B7 = eval_sym_basis(X; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, Real = true)
-               B8 = eval_sym_basis(Ref(Q) .* X; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, Real = true)
-            end
-         else
-            B1 = eval_basis(ll, Ure, Mll, X; Real = false)
-            B2 = eval_basis(ll, Ure, Mll, Ref(Q) .* X; Real = false)
-            B3 = eval_basis(ll, Ure_r, Mll_r, X; Real = true)
-            B4 = eval_basis(ll, Ure_r, Mll_r, Ref(Q) .* X; Real = true)
-            if size(Urpe,1) != 0 # we can test rpe
-               B5 = eval_basis(ll, Urpe, Mll, X; Real = false)
-               B6 = eval_basis(ll, Urpe, Mll, Ref(Q) .* X; Real = false)
-               B7 = eval_basis(ll, Urpe_r, Mll_r, X; Real = true)
-               B8 = eval_basis(ll, Urpe_r, Mll_r, Ref(Q) .* X; Real = true)
-            end
-         end
+         B1 = eval_basis(X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
+         B2 = eval_basis(Ref(Q) .* X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
+         B3 = eval_basis(X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
+         B4 = eval_basis(Ref(Q) .* X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
+         B5 = eval_sym_basis(X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
+         B6 = eval_sym_basis(Ref(Q) .* X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
+         B7 = eval_sym_basis(X; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, Real = true)
+         B8 = eval_sym_basis(Ref(Q) .* X; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, Real = true)
 
          # Check the equivariance of the basis
          # TODO: combine into a single test 
          if L == 0
-            print_tf(@test norm(B1 - (rand_refl)^pow * B2) < 1e-12)
-            print_tf(@test norm(B3 - (rand_refl)^pow * B4) < 1e-12)
-            if size(Urpe,1) != 0 # we can test rpe
-               print_tf(@test norm(B5 - (rand_refl)^pow * B6) < 1e-12)
-               print_tf(@test norm(B7 - (rand_refl)^pow * B8) < 1e-12)
-            end
+            print_tf(@test norm(B1 - B2) < 1e-12)
+            print_tf(@test norm(B3 - B4) < 1e-12)
+            print_tf(@test norm(B5 - B6) < 1e-12)
+            print_tf(@test norm(B7 - B8) < 1e-12)
          else
             D = transpose(WignerD.wignerD(L, θ...))
             D_r = Ctran(L) * D * Ctran(L)'
-            print_tf(@test norm(B1 - (rand_refl)^pow .* Ref(D) .* B2)   < 1e-12)
-            print_tf(@test norm(B3 - (rand_refl)^pow .* Ref(D_r) .* B4) < 1e-12)
-            if size(Urpe,1) != 0 # we can test rpe
-               print_tf(@test norm(B5 - (rand_refl)^pow .* Ref(D) .* B6)   < 1e-12)
-               print_tf(@test norm(B7 - (rand_refl)^pow .* Ref(D_r) .* B8) < 1e-12)
-            end
+            print_tf(@test norm(B1 - (rand_refl)^L .* Ref(D) .* B2)   < 1e-12)
+            print_tf(@test norm(B3 - (rand_refl)^L .* Ref(D_r) .* B4) < 1e-12)
+            print_tf(@test norm(B5 - (rand_refl)^L .* Ref(D) .* B6)   < 1e-12)
+            print_tf(@test norm(B7 - (rand_refl)^L .* Ref(D_r) .* B8) < 1e-12)
          end
       end
-
-      # println()
       # @info("Check the linear independence of the basis")
-      if isnothing(nn); nn = SVector{N, Int}((1:N)...); end
-      # With the absence of nn, nn are set to be SVector{N, Int}((1:N)...) by default
       ntest = 1000
 
       Xs = make_batch(ntest, length(ll))
@@ -205,30 +144,88 @@ function equivariant_test(L, ll, nn = nothing )
       BB_r = rand_batch(; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, batch = Xs, Real = true)
       print_tf(@test rank(gram(BB_r); rtol=1e-12) == size(BB_r,1) == rk_r)
 
-      if size(Urpe,1) != 0 # we can test rpe
-         BB_sym = sym_rand_batch(; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, batch = Xs, Real = false)
-         print_tf(@test rank(gram(BB_sym); rtol=1e-12) == size(BB_sym,1) == rk_rpe)
-         BB_sym_r = sym_rand_batch(; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, batch = Xs, Real = true)
-         print_tf(@test rank(gram(BB_sym_r); rtol=1e-12) == size(BB_sym_r,1) == rk_rpe_r)
-      end
+      BB_sym = sym_rand_batch(; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, batch = Xs, Real = false)
+      print_tf(@test rank(gram(BB_sym); rtol=1e-12) == size(BB_sym,1) == rk_rpe)
+      BB_sym_r = sym_rand_batch(; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, batch = Xs, Real = true)
+      print_tf(@test rank(gram(BB_sym_r); rtol=1e-12) == size(BB_sym_r,1) == rk_r_rpe)
 
    end
    println()
-end
 
-# Run test for different L, ll, nn
-for L = 0:Lmax
-   @info("Using ultra short nnll list for testing the case L = $L")
-   for (nn, ll) in nnll_list
-      @testset "L=$L, ll=$ll, nn = $nn" begin
-         equivariant_test(L, ll, nn)
-      end
-   end
-   @info("Using ultra short ll list for testing the case L = $L with the absence of nn")
+   @info("Using short ll list for testing the case L = $L with the absence of nn")
    ll_list = [ nnll_list[i][2] for i in 1:length(nnll_list) ] |> unique
-   for ll in ll_list
-      @testset "L=$L, ll=$ll, nn = nothing" begin
-         equivariant_test(L, ll)
+   for (itest, ll) in enumerate(ll_list)
+      local N 
+      N = length(ll)
+
+      Ure, Mll = coupling_coeffs(L, ll; PI = false) # cSH based re_basis
+      Ure_r, Mll_r = coupling_coeffs(L, ll; PI = false, basis = real) # rSH based re_basis
+      Urpe, Mll = coupling_coeffs(L, ll) # cSH based rpe_basis
+      Urpe_r, Mll_r = coupling_coeffs(L, ll; basis = real) # rSH based rpe_basis
+
+      rk = rank(gram(Urpe), rtol = 1e-12)
+      rk_r = rank(gram(Urpe_r), rtol = 1e-12)
+      
+      # Check that the two rpe bases, generated by rSH and cSH, have the same 
+      # dimensionality
+      print_tf(@test rk == rk_r)
+      # NOTE: re_basis and rpe_basis share the same Mll / Mll_r
+
+      # This would mean that both the bases are empty; 
+      if norm(Ure) == norm(Ure_r) == 0 ; continue; end 
+      # Check that the Ure and Ure_r basis span the spaces that have the 
+      # same dimension, and the dimensionality is the same as the size of Ure 
+      # and Ure_r (full rank)
+      print_tf(@test ( size(Ure, 1) == size(Ure_r, 1) 
+                       == rank(gram(Ure), rtol = 1e-12) 
+                       == rank(gram(Ure_r), rtol = 1e-12) ) )
+
+      X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
+      θ = rand(3) * 2pi
+      Q = RotZYZ(θ...)
+      rand_refl = rand([1,-1])
+      Q = rand_refl * Q
+      B1 = eval_basis(ll, Ure, Mll, X; Real = false)
+      B2 = eval_basis(ll, Ure, Mll, Ref(Q) .* X; Real = false)
+      B3 = eval_basis(ll, Ure_r, Mll_r, X; Real = true)
+      B4 = eval_basis(ll, Ure_r, Mll_r, Ref(Q) .* X; Real = true)
+      B5 = eval_basis(ll, Urpe, Mll, X; Real = false)
+      B6 = eval_basis(ll, Urpe, Mll, Ref(Q) .* X; Real = false)
+      B7 = eval_basis(ll, Urpe_r, Mll_r, X; Real = true)
+      B8 = eval_basis(ll, Urpe_r, Mll_r, Ref(Q) .* X; Real = true)
+
+      # Check the equivariance of the basis
+      # TODO: combine into a single test 
+      if L == 0
+         print_tf(@test norm(B1 - B2) < 1e-12)
+         print_tf(@test norm(B3 - B4) < 1e-12)
+         print_tf(@test norm(B5 - B6) < 1e-12)
+         print_tf(@test norm(B7 - B8) < 1e-12)
+      else
+         D = transpose(WignerD.wignerD(L, θ...))
+         D_r = Ctran(L) * D * Ctran(L)'
+         print_tf(@test norm(B1 - (rand_refl)^L .* Ref(D) .* B2)   < 1e-12)
+         print_tf(@test norm(B3 - (rand_refl)^L .* Ref(D_r) .* B4) < 1e-12)
+         print_tf(@test norm(B5 - (rand_refl)^L .* Ref(D) .* B6)   < 1e-12)
+         print_tf(@test norm(B7 - (rand_refl)^L .* Ref(D_r) .* B8) < 1e-12)
       end
+
+      # @info("Check the linear independence of the basis")
+      nn = SVector{N, Int}((1:N)...)
+      # With the absence of nn, nn are set to be SVector{N, Int}((1:N)...) by default
+      ntest = 1000
+
+      Xs = make_batch(ntest, length(ll))
+      BB = rand_batch(; coeffs=Urpe, MM=Mll, ll=ll, nn=nn, batch = Xs, Real = false)
+      print_tf(@test rank(gram(BB); rtol=1e-12) == size(BB,1) == rk)
+      BB_r = rand_batch(; coeffs=Urpe_r, MM=Mll_r, ll=ll, nn=nn, batch = Xs, Real = true)
+      print_tf(@test rank(gram(BB_r); rtol=1e-12) == size(BB_r,1) == rk_r)
+
+      BB_sym = sym_rand_batch(; coeffs=Urpe, MM=Mll, ll=ll, nn=nn, batch = Xs, Real = false)
+      print_tf(@test rank(gram(BB_sym); rtol=1e-12) == size(BB_sym,1) == rk)
+      BB_sym_r = sym_rand_batch(; coeffs=Urpe_r, MM=Mll_r, ll=ll, nn=nn, batch = Xs, Real = true)
+      print_tf(@test rank(gram(BB_sym_r); rtol=1e-12) == size(BB_sym_r,1) == rk_r)
+
    end
+   println()
 end
