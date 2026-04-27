@@ -316,8 +316,8 @@ function lexi_ord(nn::SVector{N, Int}, ll::SVector{N, Int}) where N
 end
 
 """
-    O3.coupling_coeffs(L, ll, nn; PI, basis)
-    O3.coupling_coeffs(L, ll; PI, basis)
+    O3.coupling_coeffs(L, ll, nn; PI, basis, refl_sym)
+    O3.coupling_coeffs(L, ll; PI, basis, refl_sym)
 
 Compute coupling coefficients for the spherical harmonics basis, where 
 - `L` must be an `Integer`;
@@ -327,10 +327,15 @@ corresponding tensor symmetric); default is `true` when `nn` is provided
 and `false` when `nn` is not provided.
 - `basis`: which basis is being coupled, default is `complex`, alternative
 choice is `real`, which is compatible with the `SpheriCart.jl` convention.  
+- `refl_sym`: behaviour of the basis under reflection, options are Symbols
+`:sym` and `:asym`, which indicate reflection symmetry and anti-symmetry, resp.
+default is `nothing`, which will later be assigned as `sym` for even `L` and 
+`asym` for odd `L`.  
 """
 function coupling_coeffs(L::Integer, ll, nn = nothing; 
                          PI = !(isnothing(nn)), 
-                         basis = complex)
+                         basis = complex,
+                         refl_sym::Union{Symbol,Nothing} = nothing)
 
     # convert L into the format required internally 
     _L = Int(L) 
@@ -363,7 +368,7 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
         end
     end 
     
-    return _coupling_coeffs(_L, _ll, _nn; PI = PI, basis = basis, )
+    return _coupling_coeffs(_L, _ll, _nn; PI = PI, basis = basis, refl_sym = refl_sym)
 end
 
 function _sort(x::SVector{N,T}, permutable_blocks::PermutableBlocks) where {N,T}
@@ -382,8 +387,15 @@ end
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
 function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
-                          PI = true, basis = complex) where N
-
+                          PI = true, basis = complex, refl_sym::Union{Symbol,Nothing} = nothing) where N
+    refl_sym === nothing && (refl_sym = iseven(L) ? :sym : :asym)
+    if refl_sym == :sym
+        ll_filter = iseven
+    elseif refl_sym == :asym
+        ll_filter = isodd
+    else
+        error("Unknown reflection symmetry type: $refl_sym")
+    end
 
     # NOTE: because of the use of m_generate, the input (nn, ll ) is required
     # to be in lexicographical order.
@@ -391,7 +403,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     T = L == 0 ? Float64 : SVector{2L+1,Float64}
 
     # there can only be non-trivial coupling coeffs if ∑ᵢ lᵢ + L is even
-    if isodd(sum(ll)+L) 
+    if !ll_filter(sum(ll)) 
         return zeros(T, 0, 0), SVector{N, Int}[]
     end
      
@@ -447,23 +459,22 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
     elseif basis === real 
         if !PI
             MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
-            Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, basis=complex)
+            Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, basis=complex, refl_sym = refl_sym)
             C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r) 
             # TODO: coupling_coeffs and mm_generate return different 
             #       format of MM's which may need to be fixed
             
             # Do the transformation to the complex coupling 
             # because it has a smaller size compared to the real one
-            if L != 0
-                CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
-                Ure_c = map(u -> CL * u, Ure_c)
-            end
-            Ure_r = real(Ure_c * C_r2c)
+
+            # Combine the two operations 
+            CL = SMatrix{2L+1,2L+1}(Matrix(Ctran(L)))
+            Ure_r = assemble_U(Ure_c, CL, C_r2c)
             return Ure_r, [ mm[inv_perm] for mm in MM_r ]
         else
             # S = Sn(nn,ll)
             MM_r = mm_generate(L, ll, nn; basis=basis, PI = true) # all admissible mm's wrt ordered cSH mm's
-            Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex) # cSH-based couplings
+            Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex, refl_sym = refl_sym) # cSH-based couplings
             C_r2c, MM_reduced = rAA2cAA_PI(SVector{N, Int}.(MM_c),SVector{N, Int}.(MM_r),ll,nn) # r2c map and the ordered mm set
             # TODO: coupling_coeffs and mm_generate return different 
             #       format of MM's which may need to be fixed
@@ -511,19 +522,41 @@ function assemble_U(U::AbstractMatrix{SVector{L, Float64}},
     a, b = size(U)
     _, c = size(C)
     
-    # Preallocate the final matrix (we know its real)
+    # Preallocate the final matrix (we know it's real)
     R = zeros(SVector{L, Float64}, a, c)
     
     # Allocate a small workspace for a single column
     W = zeros(SVector{L, ComplexF64}, a)
     
     # Extract real and imaginary parts of CL
-    # to skip calculating the imaginary part of (CL * W), which we know is 0
+    # to skip calculating the imaginary part (or real part) of (CL * W), which we know is 0
     CL_R = real.(CL)
     CL_I = imag.(CL)
     
     rows = rowvals(C)
     vals = nonzeros(C)  
+
+    # check the first non-zero element in the output 
+    # to see if the result is real or purely imaginary
+    is_real = true
+    for j in 1:c
+        if nzrange(C, j).start <= nzrange(C, j).stop
+            # Compute W[1] exactly for this first valid column
+            w1 = zero(SVector{L, ComplexF64})
+            for p in nzrange(C, j)
+                w1 += U[1, rows[p]] * vals[p]
+            end
+            
+            # CL multiplication
+            test_val = CL * w1
+
+            # if non-zero decision the type
+            if maximum(abs, test_val) > 1e-12
+                is_real = maximum(abs, imag.(test_val)) < 1e-12
+                break
+            end
+        end
+    end
     
     for j in 1:c
         fill!(W, zero(SVector{L, ComplexF64}))
@@ -538,11 +571,20 @@ function assemble_U(U::AbstractMatrix{SVector{L, Float64}},
             end
         end
         
-        # Multiply CL and extract real part: R[:, j] = Re(CL * W)
-        # We use Re(CL * W) = CL_R * Re(W) - CL_I * Im(W) to halve the operations
-        for i in 1:a
-            w = W[i]
-            R[i, j] = CL_R * real(w) - CL_I * imag(w)
+        if is_real
+            # Multiply CL and extract real part: R[:, j] = Re(CL * W)
+            # We use Re(CL * W) = CL_R * Re(W) - CL_I * Im(W) to halve the operations
+            for i in 1:a
+                w = W[i]
+                R[i, j] = CL_R * real(w) - CL_I * imag(w)
+            end
+        else
+            # or imaginary part R[:, j] = Im(CL * W)
+            # We use Im(CL * W) = CL_R * Im(W) - CL_I * Re(W)
+            for i in 1:a
+                w = W[i]
+                R[i, j] = CL_R * imag(w) + CL_I * real(w)
+            end
         end
     end
     
@@ -560,13 +602,31 @@ function assemble_U(U::AbstractMatrix{Float64},
     
     rows = rowvals(C)
     vals = nonzeros(C)
+
+    # check the first non-zero
+    is_real = true
+    for j in 1:c
+        if nzrange(C, j).start <= nzrange(C, j).stop
+            w1 = zero(ComplexF64)
+            for p in nzrange(C, j)
+                w1 += U[1, rows[p]] * vals[p]
+            end
+            
+            test_val = w1 
+
+            if abs(test_val) > 1e-12
+                is_real = abs(imag(test_val)) < 1e-12
+                break
+            end
+        end
+    end
     
     for j in 1:c
         for p in nzrange(C, j)
             k = rows[p]
-            vr = real(vals[p]) 
+            v = is_real ? real(vals[p]) : imag(vals[p]) 
             for i in 1:a
-                R[i, j] += U[i, k] * vr
+                R[i, j] += U[i, k] * v
             end
         end
     end

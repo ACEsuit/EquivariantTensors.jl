@@ -104,34 +104,37 @@ for L = 0:Lmax
                        == rank(gram(Ure), rtol = 1e-12) 
                        == rank(gram(Ure_r), rtol = 1e-12) ) )
 
-      X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
-      θ = rand(3) * 2pi
-      Q = RotZYZ(θ...)
-      B1 = eval_basis(X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
-      B2 = eval_basis(Ref(Q) .* X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
-      B3 = eval_basis(X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
-      B4 = eval_basis(Ref(Q) .* X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
-      B5 = eval_sym_basis(X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
-      B6 = eval_sym_basis(Ref(Q) .* X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
-      B7 = eval_sym_basis(X; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, Real = true)
-      B8 = eval_sym_basis(Ref(Q) .* X; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, Real = true)
+      for ntest in 1:10
+         X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
+         θ = rand(3) * 2pi
+         Q = RotZYZ(θ...)
+         rand_refl = rand([1,-1])
+         Q = rand_refl * Q
+         B1 = eval_basis(X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
+         B2 = eval_basis(Ref(Q) .* X; coeffs=Ure, MM=Mll, ll=ll, nn=nn, Real = false)
+         B3 = eval_basis(X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
+         B4 = eval_basis(Ref(Q) .* X; coeffs=Ure_r, MM=Mll_r, ll=ll, nn=nn, Real = true)
+         B5 = eval_sym_basis(X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
+         B6 = eval_sym_basis(Ref(Q) .* X; coeffs=Urpe, MM=Mll_rpe, ll=ll, nn=nn, Real = false)
+         B7 = eval_sym_basis(X; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, Real = true)
+         B8 = eval_sym_basis(Ref(Q) .* X; coeffs=Urpe_r, MM=Mll_r_rpe, ll=ll, nn=nn, Real = true)
 
-      # Check the equivariance of the basis
-      # TODO: combine into a single test 
-      if L == 0
-         print_tf(@test norm(B1 - B2) < 1e-12)
-         print_tf(@test norm(B3 - B4) < 1e-12)
-         print_tf(@test norm(B5 - B6) < 1e-12)
-         print_tf(@test norm(B7 - B8) < 1e-12)
-      else
-         D = transpose(WignerD.wignerD(L, θ...))
-         D_r = Ctran(L) * D * Ctran(L)'
-         print_tf(@test norm(B1 - Ref(D) .* B2)   < 1e-12)
-         print_tf(@test norm(B3 - Ref(D_r) .* B4) < 1e-12)
-         print_tf(@test norm(B5 - Ref(D) .* B6)   < 1e-12)
-         print_tf(@test norm(B7 - Ref(D_r) .* B8) < 1e-12)
+         # Check the equivariance of the basis
+         # TODO: combine into a single test 
+         if L == 0
+            print_tf(@test norm(B1 - B2) < 1e-12)
+            print_tf(@test norm(B3 - B4) < 1e-12)
+            print_tf(@test norm(B5 - B6) < 1e-12)
+            print_tf(@test norm(B7 - B8) < 1e-12)
+         else
+            D = transpose(WignerD.wignerD(L, θ...))
+            D_r = Ctran(L) * D * Ctran(L)'
+            print_tf(@test norm(B1 - (rand_refl)^L .* Ref(D) .* B2)   < 1e-12)
+            print_tf(@test norm(B3 - (rand_refl)^L .* Ref(D_r) .* B4) < 1e-12)
+            print_tf(@test norm(B5 - (rand_refl)^L .* Ref(D) .* B6)   < 1e-12)
+            print_tf(@test norm(B7 - (rand_refl)^L .* Ref(D_r) .* B8) < 1e-12)
+         end
       end
-
       # @info("Check the linear independence of the basis")
       ntest = 1000
 
@@ -177,32 +180,36 @@ for L = 0:Lmax
                        == rank(gram(Ure), rtol = 1e-12) 
                        == rank(gram(Ure_r), rtol = 1e-12) ) )
 
-      X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
-      θ = rand(3) * 2pi
-      Q = RotZYZ(θ...)
-      B1 = eval_basis(ll, Ure, Mll, X; Real = false)
-      B2 = eval_basis(ll, Ure, Mll, Ref(Q) .* X; Real = false)
-      B3 = eval_basis(ll, Ure_r, Mll_r, X; Real = true)
-      B4 = eval_basis(ll, Ure_r, Mll_r, Ref(Q) .* X; Real = true)
-      B5 = eval_basis(ll, Urpe, Mll, X; Real = false)
-      B6 = eval_basis(ll, Urpe, Mll, Ref(Q) .* X; Real = false)
-      B7 = eval_basis(ll, Urpe_r, Mll_r, X; Real = true)
-      B8 = eval_basis(ll, Urpe_r, Mll_r, Ref(Q) .* X; Real = true)
+      for ntest = 1:10
+         X = [ (0.1 + 0.9 * rand()) * rand_sphere() for i in 1:length(ll) ]
+         θ = rand(3) * 2pi
+         Q = RotZYZ(θ...)
+         rand_refl = rand([1,-1])
+         Q = rand_refl * Q
+         B1 = eval_basis(ll, Ure, Mll, X; Real = false)
+         B2 = eval_basis(ll, Ure, Mll, Ref(Q) .* X; Real = false)
+         B3 = eval_basis(ll, Ure_r, Mll_r, X; Real = true)
+         B4 = eval_basis(ll, Ure_r, Mll_r, Ref(Q) .* X; Real = true)
+         B5 = eval_basis(ll, Urpe, Mll, X; Real = false)
+         B6 = eval_basis(ll, Urpe, Mll, Ref(Q) .* X; Real = false)
+         B7 = eval_basis(ll, Urpe_r, Mll_r, X; Real = true)
+         B8 = eval_basis(ll, Urpe_r, Mll_r, Ref(Q) .* X; Real = true)
 
-      # Check the equivariance of the basis
-      # TODO: combine into a single test 
-      if L == 0
-         print_tf(@test norm(B1 - B2) < 1e-12)
-         print_tf(@test norm(B3 - B4) < 1e-12)
-         print_tf(@test norm(B5 - B6) < 1e-12)
-         print_tf(@test norm(B7 - B8) < 1e-12)
-      else
-         D = transpose(WignerD.wignerD(L, θ...))
-         D_r = Ctran(L) * D * Ctran(L)'
-         print_tf(@test norm(B1 - Ref(D) .* B2)   < 1e-12)
-         print_tf(@test norm(B3 - Ref(D_r) .* B4) < 1e-12)
-         print_tf(@test norm(B5 - Ref(D) .* B6)   < 1e-12)
-         print_tf(@test norm(B7 - Ref(D_r) .* B8) < 1e-12)
+         # Check the equivariance of the basis
+         # TODO: combine into a single test 
+         if L == 0
+            print_tf(@test norm(B1 - B2) < 1e-12)
+            print_tf(@test norm(B3 - B4) < 1e-12)
+            print_tf(@test norm(B5 - B6) < 1e-12)
+            print_tf(@test norm(B7 - B8) < 1e-12)
+         else
+            D = transpose(WignerD.wignerD(L, θ...))
+            D_r = Ctran(L) * D * Ctran(L)'
+            print_tf(@test norm(B1 - (rand_refl)^L .* Ref(D) .* B2)   < 1e-12)
+            print_tf(@test norm(B3 - (rand_refl)^L .* Ref(D_r) .* B4) < 1e-12)
+            print_tf(@test norm(B5 - (rand_refl)^L .* Ref(D) .* B6)   < 1e-12)
+            print_tf(@test norm(B7 - (rand_refl)^L .* Ref(D_r) .* B8) < 1e-12)
+         end
       end
 
       # @info("Check the linear independence of the basis")

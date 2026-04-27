@@ -33,6 +33,7 @@ end
     @testset "Representation" begin include("test_representation.jl"); end
     @testset "Real AA to Complex AA" begin include("test_rAA2cAA.jl"); end
     @testset "Coupling Coeffs" begin include("test_coupling.jl"); end
+    @testset "Coupling Coeffs with refl_sym given" begin include("test_coupling_augmented.jl"); end
     @testset "QuadO3" begin include("O3/test_quad_O3.jl"); end
 end
 
