@@ -42,14 +42,18 @@ function evaluate(l::SparseACElayer, Φ, ps, st)
     # broadcasted multiplication so we have to do it manually. 
     # Maybe using a comprehension would work and we can skip _tupmul below? 
     # out = 𝔹 .* ps.WLL 
+    # out = ntuple( i -> 𝔹[i] * ps.WLL[i], length(𝔹) )
+    
     out = _tupmul(𝔹, ps.WLL)
+
+
     return out, st
 end
 
 # -------------------------------------------------------------------
 # temporary hack for testing purposes
 #  Ai = 𝔹i, Bi = WLL[i] 
-# so Ai is a matrix of vectors, B a matrix of scalar weights 
+# so Ai is a matrix of svectors, B a matrix of scalar weights 
 # qi = Ai * Bi  -> mat(vecs)
 # <∂qi | qi> = tr(Ai * Bi * ∂qi')
 # from this we can deduce the pullbacks below. 
@@ -65,9 +69,22 @@ function rrule(::typeof(_tupmul), A, B)
     out = _tupmul(A, B)
     Nt = length(A)
 
-    _pbA(∂out) = [ ∂out[i] * transpose(B[i]) for i in 1:Nt ]
-    _pbB(∂out) = [ transpose(A[i]) * ∂out[i] for i in 1:Nt ]
+    @show typeof(A)
+    @show typeof(B) 
 
-    return out, ∂out -> (NoTangent(), _pbA(∂out), _pbB(∂out))
+    function _tupmul_pb(∂out_)
+        ∂out = unthunk(∂out_)
+        ∂A = ntuple(i -> ∂out[i] * transpose(B[i]), Nt)
+        ∂B = ntuple(i -> transpose(A[i]) * ∂out[i], Nt)
+
+         @show typeof(∂out)
+         @show typeof(∂A)
+         @show typeof(∂B)
+
+        return (NoTangent(), ∂A, ∂B)
+    end
+
+
+    return out, ∂out -> _tupmul_pb(∂out) 
 end
 
