@@ -31,9 +31,17 @@ model_0_2 = Lux.Chain(; embed = embed, ace = acel,
 
 embed_1_1, acel_1_1 = LTM.build_model(; Dtot, maxl, ORD, LL = (1, ), NFEAT = (1,))
 
-model_1_1 = Lux.Chain(; embed = embed, ace = acel, 
-         readout = WrappedFunction( U -> sum(sum(U[1])) ) )
+model_1_1 = Lux.Chain(; embed = embed_1_1, ace = acel_1_1, 
+         readout = WrappedFunction( U -> sum(abs2, sum(U[1])) ) )
 
+
+embed_01, acel_01 = LTM.build_model(; Dtot, maxl, ORD, LL = (0, 1), NFEAT = (3, 1))
+model_01 = Lux.Chain(; embed = embed_01, ace = acel_01, 
+         readout = WrappedFunction( U -> (U0=U[1]; U1 = U[2]; 
+            sum(U0[:,1]) + 0.1f0 * sum(U0[:,2] .^ 2) + 0.01f0 * sum(U0[:,3].^3)
+            + sum(abs2, sum(U1)) ) 
+         ) # WrappedFunction 
+      ) # Chain 
 
 # generate a random input graph 
 nnodes = 30
@@ -41,8 +49,9 @@ X = ET.Testing.rand_graph(nnodes; nneigrg = 5:10)
 
 ##
 
-model = model_0_2    # invariant, 2 features
+# model = model_0_2    # invariant, 2 features
 # model = model_1_1    # equivariant, single feature
+model = model_01   # 3 x invariant + 1 x equivariant feature
 
 ps, st = LuxCore.setup(MersenneTwister(1234), model)
 ps = ET.float32(ps); st = ET.float32(st)
@@ -62,7 +71,6 @@ g_fd = DIFF.grad_fd(X, model, ps, st)
 println_slim(@test all(g_zy.edge_data .≈ g_fd.edge_data)) 
 
 ##
-
 
 @info("Test model evaluation on GPU") 
 
