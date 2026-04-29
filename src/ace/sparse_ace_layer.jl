@@ -43,12 +43,48 @@ function evaluate(l::SparseACElayer, Φ, ps, st)
     # Maybe using a comprehension would work and we can skip _tupmul below? 
     # out = 𝔹 .* ps.WLL 
     # out = ntuple( i -> 𝔹[i] * ps.WLL[i], length(𝔹) )
-    
+
+    # This is the recommended approach but 
+    # won't run because there is no adjust for multiplying 
+    # non-standard arrays namely array(svector) * arrays(scalar)
+    # out = map(*, 𝔹, ps.WLL)
+
     out = _tupmul(𝔹, ps.WLL)
 
+    # out = map(_mul_scal, 𝔹, ps.WLL)
+    # @info("1a")
+    # out = _mul_scal(𝔹[1], ps.WLL[1])  # for testing only - single feature for now
+    # @info("1b")
 
     return out, st
 end
+
+# -------------------------------------------------------------------
+
+_mul_scal(A, B) = A * B 
+
+import ChainRulesCore: rrule 
+
+function rrule(::typeof(_mul_scal),
+                A::AbstractMatrix{SVector{D,T}},
+                B::AbstractMatrix{T}) where {D,T}
+    C = _mul_scal(A, B)
+
+    function _mul_scal_pb(∂C_)
+        ∂C = unthunk(∂C_)
+        if ∂C isa AbstractZero &&
+            return (NoTangent(), ZeroTangent(), ZeroTangent())
+        end 
+
+        ∂A  = ∂C * transpose(B)
+        ∂B = transpose(A) * ∂C
+
+        return (NoTangent(), ∂A, ∂B)
+    end
+
+    return C, _mul_scal_pb
+end
+
 
 # -------------------------------------------------------------------
 # temporary hack for testing purposes
@@ -61,29 +97,20 @@ end
 #   which is the correct output since ∇_Bi should be mat(scal) 
 
 function _tupmul(A, B) 
-    return A .* B 
+    return map(*, A, B)
 end
 
 import ChainRulesCore: rrule 
-function rrule(::typeof(_tupmul), A, B)
+function rrule(::typeof(_tupmul), A::Tuple{Vararg{Any, Nt}}, B) where {Nt} 
     out = _tupmul(A, B)
-    Nt = length(A)
-
-    @show typeof(A)
-    @show typeof(B) 
+    VALNt = Val(Nt)
 
     function _tupmul_pb(∂out_)
         ∂out = unthunk(∂out_)
-        ∂A = ntuple(i -> ∂out[i] * transpose(B[i]), Nt)
-        ∂B = ntuple(i -> transpose(A[i]) * ∂out[i], Nt)
-
-         @show typeof(∂out)
-         @show typeof(∂A)
-         @show typeof(∂B)
-
+        ∂A = ntuple(i -> ∂out[i] * transpose(B[i]), VALNt)
+        ∂B = ntuple(i -> transpose(A[i]) * ∂out[i], VALNt)
         return (NoTangent(), ∂A, ∂B)
     end
-
 
     return out, ∂out -> _tupmul_pb(∂out) 
 end
