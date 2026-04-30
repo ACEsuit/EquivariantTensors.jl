@@ -1,22 +1,14 @@
 
-using LinearAlgebra, Lux, Random, Test, Zygote, StaticArrays, ForwardDiff
+using LinearAlgebra, Lux, Random, Test
 using ACEbase.Testing: print_tf, println_slim
-using Optimisers: destructure
 
 using EquivariantTensors
 import EquivariantTensors as ET 
-import Polynomials4ML as P4ML      
-import ForwardDiff as FD 
-import DecoratedParticles as DP 
 
-# include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
+include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
 
 include("luxtestmodels.jl")
 include("diffutils.jl")
-
-using Metal 
-gpu = dev = mtl 
-Metal.versioninfo()
 
 ##
 
@@ -89,16 +81,11 @@ println_slim(@test Float32(φ_dev) ≈ Float32(φ))
 @info("evaluate X-gradient on GPU ")
 g_zy_dev = DIFF.grad_zy(X_dev, model, ps_dev, st_dev)
 g_zy_32 = DIFF.grad_zy(ET.float32(X), model, ET.float32(ps), ET.float32(st))
-
 g_zy_dev_e = Array(g_zy_dev.edge_data)
 g_zy_32_e = Array(g_zy_32.edge_data)
+
 @info("confirm matching gradients on CPU and GPU")
-@error("This test currently fails for some models!") 
-@show all(g_zy_dev_e .≈ g_zy_32_e)
-_errs = norm.(g_zy_dev_e - g_zy_32_e)
-@show sum(_errs) / length(_errs)
-@show norm(_errs) / sqrt(length(_errs))
-@show maximum(_errs)
+println_slim(@test all(g_zy_dev_e .≈ g_zy_32_e))
 
 ## 
 # Check gradient w.r.t. parameters 
@@ -118,9 +105,5 @@ g_WLL_fd = g_ps_fd.ace.WLL
 @info("confirm matching parameter gradients on CPU and GPU")
 println_slim(@test all(g_WLL .≈ g_WLL_fd))
 println_slim(@test all(Float32.(g_WLL[i]) ≈ g_WLL_32[i] for i = 1:length(g_WLL) ))
+println_slim(@test all(Array(g_WLL_dev[i]) ≈ g_WLL_32[i] for i = 1:length(g_WLL) ))
 
-Array(g_WLL_dev[1]) ≈ g_WLL_32[1]
-
-## 
-
-@show typeof(g_WLL_dev)
