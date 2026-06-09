@@ -20,7 +20,7 @@ const NTorDP = Union{NamedTuple, XState}
 
 using ForwardDiff: Dual, extract_derivative 
 
-export O3, gpu_device, cpu_device  
+export O3, Radials, gpu_device, cpu_device
 
 
 include("generics.jl")
@@ -34,6 +34,11 @@ include("transforms/agnesi.jl")
 include("embed/graph.jl")
 include("embed/embeddings.jl")
 include("embed/transsplines.jl")
+
+# ------------------------------------------------------
+# learnable / splined radial bases (Rnl)
+include("utils/elements.jl")
+include("radials/radials.jl")
 
 # ------------------------------------------------------
 # Core ACE model functionality 
