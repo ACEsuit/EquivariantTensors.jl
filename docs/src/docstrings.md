@@ -13,5 +13,5 @@ This page lists *all* docstrings in `EquivariantTensors.jl` including for functi
 ```
 
 ```@autodocs
-Modules = [EquivariantTensors, EquivariantTensors.O3]
+Modules = [EquivariantTensors, EquivariantTensors.O3, EquivariantTensors.Radials]
 ```
