@@ -1,8 +1,8 @@
 
-using EquivariantTensors, StaticArrays, Random, Test
-using EquivariantTensors: evaluate, evaluate_ed
+using ACEradials, StaticArrays, Random, Test
+using ACEradials: evaluate, evaluate_ed
 import Zygote
-const R = EquivariantTensors.Radials
+const R = ACEradials
 
 ##
 

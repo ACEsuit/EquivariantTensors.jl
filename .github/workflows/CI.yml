@@ -39,6 +39,37 @@ jobs:
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+  # ACEradials is a separately versioned subdir package (lib/ACEradials)
+  # depending on the in-repo EquivariantTensors. It is tested on every CI
+  # run (not path-filtered) so that ET-core changes that break ACEradials
+  # are caught in the same PR.
+  test-aceradials:
+    name: ACEradials - Julia ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1.11'
+          - '1.12'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: ${{ matrix.version }}
+          arch: x64
+      - uses: julia-actions/cache@v3
+      - name: Test ACEradials
+        shell: julia --project=lib/ACEradials --color=yes {0}
+        run: |
+          using Pkg
+          Pkg.develop(PackageSpec(path=pwd()))
+          Pkg.instantiate()
+          Pkg.test()
   docs:
     name: Documentation
     runs-on: ubuntu-latest

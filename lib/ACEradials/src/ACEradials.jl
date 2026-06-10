@@ -1,8 +1,9 @@
-module Radials
+module ACEradials
 
-# Self-contained learnable / splined radial basis (`Rnl`) submodule, moved
-# here from ACEpotentials `src/models/`. See `agents/radials.md` for the
-# design and porting notes.
+# Self-contained learnable / splined radial basis (`Rnl`) package, moved
+# here from ACEpotentials `src/models/`. See `agents/radials.md` in the
+# repository root for the design, porting notes, and the decision record
+# for hosting this as a subdir package of EquivariantTensors.jl.
 
 using StaticArrays: SMatrix, SVector
 using Random: AbstractRNG
@@ -19,12 +20,10 @@ import ACEbase: evaluate, evaluate!, evaluate_ed
 import LuxCore: AbstractLuxLayer, initialparameters, initialstates,
                 parameterlength
 
-# element <-> index and SMatrix helpers live in ET's utils
-import ..EquivariantTensors: _i2z, _z2i, _get_nz, _convert_zlist, _make_smatrix
-
 export LearnableRnlBasis, SplineRnlBasis, splinify, learnable_Rnl_basis,
        PolyEnvelope1sR, PolyEnvelope2sX, agnesi_transform
 
+include("elements.jl")
 include("envelopes.jl")
 include("transforms.jl")
 include("Rnl_learnable.jl")

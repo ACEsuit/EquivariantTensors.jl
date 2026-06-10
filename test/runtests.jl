@@ -44,12 +44,8 @@ end
     # @testset "ACE KA new version" begin include("acemodels/test_ace_ka2.jl"); end
 end 
 
-@testset "Atoms" begin
+@testset "Atoms" begin 
     @testset "NeighbourListsExt" begin include("atoms/test_neighbourlistsext.jl"); end
-end
-
-@testset "Radials" begin
-    @testset "Learnable & Splined Rnl" begin include("radials/test_radials.jl"); end
-end
+end 
 
 end

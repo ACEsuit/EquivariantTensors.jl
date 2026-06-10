@@ -1,11 +1,8 @@
 
 # atomic-number <-> index helpers for multi-species bases.
-# These were moved here from ACEpotentials so that the radial bases in
-# `src/radials/` can be self-contained. Unlike the ACEpotentials versions
-# they do not depend on JuLIP / ACE1x and therefore only accept integer
-# atomic numbers.
-
-using StaticArrays: SMatrix
+# These were moved here from ACEpotentials so that ACEradials is
+# self-contained. Unlike the ACEpotentials versions they do not depend on
+# JuLIP / ACE1x and therefore only accept integer atomic numbers.
 
 _i2z(obj, i::Integer) = obj._i2z[i]
 

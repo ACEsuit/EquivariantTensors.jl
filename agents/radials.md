@@ -1,5 +1,42 @@
 # Radial Basis Submodule — Implementation Plan
 
+## DECISION RECORD (2026-06-09): host as subdir package `lib/ACEradials`
+
+The plan below originally targeted an ET submodule `src/radials/`
+(`EquivariantTensors.Radials`). That was implemented and then **revised**:
+the radials are chemistry-specific (atomic-number indexing, `(rin, r0,
+rcut)` conventions), while ET is intended to stay application-agnostic
+(atomistic today; CGMD, wave functions, particle physics potentially).
+The code now lives in **`lib/ACEradials/`** — a separately registered,
+separately versioned subdirectory package of this repository (the Lux.jl
+`lib/` model), named `ACEradials.jl`, with a hard dependency on
+EquivariantTensors (declared now, used once the converters land).
+
+Why this layout rather than the alternatives considered:
+
+- *vs. ET submodule*: radials is a young, breaking-frequently API; bundling
+  it would let radials churn drive ET version bumps that all dependents see
+  as breaking, including ones that never load radials — and it parks
+  chemistry in the agnostic namespace.
+- *vs. separate repository*: the near-term roadmap (Stage 3 below —
+  `to_TransSelSplines`, `orthonormal_Rnl_basis`, scalar/edge transform
+  unification) is radials↔ET co-evolution work. In one repo that is one
+  atomic PR with one CI run; across two repos it is coordinated breaking
+  PRs + registration trains, which is where such work historically stalls.
+- *graduation path*: once the ET-coupled features have landed and the API
+  has stabilized, `lib/ACEradials` can move to its own repository with the
+  same UUID and name — a non-breaking change. The reverse (retracting a
+  released `ET.Radials`) would be breaking, so this layout preserves
+  optionality.
+
+Consequences for the text below: read `src/radials/` as
+`lib/ACEradials/src/`; the module is `ACEradials`, not
+`EquivariantTensors.Radials`; the `_i2z`/`_z2i` helpers live inside
+ACEradials (`src/elements.jl`), not in ET utils; ET v0.6.0 is not needed —
+ACEpotentials Stage 2 will instead depend on `ACEradials = "0.1"`.
+
+---
+
 ## Context and goals
 
 The goal is to move the canonical radial basis implementation from
