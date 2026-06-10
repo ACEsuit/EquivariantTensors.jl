@@ -83,6 +83,19 @@ function mul(A::AbstractMatrix, B::SparseMatCSX, op = *)
    return mul!(X, A, B, op)
 end
 
+# ZeroTangent short-circuits: when a cotangent flowing through a pullback is
+# structurally zero, ZeroTangent absorbs through `*` (and through the generic
+# `op` in the second method), so we return ZeroTangent() directly instead of
+# materializing a zero matrix. This avoids an allocation (especially costly on
+# GPU) and lets the zero propagate cleanly through downstream tangent algebra.
+mul(::SparseMatCSX, ::ChainRulesCore.ZeroTangent) = 
+      ChainRulesCore.ZeroTangent()
+
+mul(::ChainRulesCore.ZeroTangent, ::SparseMatCSX, op = *) =
+      ChainRulesCore.ZeroTangent()
+
+
+
 #
 # X = A * B where A is sparse, B is dense 
 # this is easiest to implement in CSR format 
