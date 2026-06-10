@@ -1,6 +1,7 @@
 
 using EquivariantTensors, StaticArrays, Random, Test
 using EquivariantTensors: evaluate, evaluate_ed
+import Zygote
 const R = EquivariantTensors.Radials
 
 ##
@@ -26,6 +27,8 @@ spl = R.splinify(basis, ps; nnodes = 300)
 @test spl isa R.SplineRnlBasis
 @test length(spl) == length(basis)
 @test R.splinify(spl, ps) === spl   # splinify of a spline is a no-op
+# splinify must not mutate the meta of the input basis
+@test !haskey(basis.meta, "info")
 
 ##
 
@@ -68,4 +71,45 @@ for basis_ in (basis, spl)
    end
    Rb_v, Rb_d = R.evaluate_ed_batched(basis_, rs_b, 8, zjs, ps, st)
    @test Rb_v ≈ Rb
+end
+
+##
+
+@info("   Zygote gradient w.r.t. Wnlq matches finite differences")
+W0 = ps.Wnlq
+loss = W -> sum(abs2,
+         R.evaluate_batched(basis, rs_b, 8, zjs, (Wnlq = W,), st))
+gz = Zygote.gradient(loss, W0)[1]
+@test size(gz) == size(W0)
+h = 1e-6
+for _ = 1:20
+   i = rand(rng, eachindex(W0))
+   Wp = copy(W0); Wp[i] += h
+   Wm = copy(W0); Wm[i] -= h
+   gfd = (loss(Wp) - loss(Wm)) / (2h)
+   @test abs(gz[i] - gfd) < 1e-5 * max(1.0, abs(gfd))
+end
+
+# splined basis has no parameters; the rrule returns no tangents but
+# must not error
+gspl = Zygote.gradient(
+         W -> sum(R.evaluate_batched(spl, rs_b, 8, zjs, (Wnlq = W,), st)),
+         W0)[1]
+@test isnothing(gspl)
+
+##
+
+@info("   envelope evaluate_d partial derivatives")
+env2 = basis.envelopes[1, 1]
+@test env2 isa R.PolyEnvelope2sX
+let r = 2.3, x = 0.4, h = 1e-6
+   dr, dx = R.evaluate_d(env2, r, x)
+   @test dr == 0
+   @test abs(dx - (evaluate(env2, r, x + h) - evaluate(env2, r, x - h)) / (2h)) < 1e-6
+end
+env1 = R.PolyEnvelope1sR(5.0, 1)
+let r = 2.3, x = 0.4, h = 1e-6
+   dr, dx = R.evaluate_d(env1, r, x)
+   @test dx == 0
+   @test abs(dr - (evaluate(env1, r + h, x) - evaluate(env1, r - h, x)) / (2h)) < 1e-6
 end

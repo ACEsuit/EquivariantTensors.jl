@@ -139,11 +139,13 @@ function evaluate_ed_batched(basis::SplineRnlBasis,
 end
 
 
+# the splined basis has no parameters, so all tangents are NoTangent;
+# (the tangent w.r.t. `rs` is not implemented, as for the learnable basis)
 function rrule(::typeof(evaluate_batched),
                basis::SplineRnlBasis,
                rs, zi, zjs, ps, st)
    Rnl = evaluate_batched(basis, rs, zi, zjs, ps, st)
 
-   return Rnl, Δ -> (NoTangent(), NoTangent(), NoTangent(), NoTangent(),
-                     NoTangent(), NoTangent())
+   return Rnl, Δ -> (NoTangent(), NoTangent(), NoTangent(),
+                     NoTangent(), NoTangent(), NoTangent(), NoTangent())
 end

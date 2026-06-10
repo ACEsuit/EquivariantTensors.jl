@@ -77,7 +77,8 @@ with `q >= p`. This generates an `AnalyticTransform` object that implements
 ```math
    x(r) = \frac{1}{1 + a (r/r_0)^q / (1 + (r/r0)^(q-p))}
 ```
-with default `a` chosen such that $|x'(r)|$ is maximised at $r = r_0$. But `a` may also be specified directly as a keyword argument.
+with default `a` chosen such that $|x'(r)|$ is maximised at $r = r_0$. But
+`a` may also be specified directly as a keyword argument.
 
 The transform satisfies
 ```math

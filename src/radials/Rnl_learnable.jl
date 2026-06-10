@@ -127,10 +127,6 @@ function evaluate_batched!(Rnl,
    @assert size(Rnl, 1) >= length(rs)
    @assert size(Rnl, 2) >= length(basis)
 
-   # evaluate the first one to get the types and size
-   Rnl_1 = evaluate(basis, rs[1], zi, zjs[1], ps, st)
-
-   # then evaluate the rest in-place
    for j = 1:length(rs)
       iz = _z2i(basis, zi)
       jz = _z2i(basis, zjs[j])
@@ -221,10 +217,8 @@ end
 function pullback_evaluate_batched(Δ, basis::LearnableRnlBasis,
                                    rs, zi, zjs, ps, st)
    @assert length(rs) == length(zjs)
-   # evaluate the first one to get the types and size
-   Rnl_1 = evaluate(basis, rs[1], zi, zjs[1], ps, st)
-   # ... and then allocate storage
-   Rnl = zeros(eltype(Rnl_1), (length(rs), length(Rnl_1)))
+   # Δ may arrive as a (Inplaceable)Thunk, e.g. from the sum(abs2, _) rule
+   Δ = unthunk(Δ)
 
    # output storage for the gradients
    T_∂Wnlq = promote_type(eltype(Δ), eltype(rs))
@@ -248,16 +242,20 @@ function pullback_evaluate_batched(Δ, basis::LearnableRnlBasis,
       ∂Wnlq[:, :, iz, jz] .+= Δ[j, :] * P'
    end
 
-   return (Wnql = ∂Wnlq,)
+   return (Wnlq = ∂Wnlq,)
 end
 
 
+# NOTE: only the gradient w.r.t. the parameters `ps` is implemented here;
+# the tangent w.r.t. `rs` is not (derivatives w.r.t. positions go through
+# the `evaluate_ed_batched` path).
 function rrule(::typeof(evaluate_batched),
                basis::LearnableRnlBasis,
                rs, zi, zjs, ps, st)
    Rnl = evaluate_batched(basis, rs, zi, zjs, ps, st)
 
-   return Rnl, Δ -> (NoTangent(), NoTangent(), NoTangent(), NoTangent(),
+   return Rnl, Δ -> (NoTangent(), NoTangent(), NoTangent(),
+                     NoTangent(), NoTangent(),
                      pullback_evaluate_batched(Δ, basis, rs, zi, zjs, ps, st),
                      NoTangent())
 end

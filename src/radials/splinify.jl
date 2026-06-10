@@ -28,13 +28,15 @@ function splinify(basis::LearnableRnlBasis, ps; nnodes = 100)
                 for iz0 = 1:NZ, iz1 = 1:NZ ]
    splines = SMatrix{NZ, NZ}(_splines)
 
+   # copy the meta dict so that mutating it below does not modify the
+   # meta of the input basis (the ACEpotentials original aliased it)
    spl_basis = SplineRnlBasis(basis._i2z,
                               basis.transforms,
                               basis.envelopes,
                               splines,
                               basis.rin0cuts,
                               basis.spec,
-                              basis.meta)
+                              copy(basis.meta))
 
    spl_basis.meta["info"] = "constructed from LearnableRnlBasis via `splinify`"
 

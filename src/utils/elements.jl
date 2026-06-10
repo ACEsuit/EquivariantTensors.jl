@@ -45,7 +45,8 @@ function _make_smatrix(obj, NZ)
       return SMatrix{NZ, NZ}(obj)
    end
    if obj isa AbstractArray && size(obj) != (NZ, NZ)
-      error("`_make_smatrix` : if the input `obj` is an `AbstractArray` then it must be of size `(NZ, NZ)`")
+      error("`_make_smatrix` : if the input `obj` is an `AbstractArray` \
+             then it must be of size `(NZ, NZ)`")
    end
    return SMatrix{NZ, NZ}(fill(obj, (NZ, NZ)))
 end

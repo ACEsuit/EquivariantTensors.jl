@@ -11,7 +11,7 @@ using Lux: glorot_normal
 import ForwardDiff
 using ForwardDiff: Dual
 
-import ChainRulesCore: rrule, NoTangent
+import ChainRulesCore: rrule, NoTangent, unthunk
 import WithAlloc: whatalloc
 import Polynomials4ML as P4ML
 
