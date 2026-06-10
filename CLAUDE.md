@@ -39,6 +39,7 @@ Use it to set preferences, conventions, and constraints.
 - Prefer in-place (`!`) variants of functions when performance matters.
 - Do not introduce type instabilities. If a change may affect type inference,
   note it explicitly.
+- Type annotations are for dispatch only, write code as type agnostic as possible, in particular don't hard-code floating point types
 - Do not add dependencies to `Project.toml` without asking first.
 - GPU kernels use KernelAbstractions — do not introduce CUDA.jl-specific code
   in shared paths.
@@ -56,6 +57,7 @@ Use it to set preferences, conventions, and constraints.
 
 - Use short imperative commit messages (e.g. "Remove dead simpletrans.jl").
 - Do not add "Co-Authored-By" lines unless asked.
+- For pull requests, keep the explanations brief unless prompted to give more details
 
 <!-- Uncomment to enforce Conventional Commits: -->
 <!-- - Use Conventional Commits format: `feat:`, `fix:`, `refactor:`, `docs:`, etc. -->
