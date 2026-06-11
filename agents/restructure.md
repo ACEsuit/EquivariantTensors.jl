@@ -1,23 +1,24 @@
 # ET Restructuring — Working Notes
 
-Status: draft for discussion (2026-06-11). Based on CO's initial thoughts,
-the research notes in `projects/equivarianttensors/notes/` (background,
-eqcp, eqtucker), and a survey of the current code.
+Status: rev 2 (2026-06-11), CO's comments on rev 1 folded in as decision
+records. Based on CO's initial thoughts, the research notes in
+`projects/equivarianttensors/notes/` (background, eqcp, eqtucker), and a
+survey of the current code.
 
 ---
 
 ## 1. Scope statement (proposed)
 
 ET = parameterisation and evaluation of tensors `T` that are equivariant
-under a compact group `G` (default O(3)), contracted against an
-equivariant system embedding `A`:
+under a group `G` (default O(3)), contracted against an equivariant
+system embedding `A`:
 
 ```
 F(X) = T : A(X)^⊗N,    A_nlm = Σ_j φ_nlm(x_j),    φ(gx) = ρ(g)φ(x)
 ```
 
-The research notes establish the *forced architecture* (Schur + connectedness):
-every manifestly equivariant finite-rank format is
+The research notes establish the *forced architecture* (Schur +
+connectedness): every manifestly equivariant finite-rank format is
 
 ```
 T = Σ_{l,τ} C^τ_{l1...lN} ⊗ c^{l,τ}        (fixed CG carrier ⊗ free coeffs)
@@ -28,15 +29,38 @@ compression living entirely in the G-trivial coefficient tensor `c`.
 **Consequence for the package design: a "tensor format" in ET is a choice
 of compression format for `c` plus a contraction strategy against the
 pooled features. The carrier machinery (CG coupling, symmetrisation) is
-shared infrastructure across all formats.** This is the single most
-important structural insight from the notes and should drive the layout.
+shared infrastructure across all formats.**
 
-==> small correction, the group need not be compact, all that is needed is a 
-    finite-dimensional representation. So this applies in particular also 
-    to the lorentz group after embedding into a finite-dimensional space
-    not sure what the correct terminology is, but may be  
-    "finite-dimensional representation of a locally compact Lie group" ??? 
-    Please think about it and check. 
+**Generality of the group (CO correction, checked).** Compactness is not
+needed; but "locally compact" is not the right hypothesis either — local
+compactness gives a Haar measure but not complete reducibility (e.g. ℝ
+has the non-semisimple rep `t ↦ [[1,t],[0,1]]`; same problem for the
+Euclidean group). What the forced-architecture arguments actually use:
+
+1. ρ finite-dimensional and **completely reducible (= semisimple)** —
+   this gives the isotypic decomposition, the CG carrier, and Schur. It
+   is a property of the *representation*, not the group, and holds
+   automatically for (a) all continuous f.d. reps of *compact* groups
+   (unitarisable via averaging), and (b) all f.d. reps of *connected
+   semisimple* Lie groups (Weyl's complete reducibility theorem) — which
+   covers the Lorentz group SO⁺(1,3) via its cover SL(2,ℂ). More
+   generally, reductive groups whose centre acts semisimply.
+2. Connected identity component G⁰, finite component group G/G⁰
+   (O(1,3): ℤ₂×ℤ₂ — fine). The character argument survives
+   noncompactness: χ: G → ℝ*, χ^N = 1 still forces χ(g) ∈ {±1}.
+
+Suggested phrasing: *"finite-dimensional semisimple representation of a
+Lie group with finitely many connected components"*, with compact groups
+and connected semisimple groups (Lorentz) as the two guaranteed classes.
+
+Caveats in the noncompact case, relevant to code design:
+- f.d. reps of noncompact simple groups are never unitary; carrier
+  "orthonormality" is then w.r.t. an invariant *bilinear form*, not a
+  Hermitian inner product. Conditioning of CG bases may differ.
+- Anything that *integrates or samples over G* — `quad_O3.jl`-style
+  quadrature symmetrisation, test verification via random rotations —
+  is compact-only. The CG path generalises; the quadrature path does
+  not. The `groups/` layer should keep these two routes separate.
 
 ---
 
@@ -44,9 +68,10 @@ important structural insight from the notes and should drive the layout.
 
 | Pipeline stage | Current code | Restructure verdict |
 |---|---|---|
-| particle embedding φ | `transforms/`, `embed/`, `lib/ACEradials`, P4ML, SpheriCart | out of core (lib / upstream) |
-| graph / particle states | `embed/graph.jl`, `extensions/atoms.jl`, DP dep | out of core (see §5) |
-| pooling → A | `ace/sparseprodpool*.jl` | keep in ET (see §4) |
+| particle embedding φ | `transforms/`, `embed/`, `lib/ACEradials`, P4ML, SpheriCart | out of core (lib / upstream), §5 |
+| graph datastructure | `embed/graph.jl` | **stays in ET** (decision, §5) |
+| particle states / DP diff | `transforms/diffnt.jl`, `embed/embeddings.jl`, `extensions/atoms.jl` | out of core, §5 |
+| pooling → A | `ace/sparseprodpool*.jl` | keep in ET (decision, §4) |
 | products A^⊗N | `ace/sparsesymmprod*.jl`, `symmprod_dag*.jl`, `static_prod.jl` | part of the *sparse format* |
 | carrier (CG, symmetrisation) | `O3/`, `utils/symmop.jl` | shared core, promote |
 | assembled format | `sparse_ace_basis/layer/ka/utils.jl` | becomes `formats/sparse/` |
@@ -63,90 +88,104 @@ separate.
 
 ```
 src/
-  groups/        # G-interface + O3 default: irreps, CG, coupling trees,
-                 # carrier/symmetrisation construction (abs. O3/, symmop.jl)
+  groups/        # O3: irreps, CG, coupling trees, carrier/symmetrisation
+                 # (abs. O3/, symmop.jl); flag generality, don't abstract yet
+  graphs/        # ETGraph: system <-> edge-list 3-tensor/2-tensor reshaping
   pooling/       # PooledSparseProduct + KA kernels: embeddings -> A
   formats/
     sparse/      # current: sparsesymmprod + DAG + A2Bmaps
-    dense/       # (new) unconstrained c on the B-basis
+                 # dense = special case via a dedicated constructor (see §6)
     cp/          # (new) TRACE: symmetric CP of c (+ Schur channel mixing W)
     tucker/      # (new) per eqtucker.qmd (notes still to be written)
-    tt/          # (new) tensor train — see §6
+    tt/          # (new) tensor train — see §6, Hodapp/Shapeev prior art
   specs/         # spec generation/indexing utilities
 lib/
   ACEradials/    # done
-  (candidate) particle-state / graph / atoms machinery   # see §5
+  (candidate) DP-coupled embedding machinery   # see §5
 ```
 
-==> dense is a special case of sparse. And I'm not convinced there is much 
-    value in having this as a separate format rather than a special 
-    constructor. At least this is how I see it within the current code 
-    structure. If the storage and access formats for the tensors changes 
-    significantly then this could be wrong. 
+**Decision (CO): no `dense/` format.** Dense is a special case of sparse;
+within the current storage/access structure a separate format adds
+nothing — provide a convenience *constructor* of the sparse format
+instead. Revisit only if a genuinely dense storage layout (BLAS-able
+contractions instead of sparse indexing) turns out to matter.
 
-Common format interface (all Lux layers, KA-compatible kernels):
-`evaluate(fmt, A) -> (B_L for L in LL)`, plus `pullback`, `whatalloc`.
-Formats differ *structurally* in how they contract — sparse goes through
-explicit AA products; CP goes through channel compression then per-rank
-products; dense/Tucker/TT through their own contractions — so the shared
-abstraction should be the I/O contract (A in, equivariant features per L
-out, specs/metadata), not the internal evaluation path.
-
-==> Ensure 100% lux compatibility. Consider whether a separate 
-    `evaluate` and `pullback` interface is worthwhile on top of the 
-    standard AD (possibly with ChainRules)
-
----
-
-## 4. Design question: does pooling belong in ET?
-
-Recommendation: **keep it in ET core.** Reasons:
-- It is fully application-agnostic (no chemistry; just fused sparse
-  product + sum over particles) — unlike radials, it carries no domain
-  conventions, so the ACEradials argument for eviction does not apply.
-- The transformation law of A is what *defines* the constraint on T;
-  Aspec/AAspec/coupling are co-designed and co-evolve. Splitting them
-  across packages recreates the two-repo coordination cost that
-  `agents/radials.md` cites as the reason for `lib/`.
-- It is small (one struct + kernels).
-
-But: isolate it as its own top-level concern (`src/pooling/`) with a clean
-boundary, so graduating it later stays cheap. ET's contract becomes:
-*"give me per-particle embeddings as plain arrays; I pool and contract."*
-
-
-==> I like that, let's do this. One question to consider is whether storing 
-    `A` as a single vector is a good thing, or should it be stores as a 
-    tensor in `(n, (l, m))` channels? Unclear to me, and maybe an important
-    design decision for readability and code efficiency?
+Format interface — **decisions (CO):**
+- 100% Lux compatibility is a hard requirement for all formats.
+- No abstract supertype for now. An abstract type is only justified once
+  there is shared functionality needing dispatch; start with the
+  duck-typed I/O contract (A in; equivariant features per L out; specs /
+  metadata; Lux layer semantics). (The existing `AbstractETLayer` only
+  provides evaluate-allocation conveniences and should not silently grow
+  into a format supertype.)
+- Open design item: is the bespoke `evaluate`/`pullback`/`whatalloc`
+  interface worth keeping *as public API* on top of standard AD? Likely
+  resolution: keep the hand-written in-place kernels (they are the
+  performance path, esp. with Bumper/KA) but expose them to the outside
+  world only through ChainRules `rrule`s, so users interact via Lux +
+  AD and never call `pullback!` directly. To be validated on the sparse
+  format during step 2 of §8.
 
 ---
 
-## 5. Design question: PState / DecoratedParticles
+## 4. Pooling stays in ET  *(decided)*
 
-Survey result: the DP/XState machinery (`transforms/diffnt.jl`,
-`transforms/decpart.jl`, `embed/embeddings.jl`, `embed/graph.jl`,
-`extensions/atoms.jl`) lives entirely *upstream* of A. The tensor core
-(pooling, products, coupling, formats) never sees an XState — it consumes
-and differentiates plain arrays.
+Reasons (unchanged from rev 1): application-agnostic, small, and the
+transformation law of A is what defines the constraint on T —
+Aspec/AAspec/coupling co-evolve. Isolate as `src/pooling/` with a clean
+boundary so graduating later stays cheap. ET's contract: *"give me
+per-particle embeddings as plain arrays; I pool and contract."*
 
-Recommendation: **make this an explicit boundary.** ET core takes
-embedding arrays (e.g. Rnl, Ylm matrices, or a general Φ) and defines
-pullbacks w.r.t. those arrays only. The particle-state representation and
-differentiation-through-structs question then becomes a *consumer-side*
-decision (ACEpotentials or a lib package, e.g. `lib/ETGraphs` or similar),
-and revisiting the PState design choice no longer blocks or entangles the
-ET restructure. I.e. don't answer "was PState a good idea" inside ET —
-move the question out of scope. The Dual-number tricks in `diffnt.jl` are
-self-contained and would move wholesale.
+**New design question (CO): storage layout of A.** Flat vector with spec
+indexing (current), or structured `(n, (l,m))` channels? Considerations:
 
-This would also drop DecoratedParticles (and possibly Lux vs LuxCore)
-from ET's hard deps.
+- All new formats want the Schur block structure explicitly: the channel
+  mixing W acts on n only, carrier contractions act on (l,m) only.
+  Natural layout: per-l blocks `A^l ∈ ℝ^{n_l × (2l+1)}` (ragged
+  vector-of-matrices), which is also what GPU-batched carrier
+  contractions and Tucker/TT sweeps want.
+- The sparse format is indifferent: it consumes A through an index spec
+  and can address into per-l blocks as easily as into a flat vector.
+- The flat vector is maximally flexible for *irregular* specs (different
+  n-range per l, which we do use: `n_l` above).
+- Middle ground: keep flat contiguous storage, add a lightweight block
+  view (l ↦ matrix view) on top; formats pick their access pattern.
 
-==> Ok, let's do that. Should the differentiation tooling around 
-    DecoratedParticles (=DP) be moved into DP? And would it make sense 
-    to make DP a lib for ET? 
-  
+Verdict: probably *the* key data-structure decision of the restructure;
+prototype both access patterns against the CP format before committing.
+
+---
+
+## 5. PState / DecoratedParticles boundary  *(decided, destinations refined)*
+
+Survey result (rev 1): the DP/XState machinery lives entirely *upstream*
+of A; the tensor core consumes and differentiates plain arrays.
+**Decision: adopt the boundary** — ET core takes embedding arrays and
+defines pullbacks w.r.t. those arrays only.
+
+Destination recommendations (per-piece, refined after CO's comments):
+
+- **Graph (`embed/graph.jl`): stays in ET** (CO). All models take graphs
+  as inputs, and pooling relies on the ETGraph structure to convert the
+  edge-embedding 3-tensor to the 2-tensor pooling layout and back. Only
+  move out if a replacement plan exists. Refinement: keep `ETGraph`
+  *container-agnostic* in `edge_data` so that ET does not need DP for the
+  graph itself — DP enters only through what users store in the graph.
+- **`diffnt.jl` (NamedTuple/Dual differentiation tooling): move into DP
+  itself.** It is generic make-structs-differentiable tooling with no ET
+  content; DP is its natural owner, and other DP consumers benefit.
+- **`EmbedDP`, `decpart.jl`, `atoms.jl` extension: lib package** (e.g.
+  `lib/ETAtoms` or `lib/ETEmbeddings`), not ACEpotentials — keeps the
+  radials precedent (co-evolution in one repo, graduation path open) and
+  keeps ACEpotentials a pure consumer.
+- **DP as a `lib/` of ET: recommend no.** The `lib/` slot is for packages
+  that *depend on* ET (radials pattern). After this restructure ET core
+  no longer depends on DP at all, and DP is independently useful — it
+  should remain a standalone package; the *coupling layer* (EmbedDP etc.)
+  is what belongs in `lib/`.
+
+Net effect: DecoratedParticles (and possibly Lux→LuxCore) drop out of
+ET's hard deps; ETGraph stays but becomes representation-agnostic.
 
 ---
 
@@ -155,9 +194,9 @@ from ET's hard deps.
 Per the eqcp analysis, all formats share Stage 1 (carrier) and differ in
 Stage 2/3 (compression of c, evaluation strategy):
 
-- **dense**: c stored in full per (l,τ) block. Cheapest to implement;
-  useful as reference/testing ground for the others; essentially the
-  current linear ACE with dense instead of pruned-sparse c.
+- **dense (= sparse constructor)**: c stored in full per (l,τ) block,
+  realised as a constructor producing an un-pruned sparse format.
+  Still useful early as the reference/testing ground for carrier reuse.
 - **CP / TRACE**: Schur-admissible channel mixing
   `Ā_klm = Σ_n W_{kn} A_nlm` (W independent of l,m — `selectlinl`-like
   machinery may partially be reusable), then symmetric CP on the
@@ -167,13 +206,18 @@ Stage 2/3 (compression of c, evaluation strategy):
   proceed jointly with those notes. Expected shape: shared factor matrix
   on the multiplicity (n) modes only (Schur forces factors to act
   trivially on (l,m)), Tucker core in the coupled basis.
-- **TT**: observation worth recording — the CG coupling tree is itself a
-  sequential binary contraction, i.e. **the carrier is already a TT/HT
-  network** (cores indexed by intermediate L_2,...,L_{N-1}). A TT format
-  for c whose ranks align with the coupling-tree structure could fuse
-  carrier and coefficient contraction into one sweep. This may be the
-  most natural format of all and possibly a research contribution in
-  itself.
+- **TT**: the structural observation (the CG coupling tree is itself a
+  sequential binary contraction, so the carrier is already a TT/HT
+  network and a TT format for c can fuse with it) **is published prior
+  art**: M. Hodapp & A. Shapeev, *Equivariant Tensor Network Potentials*,
+  [arXiv:2304.08226](https://arxiv.org/abs/2304.08226), MLST (2024) —
+  SO(3)-invariant-under-contraction tensor networks (MPS-like) for
+  MLIPs, with follow-up work (e.g. dispersion-corrected ETN, JCP 2025).
+  Consequence: the ET TT format is an engineering task with ETN as the
+  reference; any *research* novelty must be relative to that paper
+  (possible angles: O(3) incl. parity, alignment with the symmetrised /
+  recoupled carrier, symmetric-TT for c, generic-G formulation) — to be
+  assessed in the notes repo, not here.
 - **others**: tensor ring, hierarchical Tucker (HT = general coupling
   trees rather than the sequential ACE tree). Park for later.
 
@@ -182,26 +226,15 @@ recoupling bookkeeping (background.qmd, "where it complicates the CG
 basis") — currently handled inside `symmetrisation_matrix` for the sparse
 format; needs to be exposed as reusable carrier infrastructure.
 
-==> check whether your ideas about the TT format are already published 
-    by Alex Shapeev and Max Hodapp? (about 2-3 years ago)
-
 ---
 
-## 7. Design question: symmetric vs general tensors
+## 7. Symmetric vs general tensors  *(decided)*
 
-The notes prove symmetry is *free* for the use case `F = T : A^⊗N`
-(contraction against a tensor power sees only Sym(T)). Non-symmetric T
-only matters when the N slots carry *different* embeddings (e.g.
-A ⊗ A' mixed contractions, message passing layers, multiple interacting
-densities).
-
-Recommendation: keep mode-symmetry as a property of the concrete format
-implementations, but do not bake "all slots identical" into the abstract
-interface or the carrier code (the CG machinery is already
-slot-heterogeneous: ll-tuples need not be constant). Don't implement
-general formats now; leave the door open.
-
-==> ok agreed. 
+Symmetry is free for `F = T : A^⊗N`; non-symmetric T only matters when
+slots carry different embeddings. **Decision: keep mode-symmetry a
+property of the concrete format implementations; don't bake "all slots
+identical" into the interface or carrier code (already
+slot-heterogeneous). No general formats now.**
 
 ---
 
@@ -209,63 +242,46 @@ general formats now; leave the door open.
 
 1. Boundary cleanup first (no new functionality): split `src/ace/` into
    `pooling/` + `formats/sparse/`; promote O3+symmop to `groups/`;
-   decide destination for embed/transforms/DP machinery and move it.
-2. Introduce the abstract format interface; make the sparse format
-   conform to it. (Behaviour-preserving; existing tests must pass.)
-3. Add the dense format (small, validates the interface + carrier reuse).
+   `graph.jl` → `src/graphs/` (made container-agnostic); move diffnt
+   toward DP and EmbedDP/decpart/atoms toward a lib package.
+2. Settle the format I/O contract on the sparse format (incl. the
+   Lux/ChainRules-vs-bespoke-pullback question, §3) and the A storage
+   layout question (§4). Behaviour-preserving; existing tests must pass.
+3. Dense-via-sparse constructor as carrier-reuse validation.
 4. CP/TRACE format.
-5. Tucker (gated on eqtucker.qmd notes), then TT.
+5. Tucker (gated on eqtucker.qmd notes), then TT (after the
+   novelty-vs-ETN assessment, §6).
 
-==> agreed, but let's first iterate on whether dense is a separate format or not.
+All new format kernels: KA from day one (CO).
 
 ---
 
-## 9. Open questions for CO
+## 9. Decision record (from CO review, 2026-06-11)
 
-- Name for the format abstraction (`AbstractEquivariantFormat`?
-  `AbstractCoupledTensor`?) and for the package-level vocabulary
-  (carrier / coefficient / format?).
+- Group scope: state as "f.d. semisimple rep of a Lie group"; keep code
+  O3-only but flag and avoid hard-coding where generality is cheap
+  (e.g. pass irrep dimensions from `groups/` instead of inlining 2l+1
+  in format code). Same object pattern (D-matrices + CG analogues) is
+  expected to carry over to other groups.
+- Real SH basis committed throughout the new formats; the carrier-level
+  `basis = real/complex` switch stays in `groups/` so complex can be
+  reintroduced later (no serious obstacle identified).
+- No abstract format supertype initially.
+- 100% Lux compatibility; KA from day one.
+- Dense is a constructor of sparse, not a format.
+- Species/categorical channels are part of the multiplicity index n —
+  n is "the channel capturing everything invariant". (Lumping (l,n)
+  would also be technically possible but goes against the grain of the
+  literature — don't.)
+- Graph stays in ET; pooling stays in ET.
 
-==> It is not necessary to have an abstract supertype. This is only useful 
-    if there is shared functionality that requires dispatch. So initially 
-    just don't introduce this. 
+## 10. Remaining open questions
 
-- real vs complex SH basis: keep dual support in the carrier throughout,
-  or commit to real in the new formats?
-
-==> commit to real throughout, unless you see very serious difficulties 
-    in re-introducing complex later. 
-
-- Generalise `O3` to a `groups/` interface *now* (O(3) as the one
-  instance) or keep O3-concrete and abstract only when a second group
-  (O(2)? Euclidean? lattice point groups?) becomes concrete?
-
-==> This is a very good question. My sense is that ultimately the same 
-    objects will be used, some analogue of D matrices and some analogue 
-    of cg coefficients. This suggests that we should focus on O3 only 
-    but where there are concerns about generality, flag them and 
-    avoid hard-coding too much? 
-
-- Where do categorical/species channels live conceptually in the
-  non-atomistic setting — part of the multiplicity index n (my reading of
-  TRACE's W_{zn}), or a separate mechanism (`selectlinl`)?
-
-==> yes exactly, lump it into n. I am thinking of n as a channel that 
-    captures everything invariant. Technically one could even lump (l, n)
-    but my sense is this would become confusing since it goes against the 
-    grain of the literature. 
-
-- Destination for the particle/graph/DP machinery: lib package vs
-  ACEpotentials? (§5 argues only that it leaves ET core.)
-
-==> Give me your recommendation for the particle and DP machinery (see my question above) 
-==> For the graph, I am more sceptical about moving it out of ET. 
-    Initially at least all models will take graphs as inputs. And I would 
-    argue the pooling relies on that datastructure, because it specifies how 
-    to convert a 3-tensor into a 2-tensor for pooling and then invert.
-    I would only move this out of ET if there is a good plan in place to 
-    replace this functionality. 
-
-- GPU: all new formats KA-from-day-one, or CPU-first like radials?
-
-==> KA from day one. 
+- A storage layout: flat + spec indexing vs per-l blocks vs flat with
+  block views (§4). Prototype against CP before committing.
+- Public differentiation API: ChainRules-only surface over in-place
+  kernels, or keep `evaluate`/`pullback` exported (§3).
+- Naming: package-level vocabulary (carrier / coefficients / format?)
+  and concrete type names for the new formats.
+- DP follow-through: agree `diffnt` upstreaming with DP owners; pick the
+  lib package name for the EmbedDP/atoms machinery (§5).
