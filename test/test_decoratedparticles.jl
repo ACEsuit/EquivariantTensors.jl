@@ -88,23 +88,17 @@ ps, st = LuxCore.setup(rng, embed)
 
 G = ET.Testing.rand_graph(20; randedge = rand_x_dp)
 X = G.edge_data
-X_nt = [ getfield(x, :x) for x in X ]
 
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
 dY = DP.grad_fd.(Ref(trans), X)
-∂P1 = dY .* dP 
+∂P1 = dY .* dP
 
 P2a, _ = embed(X, ps, st)
 (P2, ∂P2), _ = ET.evaluate_ed(embed, X, ps, st)
 
-# TODO: this test is temporarily broken because the transform pullback is 
-# a bit hacky due to GPU requirements. 
-# (P3, _∂P3), _ = ET.evaluate_ed(embed, X_nt, ps, st)
-# ∂P3 = VState.(_∂P3) 
-
-println_slim(@test P ≈ P2 ≈ P2a)   # ≈ P3
-println_slim(@test all(∂P1 .≈ ∂P2 ))  # .≈ ∂P3
+println_slim(@test P ≈ P2 ≈ P2a)
+println_slim(@test all(∂P1 .≈ ∂P2 ))
 
 ## 
 
@@ -117,16 +111,13 @@ ps, st = LuxCore.setup(rng, embed)
 
 G = ET.Testing.rand_graph(20; randedge = rand_x_dp)
 X = G.edge_data
-X_nt = [ getfield(x, :x) for x in X ]
 
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
 ∂P1 = map(dr -> VState(q = 0.0, r = dr), dP)
 
 (P2, ∂P2), _ = ET.evaluate_ed(embed, X, ps, st)
-(P3, _∂P3), _ = ET.evaluate_ed(embed, X_nt, ps, st)
-∂P3 = VState.(_∂P3)
 
-println_slim(@test P ≈ P2 ≈ P3)
-println_slim(@test all(∂P1 .≈ ∂P2 .≈ ∂P3))
+println_slim(@test P ≈ P2)
+println_slim(@test all(∂P1 .≈ ∂P2))
 

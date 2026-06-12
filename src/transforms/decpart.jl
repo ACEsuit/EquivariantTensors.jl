@@ -1,23 +1,25 @@
 
 # ---------------------------------------------------------
-#  wrapping a transfrom from a named tuple or decorated particle
+#  wrapping a transfrom from a decorated particle
 #
-# NOTE: the methods for XState inputs, as well as all derivatives
-#       (evaluate_ed, _pb_ed; they require DecoratedParticles.grad_fd)
-#       live in ext/DecoratedParticlesExt.jl and are available once
-#       DecoratedParticles is loaded.
+# NOTE: only the struct and constructor live in core; all evaluation
+#       and differentiation methods live in ext/DecoratedParticlesExt.jl
+#       and are available once DecoratedParticles is loaded. Particles
+#       must be represented as XStates (PState); bare NamedTuples are
+#       not supported: they lack the tangent arithmetic (zero, +, *)
+#       needed in the gradient and pullback paths.
 
 
 """
    function dp_transform(f::Function)
    function dp_transform(f::Function, refstate::NamedTuple)
 
-If a particle x is represented as a `PState` (DecoratedParticles.jl)
-or a `NamedTuple``, e.g., `x = PState(r = SA[...], Z = 13)`,
+If a particle x is represented as a `PState` (DecoratedParticles.jl),
+e.g., `x = PState(r = SA[...], Z = 13)`,
 then a `dp_transform` generates a type that incorporates
 broadcasting and differentiation. For example
 ```julia
-x = (𝐫 = randn(StaticVector{3, Float64}), Z = rand(10:50))
+x = PState(𝐫 = randn(StaticVector{3, Float64}), Z = rand(10:50))
 refstate = (; r0 = SA[ ... ])    # list of r0 values for rescaling r
 trans = dp_transform( (x, st) -> 1 / (1 + norm(x.𝐫)/ st.r0[x.Z]))
 ```
@@ -26,7 +28,7 @@ We can then evaluate and differenitate
 y, _ = evaluate(trans, x, ps, st)
 (y, dy), _ = evaluate_ed(trans, x, ps, st)
 ```
-Here, `dy` is a `VState` or a named-tuple with the derivative w.r.t. x.𝐫 stored
+Here, `dy` is a `VState` with the derivative w.r.t. x.𝐫 stored
 as `dy.𝐫`. The derivative w.r.t. Z is not taken because `Z` is a categorical
 variable.
 
@@ -61,20 +63,6 @@ Base.show(io::IO, l::DPTransform) = print(io, "DPTransform()")
 
 initialparameters(rng::AbstractRNG, l::DPTransform) = NamedTuple()
 initialstates(rng::AbstractRNG, l::DPTransform) = deepcopy(l.refstate)
-
-(l::DPTransform)(x::NamedTuple, ps, st) = l.f(x, st), st
-
-# this non-standard calling convention assumes that st is not changed
-(l::DPTransform)(x::NamedTuple, st) = l.f(x, st)
-
-(l::DPTransform)(x::AbstractVector{<: NamedTuple}, ps, st) =
-         l(x, st), st
-
-(l::DPTransform)(x::AbstractVector{<: NamedTuple}, st) =
-         broadcast(l.f, x, Ref(st))
-
-evaluate(l::DPTransform, x::NamedTuple, ps, st) =
-         l.f(x, st)
 
 # pullback through a DPTransform w.r.t. the particle inputs; methods are
 # provided by ext/DecoratedParticlesExt.jl

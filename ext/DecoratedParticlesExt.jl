@@ -13,11 +13,9 @@ import EquivariantTensors: DPTransform, evaluate, evaluate_ed
 using DecoratedParticles: XState, PState, grad_fd
 using LinearAlgebra: dot
 
-const NTorDP = Union{NamedTuple, XState}
-
 # ---------------------------------------------------------
-# DPTransform methods for XState inputs
-# (the NamedTuple analogues live in src/transforms/decpart.jl)
+# DPTransform methods; particles must be XStates (cf. the NOTE in
+# src/transforms/decpart.jl — bare NamedTuples are not supported)
 
 (l::DPTransform)(x::XState, ps, st) = l.f(x, st), st
 
@@ -36,17 +34,17 @@ evaluate(l::DPTransform, x::XState, ps, st) =
 # ---------------------------------------------------------
 # derivatives w.r.t. particle inputs
 
-evaluate_ed(l::DPTransform, x::NTorDP, ps, st) =
+evaluate_ed(l::DPTransform, x::XState, ps, st) =
          (l.f(x, st), grad_fd(l.f, x, st))
 
-function evaluate_ed(l::DPTransform, x::AbstractVector{<: NTorDP}, ps, st)
+function evaluate_ed(l::DPTransform, x::AbstractVector{<: XState}, ps, st)
    Y = broadcast(l.f, x, Ref(st))
    dY = broadcast(grad_fd, Ref(l.f), x, Ref(st))
    return (Y, dY), st
 end
 
 function ET._pb_ed(l::DPTransform, Δ::AbstractArray,
-                   X::AbstractVector{<: NTorDP}, ps, st)
+                   X::AbstractVector{<: XState}, ps, st)
    # make sure the closure doesn't capture l, but only l.f
    # and l.f itself cannot capture anything that doesn't run on GPU.
    pb1 = let l_f = l.f, st = st

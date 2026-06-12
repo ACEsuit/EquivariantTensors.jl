@@ -74,11 +74,6 @@ end
 # utility functions to work with the ETGraph and embedding it into 
 # various formats for further processing
 
-__zero(x) = zero(x)
-# cannot be `Base.zero`: that would be type piracy on NamedTuple
-__zero(TX::Type{<: NamedTuple}) =
-      reinterpret(TX, ntuple(_ -> Int8(0), sizeof(TX)))
-
 """
    reshape_embedding(P, ii, jj, nnodes, maxneigs)
 
@@ -103,7 +98,9 @@ function reshape_embedding(P, X::ETGraph)
    # size(P) == #edges x # features 
    nedges, nfeatures = size(P)
    P3 = similar(P, (maxneigs(X), nnodes(X), nfeatures))
-   fill!(P3, __zero(eltype(P3)))    # TODO : nasty hack, another reason to switch to DecoratedParticles 
+   # NOTE: requires zero(eltype); for state-valued embeddings this is
+   #       provided by DecoratedParticles (bare NamedTuples don't have it)
+   fill!(P3, zero(eltype(P3)))
    backend = KernelAbstractions.get_backend(P3)
    kernel! = _reshape_embedding!(backend)
    kernel!(P3, P, X.first; ndrange = (nnodes(X), nfeatures))
@@ -134,7 +131,7 @@ function rev_reshape_embedding(P3, X::ETGraph)
    nedg = nedges(X) 
    nfeatures = size(P3, 3) 
    P = similar(P3, (nedg, nfeatures))
-   fill!(P, __zero(eltype(P3)))
+   fill!(P, zero(eltype(P3)))
 
    backend = KernelAbstractions.get_backend(P)
    kernel! = _rev_reshape_embedding!(backend)
