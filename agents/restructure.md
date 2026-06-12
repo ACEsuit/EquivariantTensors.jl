@@ -209,6 +209,48 @@ Destination recommendations (per-piece, refined after CO's comments):
 Net effect: DecoratedParticles (and possibly Lux→LuxCore) drop out of
 ET's hard deps; ETGraph stays but becomes representation-agnostic.
 
+### 5.1 DP removal — implementation record (PR `restruct_rmdp`)
+
+Status: diffnt landed in DP v0.1.4 (registered); ET side done. Deviations
+and refinements relative to the plan above:
+
+- **NamedTuples are no longer supported as particle/edge types**
+  (decision, CO review on PR #110). The embedding layers and the
+  reshape/pad machinery require *state* containers; the precise contract
+  is "particle/edge data must support tangent arithmetic and a tangent
+  zero" (`zero`, `+`, scalar `*`) — XStates qualify, plain arrays of
+  SVectors qualify, bare NamedTuples don't. Evidence collected in this
+  PR: (a) NT edge data broke pullbacks (`Float32 * NamedTuple`
+  undefined); (b) "zero of a NamedTuple" is ill-defined for categorical
+  fields — the old byte-zeroing `__zero` hack fabricated invalid values,
+  and the PState/VState point-vs-tangent distinction is the actual
+  answer; (c) supporting both containers duplicated every `DPTransform`
+  method across core and ext. The NT differentiation tooling itself
+  stays in DP (generic, useful); ET just doesn't route particles through
+  bare NamedTuples. `ETGraph` remains storage-agnostic.
+- **`EmbedDP`/`DPTransform` structs stay in core** — core files
+  (agnesi, transsplines) dispatch on them — but *all* evaluation and
+  differentiation methods live in the new `ext/DecoratedParticlesExt.jl`.
+  Consequence: calling a `DPTransform`/`EmbedDP` throws MethodError
+  unless DP is loaded (loud failure, acceptable: all real consumers
+  load DP).
+- The `__zero` helper is deleted; `reshape_embedding` /
+  `rev_reshape_embedding` pad with `zero(eltype)`, which DP provides for
+  XState types (incl. `_mod_zero` for categorical fields). Also fixed:
+  `rev_reshape_embedding` previously used `zero` while its forward
+  counterpart used the hack — now consistent.
+- **`NeighbourListsExt` gains DP as a second trigger**
+  (`["NeighbourLists", "DecoratedParticles"]`) — took the cheap option;
+  making it container-agnostic is deferred to the graphs/ step.
+- **`TransSelSplines` signatures relaxed** from
+  `AbstractVector{<: XState}` to `AbstractVector` (duck-typed; the
+  tangent-arithmetic contract applies, not a container restriction).
+- **`Testing.rand_graph` keeps PState default edge data**, provided
+  through the extension (`_default_randedge` stub in core, method in
+  the ext).
+- `NamedTupleTools` dropped from deps (only diffnt used it).
+- Lux→LuxCore *not* done here (DP-focused PR); separate step.
+
 ---
 
 ## 6. New formats — implementation notes
@@ -343,6 +385,9 @@ All new format kernels: KA from day one (CO).
   would also be technically possible but goes against the grain of the
   literature — don't.)
 - Graph stays in ET; pooling stays in ET.
+- Particle/edge data must be state types with tangent arithmetic
+  (XStates; plain SVectors also qualify) — bare NamedTuples are not
+  supported as particles (2026-06-12, CO review on PR #110; see §5.1).
 
 ## 10. Remaining open questions
 

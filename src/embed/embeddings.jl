@@ -61,7 +61,7 @@ the basis (or other layer) on the transformed state.
 
 This is basically a 3-stage Chain, but with additional logic, specifically 
 the implementation of evaluate_ed allowing differentiation through 
-and XState or NamedTuple input. This is e.g. needed for jacobians. 
+an XState input. This is e.g. needed for jacobians.
 """
 @concrete struct EmbedDP <: AbstractLuxContainerLayer{(:trans, :basis, :post)}
    trans

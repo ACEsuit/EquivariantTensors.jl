@@ -61,8 +61,8 @@ f(x)
 g0 = TestDP.grad_man(f, x)
 g1 = TestDP.grad_1(f, x)
 g2 = TestDP.grad_zy(f, x)
-g3 = ET.DiffNT.grad_fd(f, x)
-g4 = ET.DiffNT.grad_fd(f, x_nt)
+g3 = DP.grad_fd(f, x)
+g4 = DP.grad_fd(f, x_nt)
 
 println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3 ≈ VState(g4))
 
@@ -75,7 +75,7 @@ println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3 ≈ VState(g4))
 # @btime grad_man($f, $x)    # 3.3ns 
 # @btime grad_1($f, $x)      # 6.5ns
 # @btime grad_zy($f, $x)     # 1.4us 
-# @btime ET.DiffNT.grad_fd($f, $x)   # 8.3ns
+# @btime DP.grad_fd($f, $x)   # 8.3ns
 
 ## 
 
@@ -88,23 +88,17 @@ ps, st = LuxCore.setup(rng, embed)
 
 G = ET.Testing.rand_graph(20; randedge = rand_x_dp)
 X = G.edge_data
-X_nt = [ getfield(x, :x) for x in X ]
 
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
-dY = ET.DiffNT.grad_fd.(Ref(trans), X)
-∂P1 = dY .* dP 
+dY = DP.grad_fd.(Ref(trans), X)
+∂P1 = dY .* dP
 
 P2a, _ = embed(X, ps, st)
 (P2, ∂P2), _ = ET.evaluate_ed(embed, X, ps, st)
 
-# TODO: this test is temporarily broken because the transform pullback is 
-# a bit hacky due to GPU requirements. 
-# (P3, _∂P3), _ = ET.evaluate_ed(embed, X_nt, ps, st)
-# ∂P3 = VState.(_∂P3) 
-
-println_slim(@test P ≈ P2 ≈ P2a)   # ≈ P3
-println_slim(@test all(∂P1 .≈ ∂P2 ))  # .≈ ∂P3
+println_slim(@test P ≈ P2 ≈ P2a)
+println_slim(@test all(∂P1 .≈ ∂P2 ))
 
 ## 
 
@@ -117,16 +111,13 @@ ps, st = LuxCore.setup(rng, embed)
 
 G = ET.Testing.rand_graph(20; randedge = rand_x_dp)
 X = G.edge_data
-X_nt = [ getfield(x, :x) for x in X ]
 
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
 ∂P1 = map(dr -> VState(q = 0.0, r = dr), dP)
 
 (P2, ∂P2), _ = ET.evaluate_ed(embed, X, ps, st)
-(P3, _∂P3), _ = ET.evaluate_ed(embed, X_nt, ps, st)
-∂P3 = VState.(_∂P3)
 
-println_slim(@test P ≈ P2 ≈ P3)
-println_slim(@test all(∂P1 .≈ ∂P2 .≈ ∂P3))
+println_slim(@test P ≈ P2)
+println_slim(@test all(∂P1 .≈ ∂P2))
 
