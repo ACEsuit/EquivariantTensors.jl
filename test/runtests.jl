@@ -29,22 +29,23 @@ end
     @testset "SparseMatrix-KA" begin include("formats/sparse/test_sparsemat_ka.jl"); end
 end
 
-@testset "O3-Coupling" begin 
-    @testset "SYYVector" begin include("test_yyvector.jl"); end
-    @testset "Clebsch Gordan Coeffs" begin include("test_clebschgordans.jl"); end
-    @testset "Representation" begin include("test_representation.jl"); end
-    @testset "Real AA to Complex AA" begin include("test_rAA2cAA.jl"); end
-    @testset "Coupling Coeffs" begin include("test_coupling.jl"); end
-    @testset "Coupling Coeffs with refl_sym given" begin include("test_coupling_augmented.jl"); end
-    @testset "QuadO3" begin include("O3/test_quad_O3.jl"); end
+@testset "Groups: O3" begin
+    @testset "SYYVector" begin include("groups/O3/test_yyvector.jl"); end
+    @testset "Clebsch Gordan Coeffs" begin include("groups/O3/test_clebschgordans.jl"); end
+    @testset "Representation" begin include("groups/O3/test_representation.jl"); end
+    @testset "Real AA to Complex AA" begin include("groups/O3/test_rAA2cAA.jl"); end
+    @testset "Coupling Coeffs" begin include("groups/O3/test_coupling.jl"); end
+    @testset "Coupling Coeffs with refl_sym given" begin include("groups/O3/test_coupling_augmented.jl"); end
+    @testset "O3 Transformations" begin include("groups/O3/test_O3_transforms.jl"); end
+    @testset "QuadO3" begin include("groups/O3/test_quad_O3.jl"); end
 end
 
 @testset "ACE Models" begin 
     @testset "Pullback" begin include("acemodels/test_sparse_ace.jl"); end
     @testset "Pullback complex" begin include("acemodels/test_sparse_ace_cplx.jl"); end
     @testset "ACE KA and grad" begin include("acemodels/test_ace_ka.jl"); end
-    # temporarily remove this testset. 
-    # @testset "ACE KA new version" begin include("acemodels/test_ace_ka2.jl"); end
+    # temporarily remove this testset.
+    # @testset "ACE KA new version" begin include("dormant/test_ace_ka2.jl"); end
 end 
 
 @testset "Atoms" begin 

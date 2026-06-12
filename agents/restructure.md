@@ -90,6 +90,13 @@ by pooling and the sparse format. Test tree mirrors the split
 (`test/pooling/`, `test/formats/sparse/`, `test/utils/`). Pure moves,
 no code changes beyond include paths.
 
+*Done (PR `restruct_groups`):* `src/O3/` → `src/groups/O3/` and
+`utils/symmop.jl` → `groups/symmop.jl` (the carrier symmetrisation
+belongs with the group layer, not generic utils). Group tests collected
+in `test/groups/`. Pure moves. The §1 caveat (separate the CG route
+from the compact-only quadrature route inside `groups/`) remains open —
+quad_O3 stays inside the O3 module for now.
+
 ---
 
 ## 3. Proposed layout
@@ -398,6 +405,14 @@ All new format kernels: KA from day one (CO).
   supported as particles (2026-06-12, CO review on PR #110; see §5.1).
 
 ## 10. Remaining open questions
+
+Test-suite cleanup (2026-06-12, PR `restruct_groups`): dormant /
+superfluous tests parked in `test/dormant/` (see its README).
+Outstanding items: reactivate `test_agnesi.jl` as part of the
+agnesi/chemistry → ACEradials move; review `test_lux_models.jl`
+(only CPU-vs-GPU model consistency coverage); revisit `test_embed.jl`
+(SelectLinL coverage vs test_splines overlap) before finalizing the
+restructure.
 
 - A storage layout: flat + spec indexing vs per-l blocks vs flat with
   block views (§4). Prototype against CP before committing.

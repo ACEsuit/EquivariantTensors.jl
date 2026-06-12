@@ -50,11 +50,11 @@ include("formats/sparse/sparse_ace_utils.jl")
 include("formats/sparse/sparsemat_ka.jl")
 
 # ------------------------------------------------------
-# O3 symmetrization
-include("O3/O3.jl")
-# O3/O3_transformations.jl
-# O3/yyvector.jl 
-# O3/O3_utils.jl 
+# groups: O3 irreps, CG coupling, carrier symmetrisation
+include("groups/O3/O3.jl")
+# (O3.jl includes O3_utils.jl, yyvector.jl, O3_transformations.jl,
+#  quad_O3_data.jl, quad_O3.jl)
+include("groups/symmop.jl")
 
 
 # ------------------------------------------------------
@@ -62,7 +62,6 @@ include("O3/O3.jl")
 include("utils/setproduct.jl")
 include("utils/invmap.jl")
 include("utils/sparseprod.jl")
-include("utils/symmop.jl")
 include("utils/promotion.jl")
 
 # a linear layer that selects a linear operator from 
