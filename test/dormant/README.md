@@ -14,3 +14,5 @@ analysis before deletion (2026-06-12, during the restructure; see
 - `test_O3_scratch.jl` — scratch file, no `@test`.
 - `test_prodpool_mult.jl` — experimental batched pooled products,
   per its header "not really supported yet".
+- `test_forwarddiff.jl` — per its header, duplicates the individual
+  layer tests; the frule tests might be the only ones worth keeping.
