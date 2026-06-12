@@ -406,6 +406,14 @@ All new format kernels: KA from day one (CO).
 
 ## 10. Remaining open questions
 
+Test-suite cleanup (2026-06-12, PR `restruct_groups`): dormant /
+superfluous tests parked in `test/dormant/` (see its README).
+Outstanding items: reactivate `test_agnesi.jl` as part of the
+agnesi/chemistry → ACEradials move; review `test_lux_models.jl`
+(only CPU-vs-GPU model consistency coverage); revisit `test_embed.jl`
+(SelectLinL coverage vs test_splines overlap) before finalizing the
+restructure.
+
 - A storage layout: flat + spec indexing vs per-l blocks vs flat with
   block views (§4). Prototype against CP before committing.
 - Public differentiation API: ChainRules-only surface over in-place

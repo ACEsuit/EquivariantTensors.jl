@@ -36,6 +36,7 @@ end
     @testset "Real AA to Complex AA" begin include("groups/O3/test_rAA2cAA.jl"); end
     @testset "Coupling Coeffs" begin include("groups/O3/test_coupling.jl"); end
     @testset "Coupling Coeffs with refl_sym given" begin include("groups/O3/test_coupling_augmented.jl"); end
+    @testset "O3 Transformations" begin include("groups/O3/test_O3_transforms.jl"); end
     @testset "QuadO3" begin include("groups/O3/test_quad_O3.jl"); end
 end
 
