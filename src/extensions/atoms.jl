@@ -1,16 +1,10 @@
 
 # provide prototypes for extensions loaded via Pkg Extensions 
 
-module Atoms 
+module Atoms
 
-# Prototypes for AtomsBaseExt 
-# ----------------------------- 
-
-function bond_len end
-function agnesi_transform end
-
-# Prototypes for NeighbourListExt 
-# ----------------------------- 
+# Prototypes for NeighbourListExt
+# -----------------------------
 
 function interaction_graph end 
 

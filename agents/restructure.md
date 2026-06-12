@@ -216,6 +216,18 @@ Destination recommendations (per-piece, refined after CO's comments):
   defaults in `AtomsBaseExt`) belongs with ACEradials (which already
   has `elements.jl`/`transforms.jl`), not ET. Weakdep stubs themselves
   are harmless — no load cost, a dozen empty functions.
+*Done (PR `restruct_chemistry`):* chemistry/radials moved to
+lib/ACEradials: `transforms/agnesi.jl` → `ACEradials/src/agnesi_dp.jl`
+(its 6-arg constructor is now a method of `ACEradials.agnesi_transform`;
+unification with the scalar `GeneralizedAgnesiTransform` still pending,
+see agents/radials.md §4); ET's whole `AtomsBaseExt` (bond_len +
+LENGTHSCALES data + agnesi defaults) → ACEradials AtomsBase-extension;
+`bond_len`/`agnesi_transform` stubs removed from `ET.Atoms` (graph stubs
+stay); ET drops the AtomsBase and (vestigial) AtomsBuilder weakdeps —
+both remain test-only deps. `test_agnesi.jl` reactivated in ACEradials
+(fixed on arrival: bare-NamedTuple inputs → PStates per the #110
+decision, and stale `s0/s1` field names → the live `z0/z1` convention).
+
 - **DP as a `lib/` of ET: no.** The `lib/` slot is for packages that
   *depend on* ET (radials pattern). After this restructure ET core no
   longer depends on DP at all, and DP is independently useful — it
@@ -408,8 +420,7 @@ All new format kernels: KA from day one (CO).
 
 Test-suite cleanup (2026-06-12, PR `restruct_groups`): dormant /
 superfluous tests parked in `test/dormant/` (see its README).
-Outstanding items: reactivate `test_agnesi.jl` as part of the
-agnesi/chemistry → ACEradials move; review `test_lux_models.jl`
+Outstanding items: review `test_lux_models.jl`
 (only CPU-vs-GPU model consistency coverage); revisit `test_embed.jl`
 (SelectLinL coverage vs test_splines overlap) before finalizing the
 restructure.

@@ -3,10 +3,8 @@
 # transforming an interatomic distance. 
 
 
-import EquivariantTensors: agnesi_params, eval_agnesi,
-                           DPTransform
-
-import EquivariantTensors as ET                
+import ACEradials
+import ACEradials: agnesi_params, eval_agnesi
 
 function _rineqcut(zi, zj, rinfactor, rcutfactor)
    req = bond_len(zi, zj)
@@ -53,12 +51,7 @@ function at_agnesi_params(zlist;
 end
 
 
-function ET.Atoms.agnesi_transform(zlist; pin = 4, pcut = 2, kwargs...) 
+function ACEradials.agnesi_transform(zlist; pin = 4, pcut = 2, kwargs...)
    rins, reqs, rcuts = at_agnesi_params(zlist; kwargs...)
-
-   display(rins)
-   display(reqs)
-   display(rcuts)
-
-   return ET.agnesi_transform(zlist, rins, reqs, rcuts, pin, pcut)
+   return ACEradials.agnesi_transform(zlist, rins, reqs, rcuts, pin, pcut)
 end

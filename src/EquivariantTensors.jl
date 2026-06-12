@@ -23,7 +23,6 @@ include("generics.jl")
 # ------------------------------------------------------
 # embedding layers, transforms, & auxiliary functionality 
 include("transforms/decpart.jl")
-include("transforms/agnesi.jl")
 
 include("embed/graph.jl")
 include("embed/embeddings.jl")
