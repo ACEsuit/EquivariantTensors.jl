@@ -29,14 +29,14 @@ end
     @testset "SparseMatrix-KA" begin include("formats/sparse/test_sparsemat_ka.jl"); end
 end
 
-@testset "O3-Coupling" begin 
-    @testset "SYYVector" begin include("test_yyvector.jl"); end
-    @testset "Clebsch Gordan Coeffs" begin include("test_clebschgordans.jl"); end
-    @testset "Representation" begin include("test_representation.jl"); end
-    @testset "Real AA to Complex AA" begin include("test_rAA2cAA.jl"); end
-    @testset "Coupling Coeffs" begin include("test_coupling.jl"); end
-    @testset "Coupling Coeffs with refl_sym given" begin include("test_coupling_augmented.jl"); end
-    @testset "QuadO3" begin include("O3/test_quad_O3.jl"); end
+@testset "Groups: O3" begin
+    @testset "SYYVector" begin include("groups/test_yyvector.jl"); end
+    @testset "Clebsch Gordan Coeffs" begin include("groups/test_clebschgordans.jl"); end
+    @testset "Representation" begin include("groups/test_representation.jl"); end
+    @testset "Real AA to Complex AA" begin include("groups/test_rAA2cAA.jl"); end
+    @testset "Coupling Coeffs" begin include("groups/test_coupling.jl"); end
+    @testset "Coupling Coeffs with refl_sym given" begin include("groups/test_coupling_augmented.jl"); end
+    @testset "QuadO3" begin include("groups/test_quad_O3.jl"); end
 end
 
 @testset "ACE Models" begin 

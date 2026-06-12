@@ -90,6 +90,13 @@ by pooling and the sparse format. Test tree mirrors the split
 (`test/pooling/`, `test/formats/sparse/`, `test/utils/`). Pure moves,
 no code changes beyond include paths.
 
+*Done (PR `restruct_groups`):* `src/O3/` → `src/groups/O3/` and
+`utils/symmop.jl` → `groups/symmop.jl` (the carrier symmetrisation
+belongs with the group layer, not generic utils). Group tests collected
+in `test/groups/`. Pure moves. The §1 caveat (separate the CG route
+from the compact-only quadrature route inside `groups/`) remains open —
+quad_O3 stays inside the O3 module for now.
+
 ---
 
 ## 3. Proposed layout
