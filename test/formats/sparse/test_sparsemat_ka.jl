@@ -5,7 +5,7 @@ import EquivariantTensors as ET
 import KernelAbstractions as KA
 import Random 
 
-include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
+include(joinpath(@__DIR__(), "..", "..", "test_utils", "utils_gpu.jl"))
 
 ## 
 

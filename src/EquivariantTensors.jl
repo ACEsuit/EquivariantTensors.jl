@@ -30,17 +30,24 @@ include("embed/embeddings.jl")
 include("embed/transsplines.jl")
 
 # ------------------------------------------------------
-# Core ACE model functionality 
-include("ace/static_prod.jl")
-include("ace/sparseprodpool.jl")
-include("ace/sparseprodpool_ka.jl")
-include("ace/sparsesymmprod.jl")
-include("ace/sparsesymmprod_ka.jl")
-include("ace/sparse_ace_basis.jl")
-include("ace/sparse_ace_layer.jl")
-include("ace/sparse_ace_ka.jl")
-include("ace/sparse_ace_utils.jl")
-include("ace/sparsemat_ka.jl")
+# static product kernels, shared by pooling and the sparse format
+include("utils/static_prod.jl")
+
+# ------------------------------------------------------
+# pooling layer: per-edge embeddings -> A
+include("pooling/sparseprodpool.jl")
+include("pooling/sparseprodpool_ka.jl")
+
+# ------------------------------------------------------
+# sparse tensor format: symmetric products + symmetrisation
+# (symmprod_dag*.jl live here too but are currently not included)
+include("formats/sparse/sparsesymmprod.jl")
+include("formats/sparse/sparsesymmprod_ka.jl")
+include("formats/sparse/sparse_ace_basis.jl")
+include("formats/sparse/sparse_ace_layer.jl")
+include("formats/sparse/sparse_ace_ka.jl")
+include("formats/sparse/sparse_ace_utils.jl")
+include("formats/sparse/sparsemat_ka.jl")
 
 # ------------------------------------------------------
 # O3 symmetrization

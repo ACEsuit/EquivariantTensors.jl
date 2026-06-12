@@ -266,7 +266,7 @@ println()
 ##
 
 @info("Testing KA integration for SparseSymmProd")
-include(joinpath(@__DIR__(), "..", "test_utils", "utils_gpu.jl"))
+include(joinpath(@__DIR__(), "..", "..", "test_utils", "utils_gpu.jl"))
 
 itest = 2
 

@@ -82,6 +82,14 @@ Note the current `src/ace/` mixes two distinct things: the generic pooling
 (A) and the sparse-format-specific symmetric products (AA). They should
 separate.
 
+*Done (PR `restruct_acesplit`):* `src/ace/` split into
+`pooling/` (sparseprodpool + KA kernels) and `formats/sparse/`
+(sparsesymmprod, symmprod_dag (dormant, not included), sparse_ace_*,
+sparsemat_ka); `static_prod.jl` → `utils/` since its kernels are shared
+by pooling and the sparse format. Test tree mirrors the split
+(`test/pooling/`, `test/formats/sparse/`, `test/utils/`). Pure moves,
+no code changes beyond include paths.
+
 ---
 
 ## 3. Proposed layout
