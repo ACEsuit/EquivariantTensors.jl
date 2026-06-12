@@ -19,11 +19,14 @@ end
     @testset "TransSplines" begin include("embed/test_splines.jl"); end
 end
 
-@testset "ACE Layers" begin 
-    @testset "StaticProd" begin include("ace/test_static_prod.jl"); end 
-    @testset "SparseProdPool" begin include("ace/test_sparseprodpool.jl"); end 
-    @testset "SparseSymmetricProduct" begin include("ace/test_sparsesymmprod.jl"); end 
-    @testset "SparseMatrix-KA" begin include("ace/test_sparsemat_ka.jl"); end
+@testset "Pooling" begin
+    @testset "StaticProd" begin include("utils/test_static_prod.jl"); end
+    @testset "SparseProdPool" begin include("pooling/test_sparseprodpool.jl"); end
+end
+
+@testset "Sparse Format" begin
+    @testset "SparseSymmetricProduct" begin include("formats/sparse/test_sparsesymmprod.jl"); end
+    @testset "SparseMatrix-KA" begin include("formats/sparse/test_sparsemat_ka.jl"); end
 end
 
 @testset "O3-Coupling" begin 
