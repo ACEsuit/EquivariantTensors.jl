@@ -209,6 +209,39 @@ Destination recommendations (per-piece, refined after CO's comments):
 Net effect: DecoratedParticles (and possibly Lux→LuxCore) drop out of
 ET's hard deps; ETGraph stays but becomes representation-agnostic.
 
+### 5.1 DP removal — implementation record (PR `restruct_rmdp`)
+
+Status: diffnt landed in DP v0.1.4 (registered); ET side done. Deviations
+and refinements relative to the plan above:
+
+- **`EmbedDP`/`DPTransform` structs stay in core** — they turned out to
+  be DP-free (dispatch + plain evaluation work on NamedTuples). What
+  moved to the new `ext/DecoratedParticlesExt.jl` is (a) all `XState`
+  methods and (b) *all* derivative paths (`evaluate_ed`, `_pb_ed`) —
+  including the NamedTuple ones, since `grad_fd` now lives in DP. So
+  "EmbedDP/decpart → extension" resolved as: structs in core, DP
+  coupling + struct-input differentiation in the extension. Consequence:
+  `evaluate_ed` of a `DPTransform`/`EmbedDP` throws MethodError unless
+  DP is loaded (loud failure, acceptable: all real consumers load DP).
+- **`NeighbourListsExt` gains DP as a second trigger**
+  (`["NeighbourLists", "DecoratedParticles"]`) — took the cheap option;
+  making it container-agnostic is deferred to the graphs/ step.
+- **`TransSelSplines` made container-agnostic**: its two methods were
+  restricted to `AbstractVector{<: XState}` for no structural reason;
+  relaxed to `AbstractVector` (strict behaviour extension).
+- **`Testing.rand_graph` keeps PState default edge data**, now provided
+  through the extension (`_default_randedge` stub in core, method in the
+  ext). A plain-NamedTuple default was tried first and broke pullbacks:
+  tangent arithmetic (`α * dx`, `dx + dy`) on edge data needs the
+  vector-space structure of XStates — NamedTuples don't have it. Worth
+  remembering for the graphs/ container-agnostic step: "container-
+  agnostic" can only mean agnostic in *storage*, gradients still need
+  state(-like) arithmetic.
+- `__zero(::Type{<:NamedTuple})` inlined in `graph.jl` (1 line,
+  duplicates DP's helper — accepted, core needs it without DP).
+- `NamedTupleTools` dropped from deps (only diffnt used it).
+- Lux→LuxCore *not* done here (DP-focused PR); separate step.
+
 ---
 
 ## 6. New formats — implementation notes

@@ -11,14 +11,9 @@ import ChainRulesCore: rrule, frule
 import LuxCore: initialparameters, initialstates, AbstractLuxLayer
 import MLDataDevices: gpu_device, cpu_device 
 
-import DecoratedParticles as DP 
-import Polynomials4ML as P4ML 
+import Polynomials4ML as P4ML
 
-import DecoratedParticles: VState, PState, XState 
-
-const NTorDP = Union{NamedTuple, XState}
-
-using ForwardDiff: Dual, extract_derivative 
+using ForwardDiff: Dual, extract_derivative
 
 export O3, gpu_device, cpu_device  
 
@@ -27,7 +22,6 @@ include("generics.jl")
 
 # ------------------------------------------------------
 # embedding layers, transforms, & auxiliary functionality 
-include("transforms/diffnt.jl")
 include("transforms/decpart.jl")
 include("transforms/agnesi.jl")
 

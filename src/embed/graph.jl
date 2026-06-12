@@ -74,8 +74,10 @@ end
 # utility functions to work with the ETGraph and embedding it into 
 # various formats for further processing
 
-__zero(x) = zero(x) 
-__zero(TX::Type{<: NamedTuple}) = DiffNT.__zero(TX)
+__zero(x) = zero(x)
+# cannot be `Base.zero`: that would be type piracy on NamedTuple
+__zero(TX::Type{<: NamedTuple}) =
+      reinterpret(TX, ntuple(_ -> Int8(0), sizeof(TX)))
 
 """
    reshape_embedding(P, ii, jj, nnodes, maxneigs)
@@ -132,7 +134,7 @@ function rev_reshape_embedding(P3, X::ETGraph)
    nedg = nedges(X) 
    nfeatures = size(P3, 3) 
    P = similar(P3, (nedg, nfeatures))
-   fill!(P, zero(eltype(P3)))
+   fill!(P, __zero(eltype(P3)))
 
    backend = KernelAbstractions.get_backend(P)
    kernel! = _rev_reshape_embedding!(backend)

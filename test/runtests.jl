@@ -14,7 +14,6 @@ include(joinpath(@__DIR__(), "test_utils", "utils_gpu.jl"))
 end
 
 @testset "Embed" begin 
-    @testset "NamedTuples" begin include("embed/test_diffnt.jl"); end
     @testset "Transform" begin include("embed/test_transform.jl"); end
     @testset "Decorated Particles" begin include("test_decoratedparticles.jl"); end
     @testset "TransSplines" begin include("embed/test_splines.jl"); end

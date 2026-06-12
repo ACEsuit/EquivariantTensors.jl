@@ -61,8 +61,8 @@ f(x)
 g0 = TestDP.grad_man(f, x)
 g1 = TestDP.grad_1(f, x)
 g2 = TestDP.grad_zy(f, x)
-g3 = ET.DiffNT.grad_fd(f, x)
-g4 = ET.DiffNT.grad_fd(f, x_nt)
+g3 = DP.grad_fd(f, x)
+g4 = DP.grad_fd(f, x_nt)
 
 println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3 ≈ VState(g4))
 
@@ -75,7 +75,7 @@ println_slim(@test g0 ≈ g1 ≈ g2 ≈ g3 ≈ VState(g4))
 # @btime grad_man($f, $x)    # 3.3ns 
 # @btime grad_1($f, $x)      # 6.5ns
 # @btime grad_zy($f, $x)     # 1.4us 
-# @btime ET.DiffNT.grad_fd($f, $x)   # 8.3ns
+# @btime DP.grad_fd($f, $x)   # 8.3ns
 
 ## 
 
@@ -92,7 +92,7 @@ X_nt = [ getfield(x, :x) for x in X ]
 
 Y = trans.(X)
 P, dP = P4ML.evaluate_ed(basis, Y)
-dY = ET.DiffNT.grad_fd.(Ref(trans), X)
+dY = DP.grad_fd.(Ref(trans), X)
 ∂P1 = dY .* dP 
 
 P2a, _ = embed(X, ps, st)

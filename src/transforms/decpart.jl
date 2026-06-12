@@ -1,8 +1,11 @@
 
-import ForwardDiff as FD
-
 # ---------------------------------------------------------
 #  wrapping a transfrom from a named tuple or decorated particle
+#
+# NOTE: the methods for XState inputs, as well as all derivatives
+#       (evaluate_ed, _pb_ed; they require DecoratedParticles.grad_fd)
+#       live in ext/DecoratedParticlesExt.jl and are available once
+#       DecoratedParticles is loaded.
 
 
 """
@@ -59,36 +62,20 @@ Base.show(io::IO, l::DPTransform) = print(io, "DPTransform()")
 initialparameters(rng::AbstractRNG, l::DPTransform) = NamedTuple()
 initialstates(rng::AbstractRNG, l::DPTransform) = deepcopy(l.refstate)
 
-(l::DPTransform)(x::NTorDP, ps, st) = l.f(x, st), st
+(l::DPTransform)(x::NamedTuple, ps, st) = l.f(x, st), st
 
 # this non-standard calling convention assumes that st is not changed
-(l::DPTransform)(x::NTorDP, st) = l.f(x, st)
+(l::DPTransform)(x::NamedTuple, st) = l.f(x, st)
 
-(l::DPTransform)(x::AbstractVector{<: NTorDP}, ps, st) =
+(l::DPTransform)(x::AbstractVector{<: NamedTuple}, ps, st) =
          l(x, st), st
 
-(l::DPTransform)(x::AbstractVector{<: NTorDP}, st) =
+(l::DPTransform)(x::AbstractVector{<: NamedTuple}, st) =
          broadcast(l.f, x, Ref(st))
 
-evaluate(l::DPTransform, x::NTorDP, ps, st) =
+evaluate(l::DPTransform, x::NamedTuple, ps, st) =
          l.f(x, st)
 
-evaluate_ed(l::DPTransform, x::NTorDP, ps, st) =
-         (l.f(x, st), DiffNT.grad_fd(l.f, x, st))
-
-function evaluate_ed(l::DPTransform, x::AbstractVector{<: NTorDP}, ps, st)
-   Y = broadcast(l.f, x, Ref(st))
-   dY = broadcast(DiffNT.grad_fd, Ref(l.f), x, Ref(st))
-   return (Y, dY), st
-end
-
-
-function _pb_ed(l::DPTransform, Δ::AbstractArray,
-                 X::AbstractVector{<: NTorDP}, ps, st)
-   # make sure the closure doesn't capture l, but only l.f
-   # and l.f itself cannot capture anything that doesn't run on GPU.
-   pb1 = let l_f = l.f, st = st
-      (x, d) -> DiffNT.grad_fd(_x -> dot(l_f(_x, st), d), x)
-   end
-   return pb1.(X, Δ)
-end
+# pullback through a DPTransform w.r.t. the particle inputs; methods are
+# provided by ext/DecoratedParticlesExt.jl
+function _pb_ed end

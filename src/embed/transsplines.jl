@@ -94,8 +94,8 @@ initialstates(rng::AbstractRNG, l::TransSelSplines) =
 evaluate(l::TransSelSplines, x, ps, st) = _apply_etsplinebasis(l, x, st), st 
 
       
-function _apply_etsplinebasis(l::TransSelSplines, 
-                              X::AbstractVector{<: XState}, 
+function _apply_etsplinebasis(l::TransSelSplines,
+                              X::AbstractVector,
                               st)
    # transform 
    Y = l.trans(X, st.trans) 
@@ -137,8 +137,8 @@ function _apply_etsplinebasis(l::TransSelSplines,
 end
 
 
-function evaluate_ed(l::TransSelSplines, 
-                     X::AbstractVector{<: XState}, 
+function evaluate_ed(l::TransSelSplines,
+                     X::AbstractVector,
                      ps, st)
    # transform 
    (Y, dY), _ = evaluate_ed(l.trans, X, NamedTuple(), st.trans)
