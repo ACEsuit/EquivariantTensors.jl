@@ -1,10 +1,18 @@
 
+# Species-pair-indexed Agnesi transform operating on edge / XState
+# descriptors (moved here from EquivariantTensors, src/transforms/agnesi.jl).
+# NOTE: this duplicates the scalar GeneralizedAgnesiTransform in
+#       transforms.jl with a different calling convention; the two should
+#       be unified in a later pass (see agents/radials.md, §4).
+
+using LinearAlgebra: norm
+import EquivariantTensors: DPTransform, symidx, catcat2idx_sym
 
 """
    agnesi_params(pcut, pin, rin, req, rcut)
 
-Precompute the parameters for the generalized Agnesi transform, to be used with 
-`eval_agnesi`. See docs for ??? for details. 
+Precompute the parameters for the generalized Agnesi transform, to be used with
+`eval_agnesi`. See docs for ??? for details.
 """
 function agnesi_params(pcut::Integer, pin::Integer, 
                         rin::Real, req::Real, rcut::Real)

@@ -26,6 +26,7 @@ export LearnableRnlBasis, SplineRnlBasis, splinify, learnable_Rnl_basis,
 include("elements.jl")
 include("envelopes.jl")
 include("transforms.jl")
+include("agnesi_dp.jl")
 include("Rnl_learnable.jl")
 include("Rnl_splines.jl")
 include("splinify.jl")

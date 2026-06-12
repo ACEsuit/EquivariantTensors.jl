@@ -16,9 +16,6 @@ analysis before deletion (2026-06-12, during the restructure; see
   per its header "not really supported yet".
 - `test_forwarddiff.jl` — per its header, duplicates the individual
   layer tests; the frule tests might be the only ones worth keeping.
-- `test_agnesi.jl` — real coverage of the agnesi transform (incl.
-  species); **goes with the upcoming agnesi/chemistry move to
-  lib/ACEradials**, reactivate there.
 - `test_lux_models.jl` (+ helpers `luxtestmodels.jl`, `diffutils.jl`)
   — **review**: only CPU-vs-GPU consistency tests for full Lux models
   incl. parameter gradients; this coverage exists nowhere else.

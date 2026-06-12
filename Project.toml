@@ -27,13 +27,10 @@ WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
 WithAlloc = "fb1aa66a-603c-4c1d-9bc4-66947c7b08dd"
 
 [weakdeps]
-AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
-AtomsBuilder = "f5cc8831-eeb7-4288-8d9f-d6c1ddb77004"
 DecoratedParticles = "023d0394-cb16-4d2d-a5c7-724bed42bbb6"
 NeighbourLists = "2fcf5ba9-9ed4-57cf-b73f-ff513e316b9c"
 
 [extensions]
-AtomsBaseExt = "AtomsBase"
 DecoratedParticlesExt = "DecoratedParticles"
 NeighbourListsExt = ["NeighbourLists", "DecoratedParticles"]
 
@@ -69,6 +66,8 @@ WithAlloc = "0.1.1"
 julia = "1.11"
 
 [extras]
+AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
+AtomsBuilder = "f5cc8831-eeb7-4288-8d9f-d6c1ddb77004"
 BlockDiagonals = "0a1fb500-61f7-11e9-3c65-f5ef3456f9f0"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DecoratedParticles = "023d0394-cb16-4d2d-a5c7-724bed42bbb6"
