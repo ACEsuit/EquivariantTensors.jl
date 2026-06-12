@@ -3,7 +3,7 @@ import EquivariantTensors: O3
 using Polynomials4ML, StaticArrays, BlockDiagonals
 using Test
 
-include("../test_utils/utils_testO3.jl")
+include("../../test_utils/utils_testO3.jl")
 
 ## 
 

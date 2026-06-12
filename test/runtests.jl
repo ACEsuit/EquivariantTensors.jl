@@ -30,13 +30,13 @@ end
 end
 
 @testset "Groups: O3" begin
-    @testset "SYYVector" begin include("groups/test_yyvector.jl"); end
-    @testset "Clebsch Gordan Coeffs" begin include("groups/test_clebschgordans.jl"); end
-    @testset "Representation" begin include("groups/test_representation.jl"); end
-    @testset "Real AA to Complex AA" begin include("groups/test_rAA2cAA.jl"); end
-    @testset "Coupling Coeffs" begin include("groups/test_coupling.jl"); end
-    @testset "Coupling Coeffs with refl_sym given" begin include("groups/test_coupling_augmented.jl"); end
-    @testset "QuadO3" begin include("groups/test_quad_O3.jl"); end
+    @testset "SYYVector" begin include("groups/O3/test_yyvector.jl"); end
+    @testset "Clebsch Gordan Coeffs" begin include("groups/O3/test_clebschgordans.jl"); end
+    @testset "Representation" begin include("groups/O3/test_representation.jl"); end
+    @testset "Real AA to Complex AA" begin include("groups/O3/test_rAA2cAA.jl"); end
+    @testset "Coupling Coeffs" begin include("groups/O3/test_coupling.jl"); end
+    @testset "Coupling Coeffs with refl_sym given" begin include("groups/O3/test_coupling_augmented.jl"); end
+    @testset "QuadO3" begin include("groups/O3/test_quad_O3.jl"); end
 end
 
 @testset "ACE Models" begin 
