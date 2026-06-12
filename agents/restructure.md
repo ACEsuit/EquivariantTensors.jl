@@ -99,9 +99,10 @@ src/
     tucker/      # (new) per eqtucker.qmd (notes still to be written)
     tt/          # (new) tensor train — see §6, Hodapp/Shapeev prior art
   specs/         # spec generation/indexing utilities
+ext/
+  (rev 3) DP-coupled embedding machinery as DP-triggered extension  # §5
 lib/
-  ACEradials/    # done
-  (candidate) DP-coupled embedding machinery   # see §5
+  ACEradials/    # done; also receives bond_len/agnesi defaults (§5)
 ```
 
 **Decision (CO): no `dense/` format.** Dense is a special case of sparse;
@@ -172,17 +173,38 @@ Destination recommendations (per-piece, refined after CO's comments):
   *container-agnostic* in `edge_data` so that ET does not need DP for the
   graph itself — DP enters only through what users store in the graph.
 - **`diffnt.jl` (NamedTuple/Dual differentiation tooling): move into DP
-  itself.** It is generic make-structs-differentiable tooling with no ET
-  content; DP is its natural owner, and other DP consumers benefit.
-- **`EmbedDP`, `decpart.jl`, `atoms.jl` extension: lib package** (e.g.
-  `lib/ETAtoms` or `lib/ETEmbeddings`), not ACEpotentials — keeps the
-  radials precedent (co-evolution in one repo, graduation path open) and
-  keeps ACEpotentials a pure consumer.
-- **DP as a `lib/` of ET: recommend no.** The `lib/` slot is for packages
-  that *depend on* ET (radials pattern). After this restructure ET core
-  no longer depends on DP at all, and DP is independently useful — it
-  should remain a standalone package; the *coupling layer* (EmbedDP etc.)
-  is what belongs in `lib/`.
+  proper** (not a DP→ForwardDiff extension). It is generic
+  make-structs-differentiable tooling with no ET content; DP already
+  depends on NamedTupleTools + StaticArrays, so ForwardDiff is the only
+  new (light) dep. Against the extension route: differentiability is
+  core to DP's purpose, and extension glue triggered by a package that
+  end users never load directly (ForwardDiff) silently fails to
+  activate — the classic extension footgun.
+- **`EmbedDP`, `decpart.jl`: Pkg extension of ET triggered by DP**
+  (rev 3, supersedes the rev-2 lib recommendation). Rationale: this is
+  a compat shim whose design is under reconsideration — registering a
+  lib package for code that may be redesigned/deprecated has no payoff,
+  while an extension achieves the dependency goal (no hard DP dep in
+  core; glue auto-loads for ET+DP consumers like ACEpotentials).
+  Implementation notes: (a) `embeddings.jl` imports
+  `AbstractLuxWrapperLayer`/`ContainerLayer` via Lux but they live in
+  LuxCore — switch the import, no Lux trigger needed; (b) `decpart`
+  methods on plain NamedTuples (the `NTorDP` union) can stay in core,
+  only XState methods go in the extension. Trade-off accepted:
+  extension code rides ET's version train.
+- **`extensions/atoms.jl` prototypes + ext/: keep, but split.** The
+  graph half (`interaction_graph`, `nlist2graph`,
+  `forces_from_edge_grads`) is the system→ETGraph entry point and stays
+  with `graphs/`; note `NeighbourListsExt` currently constructs PStates
+  directly — must become container-agnostic (or gain a DP trigger) once
+  DP leaves the hard deps. The chemistry half (`bond_len`, agnesi
+  defaults in `AtomsBaseExt`) belongs with ACEradials (which already
+  has `elements.jl`/`transforms.jl`), not ET. Weakdep stubs themselves
+  are harmless — no load cost, a dozen empty functions.
+- **DP as a `lib/` of ET: no.** The `lib/` slot is for packages that
+  *depend on* ET (radials pattern). After this restructure ET core no
+  longer depends on DP at all, and DP is independently useful — it
+  remains a standalone package.
 
 Net effect: DecoratedParticles (and possibly Lux→LuxCore) drop out of
 ET's hard deps; ETGraph stays but becomes representation-agnostic.
@@ -226,6 +248,52 @@ recoupling bookkeeping (background.qmd, "where it complicates the CG
 basis") — currently handled inside `symmetrisation_matrix` for the sparse
 format; needs to be exposed as reusable carrier infrastructure.
 
+### 6.1 Where does W live? (ET vs ACEradials)
+
+Observation (CO): the channel mixing `Ā_klm = Σ_n W_kn A_nlm` *is* the
+Tucker factor matrix and the CP/TRACE channel weights — and since
+pooling is linear in the embedding, `W·A = pool(W·R · Ylm)`, i.e. W is
+equivalently a *learned radial basis*. This is the code-level shadow of
+eqcp.qmd's gauge freedom #2 ("how the multiplicity compression W is
+distributed relative to the CP step").
+
+Resolution: **the operation lives in both places, with genuinely
+different meanings**, connected by an explicit converter:
+
+- **ET** owns the primitive: the *G-equivariant learnable linear
+  layer*. By Schur, any equivariant linear map acts arbitrarily on the
+  multiplicity index n and as identity on (l,m) — this block structure
+  is the unique equivariant linear layer, it is representation theory
+  (ET's domain), and the CP/Tucker formats are *defined* through it.
+  Dependency direction forces this anyway (ACEradials depends on ET).
+  Computationally the post-pooling placement is the good one: one
+  dense matmul per l-block per pooled A (BLAS/KA-friendly), not one
+  per edge.
+- **ACEradials** keeps `Wnlq * P(x)` as a *basis parameterisation*
+  device: chemistry semantics (per-species-pair blocks, envelopes,
+  smoothness priors, orthonormalisation) and the splinification /
+  deployment path. Different granularity too: ACEradials' W is per
+  (z_i, z_j), ET's acts on the full multiplicity index n (which
+  includes species, per §9).
+- **Bridge = a "fold" converter in ACEradials** (it depends on ET and
+  owns splinify): absorb a trained ET channel mixing into the radial
+  basis (`W_fmt ∘ W_rad`, then splinify) for production. The
+  pooling-linearity identity gets one documented home instead of
+  being accidental duplication.
+
+Two caveats worth recording:
+- The fold equivalence holds *only for shared-factor (symmetric)
+  formats*: per-slot Tucker factors W_t cannot be absorbed into a
+  single radial basis (would need one pooled A per slot). The
+  pre-pooling placement hard-codes the shared-factor assumption; the
+  ET-side placement keeps per-slot freedom open — another reason ET's
+  version is the more primitive object.
+- Gauge redundancy: W_fmt and W_rad both learnable is a product of two
+  linear maps — pure overparameterisation. Constructors/docs should
+  steer toward one learnable side (e.g. fixed orthonormal radials +
+  learnable format mixing for training; folded splined radials for
+  deployment). ET should not enforce this.
+
 ---
 
 ## 7. Symmetric vs general tensors  *(decided)*
@@ -243,7 +311,8 @@ slot-heterogeneous). No general formats now.**
 1. Boundary cleanup first (no new functionality): split `src/ace/` into
    `pooling/` + `formats/sparse/`; promote O3+symmop to `groups/`;
    `graph.jl` → `src/graphs/` (made container-agnostic); move diffnt
-   toward DP and EmbedDP/decpart/atoms toward a lib package.
+   toward DP, EmbedDP/decpart into a DP-triggered extension, and the
+   bond_len/agnesi-defaults chemistry toward ACEradials (§5).
 2. Settle the format I/O contract on the sparse format (incl. the
    Lux/ChainRules-vs-bespoke-pullback question, §3) and the A storage
    layout question (§4). Behaviour-preserving; existing tests must pass.
@@ -283,5 +352,5 @@ All new format kernels: KA from day one (CO).
   kernels, or keep `evaluate`/`pullback` exported (§3).
 - Naming: package-level vocabulary (carrier / coefficients / format?)
   and concrete type names for the new formats.
-- DP follow-through: agree `diffnt` upstreaming with DP owners; pick the
-  lib package name for the EmbedDP/atoms machinery (§5).
+- DP follow-through: land `diffnt` in DP (adds ForwardDiff dep there);
+  confirm the EmbedDP/decpart-as-extension recommendation (§5, rev 3).
