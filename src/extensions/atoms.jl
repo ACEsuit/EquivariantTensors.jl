@@ -6,11 +6,9 @@ module Atoms
 # Prototypes for NeighbourListExt
 # -----------------------------
 
-function interaction_graph end 
+function interaction_graph end
 
-function nlist2graph end 
-
-function forces_from_edge_grads end
+function nlist2graph end
 
 
 
