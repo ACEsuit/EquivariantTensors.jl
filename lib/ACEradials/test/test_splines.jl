@@ -5,11 +5,11 @@
 
 ##
 
-using StaticArrays, Random, LuxCore, Test, LinearAlgebra, ForwardDiff, 
-      EquivariantTensors, Lux
+using StaticArrays, Random, LuxCore, Test, LinearAlgebra, ForwardDiff,
+      EquivariantTensors, Lux, ACEradials
 
 import EquivariantTensors as ET
-import Polynomials4ML as P4ML 
+import Polynomials4ML as P4ML
 import DecoratedParticles as DP
 
 using ACEbase.Testing: print_tf, println_slim
@@ -58,10 +58,10 @@ end
 # could try false for local testing, but CI should use true 
 # which is the more interesting scenario for most applications 
 extract_envelope = true
-spl_30 = ET.trans_splines(rembed, ps, st; 
-                           yrange = (-1.0, 1.0), nspl = 30, 
+spl_30 = ACEradials.trans_splines(rembed, ps, st;
+                           yrange = (-1.0, 1.0), nspl = 30,
                            extract_envelope = extract_envelope)
-spl_100 = ET.trans_splines(rembed, ps, st; 
+spl_100 = ACEradials.trans_splines(rembed, ps, st;
                            yrange = (-1.0, 1.0), nspl = 100,
                            extract_envelope = extract_envelope)
 

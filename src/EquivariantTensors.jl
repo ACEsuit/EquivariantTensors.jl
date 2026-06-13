@@ -31,7 +31,6 @@ include("graphs/atoms.jl")
 include("transforms/decpart.jl")
 
 include("embed/embeddings.jl")
-include("embed/transsplines.jl")
 
 # ------------------------------------------------------
 # static product kernels, shared by pooling and the sparse format

@@ -470,6 +470,17 @@ Outstanding items: review `test_lux_models.jl`
 (SelectLinL coverage vs test_splines overlap) before finalizing the
 restructure.
 
+- ACEradials ↔ Polynomials4ML spline ownership: PR `restruct_transsplines`
+  moved `transsplines.jl` (the GPU spline radial basis,
+  `trans_splines`/`TransSelSplines`) from ET to `lib/ACEradials` — it is a
+  radial basis and now sits beside ACEradials' `Rnl_splines.jl` /
+  `splinify.jl`. **Breaking:** `ET.trans_splines` → `ACEradials.trans_splines`.
+  This leaves *three* overlapping spline paths in ACEradials; the deferred
+  analysis is where GPU-friendly spline evaluation should really live
+  (fixed upstream in P4ML vs owned by ACEradials) and how the three
+  consolidate. (This move also removed the last `Lux` reference from ET
+  core, enabling the Lux→LuxCore trim.)
+
 - ACEpotentials forces/virial wrapper: `restruct_edgegrads` deleted
   `forces_from_edge_grads` and replaced it with the generic core
   primitive `node_grads_from_edge_grads(G, w_edges)` (position part of
