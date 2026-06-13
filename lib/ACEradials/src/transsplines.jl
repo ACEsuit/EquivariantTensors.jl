@@ -1,10 +1,13 @@
 #
-# This is an essentially complete re-impleentation of P4ML spline
-# evaluation  because some small details just don't run nice on GPU
+# A GPU-ready spline radial-basis embedding. The cubic-spline math is *not*
+# re-implemented here: the KA kernels call P4ML's shared, GPU-safe spline
+# helpers (`P4ML._spl_grid`, `P4ML._eval_cubic`, `P4ML._eval_cubic_d`), so
+# there is a single `_eval_cubic` in the ecosystem (radials_restructure.md
+# §3.1, Option B). This layer keeps only the genuinely ACE-specific
+# orchestration: the transform, the categorical spline selection, and the
+# envelope post-multiply.
 # TODO :
-#   (1) check whether this code can be unified between P4ML and ET
-#       to reduce duplication
-#   (2) consider parallelizing the KA evaluation over both inputs and
+#   (1) consider parallelizing the KA evaluation over both inputs and
 #       spline output indices if the spline output is a vector
 #       (almost always, maybe always??)
 #
@@ -123,8 +126,8 @@ function _apply_etsplinebasis(l::TransSelSplines,
    @kernel function _etspl_kernel!(S, Y, i_sel, FF, GG, X0, X1, NX)
       idx = @index(Global)
       icat = i_sel[idx]
-      x, t, il, h = _spl_grid(Y[idx], X0[icat], X1[icat], NX)
-      s = _eval_cubic(t, FF[il+1, icat], FF[il+2, icat], 
+      x, t, il, h = P4ML._spl_grid(Y[idx], X0[icat], X1[icat], NX)
+      s = P4ML._eval_cubic(t, FF[il+1, icat], FF[il+2, icat],
                        h*GG[il+1, icat], h*GG[il+2, icat])
       S[idx, :] .= s
       nothing
@@ -163,9 +166,9 @@ function evaluate_ed(l::TransSelSplines,
    @kernel function _etspl_ed_kernel!(S, ∂S, Y, dY, i_sel, FF, GG, X0, X1, NX)
       idx = @index(Global)
       icat = i_sel[idx]
-      x, t, il, h = _spl_grid(Y[idx], X0[icat], X1[icat], NX)
-      s, ds = _eval_cubic_widthgrad(t, 
-                        FF[il+1, icat], FF[il+2, icat], 
+      x, t, il, h = P4ML._spl_grid(Y[idx], X0[icat], X1[icat], NX)
+      s, ds = P4ML._eval_cubic_d(t,
+                        FF[il+1, icat], FF[il+2, icat],
                         h*GG[il+1, icat], h*GG[il+2, icat], h)
       S[idx, :] .= s
       ∂S[idx, :] .= Ref(dY[idx]) .* ds
@@ -198,46 +201,5 @@ function rrule(::typeof(_apply_etsplinebasis),
    end
 
    return P, _pb_etsplinebasis
-end
-
-
-"""
-   _spl_grid(y, x0, x1, NX) 
-
-Compute the local spline grid information needed for _eval_cubic
-"""
-@inline function _spl_grid(y, x0, x1, NX) 
-   x = clamp(y, x0, x1)     # project to [x0, x1] (corresponds to Flat bc)
-   h = (x1 - x0) / (NX-1)   # uniform grid spacing 
-   t, _il = modf((x - x0) / h)
-   # use unsafe_ because the exception cannot be compiled away
-   il = unsafe_trunc(Int, _il)   
-   return x, t, il, h
-end
-
-
-"""
-   _eval_cubic(t, fl, fr, gl, gr, h)
-
-Evaluate cubic spline at position `t` in `[0,1]`, given function values `fl`, `fr`
-and gradients `gl`, `gr` at the left and right endpoints.
-"""
-@inline function _eval_cubic(t, fl, fr, gl, gr)
-   # (2t³ - 3t² + 1)*fl + (t³ - 2t² + t)*gl + 
-   #           (-2t³ + 3t²)*fr + (t³ - t²)*gr 
-   a0 = fl
-   a1 = gl 
-   a2 = -3fl + 3fr - 2gl - gr
-   a3 = 2fl - 2fr + gl + gr
-   return ((a3*t + a2)*t + a1)*t + a0
-end
-
-@inline function _eval_cubic_widthgrad(t, fl, fr, gl, gr, h)
-   # compute both value and width-derivative using dual numbers 
-   td = Dual(t, one(t))
-   fd = _eval_cubic(td, fl, fr, gl, gr)
-   f = ForwardDiff.value.(fd)
-   g = ForwardDiff.partials.(fd, 1)
-   return f, g / h 
 end
 
