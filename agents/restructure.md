@@ -285,18 +285,26 @@ neighbourlist→ETGraph builder, and its trigger
     `NeighbourLists.PairList`; an extension may use only its triggers +
     the parent's hard deps, and NeighbourLists is deliberately not an ET
     hard dep.
-  - *AtomsBase* deliberately not a trigger — `AbstractSystem` and every
-    accessor (species/position/cell_vectors/periodicity/Unitful) reach
-    through `NeighbourLists.AtomsBase` (NeighbourLists hard-depends on
-    AtomsBase). An extra trigger would only delay activation (all
-    triggers must load first).
+  - *AtomsBase* was not a trigger under NeighbourLists 0.5 —
+    `AbstractSystem` and the accessors reached through
+    `NeighbourLists.AtomsBase` (a hard dep + re-export of NL 0.5).
+    **Superseded by PR `restruct_nlist06`:** NeighbourLists 0.6 dropped
+    AtomsBase as a hard dep and stopped re-exporting it (the
+    `PairList(sys, rcut)` constructor moved into NL's own
+    `NeighbourListsAtomsBaseExt`). So under 0.6 AtomsBase **must** be a
+    trigger — the ext now imports it directly (`ustrip` via AtomsBase's
+    re-export), and the NL sys-constructor activates because AtomsBase
+    (which pulls Unitful transitively) is loaded. Trigger is now
+    `["NeighbourLists", "AtomsBase", "DecoratedParticles"]`; compat
+    bumped to NeighbourLists 0.6 only.
   - *DecoratedParticles* is a trigger because the ext **constructs
     PStates** for all edge/node data (per #110, particles must be state
     types; bare NamedTuples lack tangent arithmetic). Revisit only when
     the graphs/ step parametrises the edge container.
   - Transitive loads count, so ACEpotentials-style consumers (hard deps
-    on NeighbourLists + DP) activate it automatically; direct ET script
-    users need `using NeighbourLists, DecoratedParticles`.
+    on NeighbourLists + AtomsBase + DP) activate it automatically; direct
+    ET script users need `using NeighbourLists, AtomsBase,
+    DecoratedParticles`.
 - **`TransSelSplines` signatures relaxed** from
   `AbstractVector{<: XState}` to `AbstractVector` (duck-typed; the
   tangent-arithmetic contract applies, not a container restriction).

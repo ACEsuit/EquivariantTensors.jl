@@ -5,8 +5,13 @@ module NeighbourListsExt
 
 using NeighbourLists
 import EquivariantTensors as ET
-import NeighbourLists.AtomsBase: AbstractSystem
-using DecoratedParticles: PState 
+# NeighbourLists 0.6 no longer re-exports AtomsBase/Unitful, so import
+# AtomsBase directly (it re-exports `ustrip`). The `PairList(sys, rcut)`
+# constructor is provided by NeighbourLists' own AtomsBase extension,
+# which activates because AtomsBase is one of our triggers.
+import AtomsBase
+import AtomsBase: AbstractSystem
+using DecoratedParticles: PState
 
 function ET.Atoms.interaction_graph(sys::AbstractSystem, rcut) 
    nlist = NeighbourLists.PairList(sys, rcut)
@@ -14,29 +19,31 @@ function ET.Atoms.interaction_graph(sys::AbstractSystem, rcut)
 end
 
 function ET.Atoms.nlist2graph(nlist::NeighbourLists.PairList, sys::AbstractSystem)
-   ii = copy(nlist.i)
-   jj = copy(nlist.j)
-   first = copy(nlist.first) 
+   # NeighbourLists 0.6 returns Int32 index vectors; keep ETGraph indices
+   # as `Int` (matches `Testing.rand_graph` and the maxneigs::Int field)
+   ii = Int.(nlist.i)
+   jj = Int.(nlist.j)
+   first = copy(nlist.first)
    R_ij = [ NeighbourLists._getR(nlist, n) for n = 1:length(ii) ] 
-   S_i = [ NeighbourLists.AtomsBase.species(sys, i) for i in ii ] 
-   S_j = [ NeighbourLists.AtomsBase.species(sys, j) for j in jj ]
+   S_i = [ AtomsBase.species(sys, i) for i in ii ]
+   S_j = [ AtomsBase.species(sys, j) for j in jj ]
    X_ij = [ PState(𝐫 = 𝐫, z0 = si, z1 = sj, 𝐒 = shift) 
             for (𝐫, si, sj, shift) in zip(R_ij, S_i, S_j, nlist.S) ]
 
    # for node data we use _only_ the atomic species for now so that we 
    # don't even give the option of using position information directly. 
    # ... until we sort out how to best handle this in ET. 
-   X_i = [ PState(𝐫 = NeighbourLists.Unitful.ustrip.(NeighbourLists.AtomsBase.position(sys, i)), 
-                  z = NeighbourLists.AtomsBase.species(sys, i))
+   X_i = [ PState(𝐫 = AtomsBase.ustrip.(AtomsBase.position(sys, i)),
+                  z = AtomsBase.species(sys, i))
            for i = 1:length(sys) ]
 
-   cell_vecs_u = NeighbourLists.AtomsBase.cell_vectors(sys)
-   cell_vecs = ntuple( i -> NeighbourLists.Unitful.ustrip.(cell_vecs_u[i]), 
+   cell_vecs_u = AtomsBase.cell_vectors(sys)
+   cell_vecs = ntuple( i -> AtomsBase.ustrip.(cell_vecs_u[i]),
                        length(cell_vecs_u) )
 
-   sys_data = ( pbc = NeighbourLists.AtomsBase.periodicity(sys), 
+   sys_data = ( pbc = AtomsBase.periodicity(sys),
                cell = cell_vecs
-              )          
+              )
 
    G = ET.ETGraph(ii, jj; 
                   edge_data = X_ij, 
