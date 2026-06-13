@@ -21,10 +21,15 @@ export O3, gpu_device, cpu_device
 include("generics.jl")
 
 # ------------------------------------------------------
-# embedding layers, transforms, & auxiliary functionality 
+# ------------------------------------------------------
+# graphs: ETGraph datastructure + atomic-system entry points
+include("graphs/graph.jl")
+include("graphs/atoms.jl")
+
+# ------------------------------------------------------
+# embedding layers, transforms, & auxiliary functionality
 include("transforms/decpart.jl")
 
-include("embed/graph.jl")
 include("embed/embeddings.jl")
 include("embed/transsplines.jl")
 
@@ -74,11 +79,7 @@ include("utils/selector.jl")
 include("utils/adapt.jl")
 
 # ------------------------------------------------------
-# extensions 
-include("extensions/atoms.jl")
-
-# ------------------------------------------------------
-# Testing utilities 
+# Testing utilities
 include("testing/testing.jl")
 
 

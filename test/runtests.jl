@@ -48,8 +48,8 @@ end
     # @testset "ACE KA new version" begin include("dormant/test_ace_ka2.jl"); end
 end 
 
-@testset "Atoms" begin 
-    @testset "NeighbourListsExt" begin include("atoms/test_neighbourlistsext.jl"); end
-end 
+@testset "Graphs" begin
+    @testset "NeighbourListsExt" begin include("graphs/test_neighbourlistsext.jl"); end
+end
 
 end
