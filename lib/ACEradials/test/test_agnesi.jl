@@ -34,6 +34,18 @@ rand_sphere() = (u = (@SVector randn(3)); u / norm(u))
 rand_x(cats, maxrcut) = PState(𝐫 = (1.1 * maxrcut) * rand() * rand_sphere(),
                z0 = rand(cats), z1 = rand(cats))
 
+# standalone reference for the scalar Agnesi transform that the species-pair
+# `agnesi_transform` now wraps (mirrors GeneralizedAgnesiTransform +
+# NormalizedTransform, incl. the `r <= rin -> x = 1` guard).
+function _agnesi_ref(r, rin, req, rcut, pcut, pin)
+   a = (-2 * pin + pcut * (-2 + 4 * pin)) / (pcut + pcut^2 + pin + pin^2)
+   _x(ρ) = ρ <= rin ? one(a) :
+               (s = (ρ - rin) / (req - rin); 1 / (1 + a * s^pin / (1 + s^(pin - pcut))))
+   xin = _x(rin); xcut = _x(rcut)
+   y = -1 + 2 * (_x(r) - xin) / (xcut - xin)
+   return min(max(-one(y), y), one(y))
+end
+
 function _test_agnesi(trans, cats, pcut, pin, rins, reqs, rcuts)
 
    ps, st = LuxCore.setup(rng, trans)
@@ -41,21 +53,16 @@ function _test_agnesi(trans, cats, pcut, pin, rins, reqs, rcuts)
    maxrcut = maximum(collect(values(rcuts)))
    x = rand_x(cats, maxrcut)
    y = trans(x, ps, st)[1]
-
-   # check against manual implementation
-   p = ACEradials.agnesi_params(pcut, pin, rins[(x.z0, x.z1)],
-                            reqs[(x.z0, x.z1)], rcuts[(x.z0, x.z1)])
    r = norm(x.𝐫)
-   y1 = ACEradials.eval_agnesi(r, p)
 
-   __s(r) = (r - rins[(x.z0, x.z1)]) / (reqs[(x.z0, x.z1)] - rins[(x.z0, x.z1)])
-   __x(s) = 1 / (1 + p.a * s^(pin) / (1 + s^(pin - pcut)))
-   _xin = __x(__s(rins[(x.z0, x.z1)]))
-   _xcut = __x(__s(rcuts[(x.z0, x.z1)]))
-   b1 = 2 / (_xcut - _xin)
-   b0 = -1 - 2 * _xin / (_xcut - _xin)
-   y2 = b1 * __x(__s(r)) + b0
-   y2 = max(-1, min(1, y2))
+   rin = rins[(x.z0, x.z1)]; req = reqs[(x.z0, x.z1)]; rcut = rcuts[(x.z0, x.z1)]
+
+   # the species transform must agree with the scalar primitive it wraps ...
+   t_ij = ACEradials.agnesi_transform(req, rcut, pcut, pin; rin = rin)
+   y1 = t_ij(r)
+
+   # ... and with an independent manual reference
+   y2 = _agnesi_ref(r, rin, req, rcut, pcut, pin)
 
    return y, y1, y2
 end
@@ -86,13 +93,12 @@ for ntest = 1:30
 
    x = rand_x(cats, maxrcut)
 
-   params = ACEradials.agnesi_params(pcut, pin, rins[(x.z0, x.z1)],
-                           reqs[(x.z0, x.z1)], rcuts[(x.z0, x.z1)])
    rin = rins[(x.z0, x.z1)]
    req = reqs[(x.z0, x.z1)]
    rcut = rcuts[(x.z0, x.z1)]
 
-   dy(r) = ForwardDiff.derivative(r -> ACEradials.eval_agnesi(r, params), r)
+   t_ij = ACEradials.agnesi_transform(req, rcut, pcut, pin; rin = rin)
+   dy(r) = ForwardDiff.derivative(r -> t_ij(r), r)
    dy_eq = dy(req)
 
    rr = rin .+ (rcut - rin) * rand(100)

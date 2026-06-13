@@ -4,7 +4,6 @@
 
 
 import ACEradials
-import ACEradials: agnesi_params, eval_agnesi
 
 function _rineqcut(zi, zj, rinfactor, rcutfactor)
    req = bond_len(zi, zj)
@@ -34,7 +33,7 @@ function at_agnesi_params(zlist;
             return rcut_def 
          end
       end 
-      error("agnesi_params: illegal format for rcuts parameter.")
+      error("at_agnesi_params: illegal format for rcuts parameter.")
    end 
 
    idx = 0 
