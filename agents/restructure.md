@@ -454,6 +454,14 @@ restructure.
   (apply the `−` sign, units, `AbstractSystem` handling) and the virial
   (the cell part of the same adjoint) belong in ACEpotentials.jl — to be
   added there (repo not in this workspace).
+- **Revisit `node_grads_from_edge_grads` naming + specification.** It is
+  nothing special: it is the standard *pullback of a node → edge
+  operation* (gather `x ↦ 𝐫_e`), and should be designed/named as such —
+  i.e. as one half of a `forward (node→edge) + pullback (edge→node)`
+  pair on the graph, ideally with a ChainRules `rrule` so it composes
+  with AD rather than being a bespoke helper. The current name and
+  ad-hoc signature are placeholders; settle this together with the
+  graphs/ step and the §3 differentiation-API decision.
 - A storage layout: flat + spec indexing vs per-l blocks vs flat with
   block views (§4). Prototype against CP before committing.
 - Public differentiation API: ChainRules-only surface over in-place
