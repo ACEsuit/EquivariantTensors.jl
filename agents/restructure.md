@@ -401,9 +401,12 @@ slot-heterogeneous). No general formats now.**
 
 1. Boundary cleanup first (no new functionality): split `src/ace/` into
    `pooling/` + `formats/sparse/`; promote O3+symmop to `groups/`;
-   `graph.jl` → `src/graphs/` (made container-agnostic); move diffnt
-   toward DP, EmbedDP/decpart into a DP-triggered extension, and the
-   bond_len/agnesi-defaults chemistry toward ACEradials (§5).
+   `graph.jl` → `src/graphs/` (made container-agnostic) — this step
+   should also absorb `extensions/atoms.jl` (the `Atoms` system→ETGraph
+   stubs) into `graphs/` and retire the single-file `extensions/`
+   directory (keep the `Atoms` module name; it is the right namespace);
+   move diffnt toward DP, EmbedDP/decpart into a DP-triggered extension,
+   and the bond_len/agnesi-defaults chemistry toward ACEradials (§5).
 2. Settle the format I/O contract on the sparse format (incl. the
    Lux/ChainRules-vs-bespoke-pullback question, §3) and the A storage
    layout question (§4). Behaviour-preserving; existing tests must pass.
