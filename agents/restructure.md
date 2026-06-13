@@ -187,6 +187,12 @@ Destination recommendations (per-piece, refined after CO's comments):
   move out if a replacement plan exists. Refinement: keep `ETGraph`
   *container-agnostic* in `edge_data` so that ET does not need DP for the
   graph itself — DP enters only through what users store in the graph.
+  *Done (PR `restruct_graphs`):* `embed/graph.jl` → `src/graphs/graph.jl`
+  and `extensions/atoms.jl` → `src/graphs/atoms.jl` (keeping the `Atoms`
+  module); the single-file `src/extensions/` directory retired.
+  Container-agnostic was already satisfied (ETGraph is fully parametric
+  and DP-free; the PState question was handled by the DP trigger in
+  #110), so this was a pure move.
 - **`diffnt.jl` (NamedTuple/Dual differentiation tooling): move into DP
   proper** (not a DP→ForwardDiff extension). It is generic
   make-structs-differentiable tooling with no ET content; DP already
@@ -401,12 +407,11 @@ slot-heterogeneous). No general formats now.**
 
 1. Boundary cleanup first (no new functionality): split `src/ace/` into
    `pooling/` + `formats/sparse/`; promote O3+symmop to `groups/`;
-   `graph.jl` → `src/graphs/` (made container-agnostic) — this step
-   should also absorb `extensions/atoms.jl` (the `Atoms` system→ETGraph
-   stubs) into `graphs/` and retire the single-file `extensions/`
-   directory (keep the `Atoms` module name; it is the right namespace);
-   move diffnt toward DP, EmbedDP/decpart into a DP-triggered extension,
-   and the bond_len/agnesi-defaults chemistry toward ACEradials (§5).
+   `graph.jl` → `src/graphs/` (done, PR `restruct_graphs`; also absorbed
+   `extensions/atoms.jl` and retired the `extensions/` directory; the
+   `Atoms` module name kept); move diffnt toward DP (done), EmbedDP/
+   decpart into a DP-triggered extension (done), and the
+   bond_len/agnesi-defaults chemistry toward ACEradials (done, §5).
 2. Settle the format I/O contract on the sparse format (incl. the
    Lux/ChainRules-vs-bespoke-pullback question, §3) and the A storage
    layout question (§4). Behaviour-preserving; existing tests must pass.
