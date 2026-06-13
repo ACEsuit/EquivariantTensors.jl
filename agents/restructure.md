@@ -305,6 +305,13 @@ neighbourlist→ETGraph builder, and its trigger
     on NeighbourLists + AtomsBase + DP) activate it automatically; direct
     ET script users need `using NeighbourLists, AtomsBase,
     DecoratedParticles`.
+  - *Decision (CO, PR `restruct_atomsdoc`):* keep the builder as the
+    NeighbourListsExt and **document** the load requirement (docstrings
+    on `Atoms.interaction_graph`/`nlist2graph`). The 3-trigger set is
+    intrinsic (NL engine + AtomsBase system + DP states) and the friction
+    is REPL-only — downstream packages auto-activate. A one-import `lib/`
+    glue package was considered and deferred until the graphs/ builder
+    form settles (same reasoning as the EmbedDP lib-vs-ext call).
 - **`TransSelSplines` signatures relaxed** from
   `AbstractVector{<: XState}` to `AbstractVector` (duck-typed; the
   tangent-arithmetic contract applies, not a container restriction).
