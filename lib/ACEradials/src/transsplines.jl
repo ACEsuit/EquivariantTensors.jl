@@ -1,15 +1,23 @@
 #
-# This is an essentially complete re-impleentation of P4ML spline 
-# evaluation  because some small details just don't run nice on GPU 
-# TODO : 
-#   (1) check whether this code can be unified between P4ML and ET 
-#       to reduce duplication 
-#   (2) consider parallelizing the KA evaluation over both inputs and 
-#       spline output indices if the spline output is a vector 
-#       (almost always, maybe always??) 
+# This is an essentially complete re-impleentation of P4ML spline
+# evaluation  because some small details just don't run nice on GPU
+# TODO :
+#   (1) check whether this code can be unified between P4ML and ET
+#       to reduce duplication
+#   (2) consider parallelizing the KA evaluation over both inputs and
+#       spline output indices if the spline output is a vector
+#       (almost always, maybe always??)
+#
+# Moved here from EquivariantTensors (src/embed/transsplines.jl): this is
+# a radial-basis embedding, so it belongs with the other ACEradials
+# spline machinery (Rnl_splines.jl, splinify.jl).
 #
 
 using Lux: BranchLayer, WrappedFunction
+using KernelAbstractions
+using ConcreteStructs
+import LuxCore
+using EquivariantTensors: EmbedDP, DPTransform, dp_transform, SelectLinL
 
 function trans_splines(trans, splines, selector,  
                        envelope = nothing)
@@ -94,8 +102,8 @@ initialstates(rng::AbstractRNG, l::TransSelSplines) =
 evaluate(l::TransSelSplines, x, ps, st) = _apply_etsplinebasis(l, x, st), st 
 
       
-function _apply_etsplinebasis(l::TransSelSplines, 
-                              X::AbstractVector{<: XState}, 
+function _apply_etsplinebasis(l::TransSelSplines,
+                              X::AbstractVector,
                               st)
    # transform 
    Y = l.trans(X, st.trans) 
@@ -137,8 +145,8 @@ function _apply_etsplinebasis(l::TransSelSplines,
 end
 
 
-function evaluate_ed(l::TransSelSplines, 
-                     X::AbstractVector{<: XState}, 
+function evaluate_ed(l::TransSelSplines,
+                     X::AbstractVector,
                      ps, st)
    # transform 
    (Y, dY), _ = evaluate_ed(l.trans, X, NamedTuple(), st.trans)

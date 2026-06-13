@@ -2,13 +2,13 @@
 # Scalar `r -> x ∈ [-1,1]` transforms for the radial bases. Ported from
 # ACEpotentials `src/models/radial_transforms.jl`.
 #
-# NOTE on duplication: ET already provides an Agnesi transform in
-# `src/transforms/agnesi.jl`, but with a different calling convention (it
-# operates on an edge / XState descriptor rather than a scalar distance `r`).
-# These two representations are kept separate for now and should be unified in
-# a later pass (see `agents/radials.md`, §4). The serialization (`write_dict`
-# / `read_dict`) and `Roots`-based inverse transform from the ACEpotentials
-# version are intentionally not ported to avoid new dependencies.
+# These are the single source of the Agnesi math in ACEradials: the
+# species-pair / XState transform in `agnesi_dp.jl` is a thin adapter that
+# stores one `NormalizedTransform` per species pair and evaluates it at
+# `norm(x.𝐫)` (see agents/radials.md §4, agents/radials_restructure.md §3.2).
+# The serialization (`write_dict` / `read_dict`) and `Roots`-based inverse
+# transform from the ACEpotentials version are intentionally not ported to
+# avoid new dependencies.
 
 import ForwardDiff
 

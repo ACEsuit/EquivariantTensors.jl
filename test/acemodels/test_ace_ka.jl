@@ -204,7 +204,7 @@ _zygrad(X) = Zygote.gradient(G -> energy(model, G, ps, st), X)[1]
 
 function replace_edges(X, Rmat)
    Rsvec = [ SVector{3}(Rmat[:, i]) for i in 1:size(Rmat, 2) ]
-   new_edgedata = [ (; 𝐫 = 𝐫) for 𝐫 in Rsvec ]
+   new_edgedata = [ PState(𝐫 = 𝐫) for 𝐫 in Rsvec ]
    return ET.ETGraph( X.ii, X.jj, X.first, 
                X.node_data, new_edgedata, X.graph_data, 
                X.maxneigs )
@@ -220,7 +220,7 @@ function grad_fd(model, G)
    Rmat = reinterpret(reshape, eltype(Rsvec[1]), Rsvec)
    ∇E_fd = ForwardDiff.gradient(_energy, Rmat)
    ∇E_svec = [ SVector{3}(∇E_fd[:, i]) for i in 1:size(∇E_fd, 2) ]
-   ∇E_edges = [ (; 𝐫 = 𝐫) for 𝐫 in ∇E_svec ]
+   ∇E_edges = [ VState(𝐫 = 𝐫) for 𝐫 in ∇E_svec ]
    return ET.ETGraph( G.ii, G.jj, G.first, 
                G.node_data, ∇E_edges, G.graph_data, 
                G.maxneigs )

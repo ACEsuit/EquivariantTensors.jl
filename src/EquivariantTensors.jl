@@ -11,14 +11,9 @@ import ChainRulesCore: rrule, frule
 import LuxCore: initialparameters, initialstates, AbstractLuxLayer
 import MLDataDevices: gpu_device, cpu_device 
 
-import DecoratedParticles as DP 
-import Polynomials4ML as P4ML 
+import Polynomials4ML as P4ML
 
-import DecoratedParticles: VState, PState, XState 
-
-const NTorDP = Union{NamedTuple, XState}
-
-using ForwardDiff: Dual, extract_derivative 
+using ForwardDiff: Dual, extract_derivative
 
 export O3, gpu_device, cpu_device  
 
@@ -26,34 +21,43 @@ export O3, gpu_device, cpu_device
 include("generics.jl")
 
 # ------------------------------------------------------
-# embedding layers, transforms, & auxiliary functionality 
-include("transforms/diffnt.jl")
+# ------------------------------------------------------
+# graphs: ETGraph datastructure + atomic-system entry points
+include("graphs/graph.jl")
+include("graphs/atoms.jl")
+
+# ------------------------------------------------------
+# embedding layers, transforms, & auxiliary functionality
 include("transforms/decpart.jl")
-include("transforms/agnesi.jl")
 
-include("embed/graph.jl")
 include("embed/embeddings.jl")
-include("embed/transsplines.jl")
 
 # ------------------------------------------------------
-# Core ACE model functionality 
-include("ace/static_prod.jl")
-include("ace/sparseprodpool.jl")
-include("ace/sparseprodpool_ka.jl")
-include("ace/sparsesymmprod.jl")
-include("ace/sparsesymmprod_ka.jl")
-include("ace/sparse_ace_basis.jl")
-include("ace/sparse_ace_layer.jl")
-include("ace/sparse_ace_ka.jl")
-include("ace/sparse_ace_utils.jl")
-include("ace/sparsemat_ka.jl")
+# static product kernels, shared by pooling and the sparse format
+include("utils/static_prod.jl")
 
 # ------------------------------------------------------
-# O3 symmetrization
-include("O3/O3.jl")
-# O3/O3_transformations.jl
-# O3/yyvector.jl 
-# O3/O3_utils.jl 
+# pooling layer: per-edge embeddings -> A
+include("pooling/sparseprodpool.jl")
+include("pooling/sparseprodpool_ka.jl")
+
+# ------------------------------------------------------
+# sparse tensor format: symmetric products + symmetrisation
+# (symmprod_dag*.jl live here too but are currently not included)
+include("formats/sparse/sparsesymmprod.jl")
+include("formats/sparse/sparsesymmprod_ka.jl")
+include("formats/sparse/sparse_ace_basis.jl")
+include("formats/sparse/sparse_ace_layer.jl")
+include("formats/sparse/sparse_ace_ka.jl")
+include("formats/sparse/sparse_ace_utils.jl")
+include("formats/sparse/sparsemat_ka.jl")
+
+# ------------------------------------------------------
+# groups: O3 irreps, CG coupling, carrier symmetrisation
+include("groups/O3/O3.jl")
+# (O3.jl includes O3_utils.jl, yyvector.jl, O3_transformations.jl,
+#  quad_O3_data.jl, quad_O3.jl)
+include("groups/symmop.jl")
 
 
 # ------------------------------------------------------
@@ -61,7 +65,6 @@ include("O3/O3.jl")
 include("utils/setproduct.jl")
 include("utils/invmap.jl")
 include("utils/sparseprod.jl")
-include("utils/symmop.jl")
 include("utils/promotion.jl")
 
 # a linear layer that selects a linear operator from 
@@ -75,11 +78,7 @@ include("utils/selector.jl")
 include("utils/adapt.jl")
 
 # ------------------------------------------------------
-# extensions 
-include("extensions/atoms.jl")
-
-# ------------------------------------------------------
-# Testing utilities 
+# Testing utilities
 include("testing/testing.jl")
 
 

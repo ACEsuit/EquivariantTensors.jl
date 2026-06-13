@@ -74,9 +74,6 @@ end
 # utility functions to work with the ETGraph and embedding it into 
 # various formats for further processing
 
-__zero(x) = zero(x) 
-__zero(TX::Type{<: NamedTuple}) = DiffNT.__zero(TX)
-
 """
    reshape_embedding(P, ii, jj, nnodes, maxneigs)
 
@@ -101,7 +98,9 @@ function reshape_embedding(P, X::ETGraph)
    # size(P) == #edges x # features 
    nedges, nfeatures = size(P)
    P3 = similar(P, (maxneigs(X), nnodes(X), nfeatures))
-   fill!(P3, __zero(eltype(P3)))    # TODO : nasty hack, another reason to switch to DecoratedParticles 
+   # NOTE: requires zero(eltype); for state-valued embeddings this is
+   #       provided by DecoratedParticles (bare NamedTuples don't have it)
+   fill!(P3, zero(eltype(P3)))
    backend = KernelAbstractions.get_backend(P3)
    kernel! = _reshape_embedding!(backend)
    kernel!(P3, P, X.first; ndrange = (nnodes(X), nfeatures))
@@ -151,4 +150,33 @@ function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
    end
 
    return ϕ3, _pb_ϕ
+end
+
+
+"""
+   node_grads_from_edge_grads(G::ETGraph, w_edges) -> Vector
+
+Scatter edge cotangents onto nodes. For an edge `e` running from node
+`i(e)` to node `j(e)`, the edge vector is
+`𝐫_e = x_{j(e)} - x_{i(e)} (+ shift)`, and the adjoint of the map
+`x ↦ 𝐫_e` accumulates
+```
+   ∂x_i = Σ_{e : j(e) = i} w_e  −  Σ_{e : i(e) = i} w_e ,
+```
+where `w_e` is the cotangent (gradient) with respect to `𝐫_e`. This is
+the position part of the adjoint of `(x, cell) ↦ 𝐫_e`; the cell part of
+the same adjoint yields the virial, which is handled downstream (e.g. in
+a forces/virial wrapper in ACEpotentials).
+
+`w_edges` must be an indexable collection of node-vector-shaped
+cotangents (e.g. `SVector{3}`s extracted from edge gradient states); the
+result is a `Vector` with one entry per node, of the same element type.
+"""
+function node_grads_from_edge_grads(G::ETGraph, w_edges)
+   g = zeros(eltype(w_edges), nnodes(G))
+   for (i, j, w) in zip(G.ii, G.jj, w_edges)
+      g[i] -= w
+      g[j] += w
+   end
+   return g
 end

@@ -2,8 +2,8 @@
 module AtomsBaseExt 
 
 
-import AtomsBase: ChemicalSpecies, atomic_number 
-import EquivariantTensors.Atoms: bond_len
+import AtomsBase: ChemicalSpecies, atomic_number
+import ACEradials: bond_len
 
 # some data about bond lengths
 include("atoms_data.jl")

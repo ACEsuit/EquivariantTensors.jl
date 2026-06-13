@@ -9,7 +9,6 @@ Bumper = "8ce10254-0962-460f-a3d8-1f77fea1446e"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 ConcreteStructs = "2569d6c7-a4a2-43d3-a901-331e8e4be471"
-DecoratedParticles = "023d0394-cb16-4d2d-a5c7-724bed42bbb6"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Functors = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
 GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
@@ -18,7 +17,6 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Lux = "b2108857-7c20-44ae-9111-449ecde12c47"
 LuxCore = "bb33d45b-7691-41d6-9220-0943567d0623"
 MLDataDevices = "7e8f7934-dd98-4c1a-8fe8-92b47a384d40"
-NamedTupleTools = "d9ec5142-1e00-5aa0-9d6a-321866360f50"
 PartialWaveFunctions = "793d2195-304b-438e-bbb1-bc33c872ac39"
 Polynomials4ML = "03c4bcba-a943-47e9-bfa1-b1661fc2974f"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -30,12 +28,12 @@ WithAlloc = "fb1aa66a-603c-4c1d-9bc4-66947c7b08dd"
 
 [weakdeps]
 AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
-AtomsBuilder = "f5cc8831-eeb7-4288-8d9f-d6c1ddb77004"
+DecoratedParticles = "023d0394-cb16-4d2d-a5c7-724bed42bbb6"
 NeighbourLists = "2fcf5ba9-9ed4-57cf-b73f-ff513e316b9c"
 
 [extensions]
-AtomsBaseExt = "AtomsBase"
-NeighbourListsExt = "NeighbourLists"
+DecoratedParticlesExt = "DecoratedParticles"
+NeighbourListsExt = ["NeighbourLists", "AtomsBase", "DecoratedParticles"]
 
 [compat]
 ACEbase = "0.4.5"
@@ -47,7 +45,7 @@ CUDA = "5.9.1, 6"
 ChainRulesCore = "1.25.1"
 Combinatorics = "1"
 ConcreteStructs = "0.2.3"
-DecoratedParticles = "0.1.0"
+DecoratedParticles = "0.1.4"
 ForwardDiff = "0.10, 1"
 Functors = "0.5.2"
 GPUArraysCore = "0.2.0"
@@ -57,8 +55,7 @@ Lux = "1"
 LuxCore = "1.2.4"
 MLDataDevices = "1.9.3"
 Metal = "1.9.0"
-NamedTupleTools = "0.14.0"
-NeighbourLists = "0.5.10"
+NeighbourLists = "0.6"
 PartialWaveFunctions = "0.2.0"
 Polynomials4ML = "0.5.6"
 Random = "1.11"
@@ -70,8 +67,11 @@ WithAlloc = "0.1.1"
 julia = "1.11"
 
 [extras]
+AtomsBase = "a963bdd2-2df7-4f54-a1ee-49d51e6be12a"
+AtomsBuilder = "f5cc8831-eeb7-4288-8d9f-d6c1ddb77004"
 BlockDiagonals = "0a1fb500-61f7-11e9-3c65-f5ef3456f9f0"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+DecoratedParticles = "023d0394-cb16-4d2d-a5c7-724bed42bbb6"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
@@ -83,4 +83,4 @@ WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", "Printf", "Zygote", "Optimisers", "CUDA", "Metal", "AtomsBase", "AtomsBuilder", "NeighbourLists", "Unitful"]
+test = ["Test", "WignerD", "Rotations", "BlockDiagonals", "SpheriCart", "Printf", "Zygote", "Optimisers", "CUDA", "Metal", "AtomsBase", "AtomsBuilder", "DecoratedParticles", "NeighbourLists", "Unitful"]
