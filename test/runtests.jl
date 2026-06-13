@@ -16,7 +16,6 @@ end
 @testset "Embed" begin 
     @testset "Transform" begin include("embed/test_transform.jl"); end
     @testset "Decorated Particles" begin include("test_decoratedparticles.jl"); end
-    @testset "TransSplines" begin include("embed/test_splines.jl"); end
 end
 
 @testset "Pooling" begin

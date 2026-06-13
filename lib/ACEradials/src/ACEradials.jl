@@ -21,7 +21,8 @@ import LuxCore: AbstractLuxLayer, initialparameters, initialstates,
                 parameterlength
 
 export LearnableRnlBasis, SplineRnlBasis, splinify, learnable_Rnl_basis,
-       PolyEnvelope1sR, PolyEnvelope2sX, agnesi_transform
+       PolyEnvelope1sR, PolyEnvelope2sX, agnesi_transform,
+       trans_splines, TransSelSplines
 
 include("elements.jl")
 include("envelopes.jl")
@@ -30,6 +31,7 @@ include("agnesi_dp.jl")
 include("Rnl_learnable.jl")
 include("Rnl_splines.jl")
 include("splinify.jl")
+include("transsplines.jl")
 include("constructors.jl")
 
 end
