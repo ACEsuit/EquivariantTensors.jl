@@ -208,11 +208,12 @@ Destination recommendations (per-piece, refined after CO's comments):
   only XState methods go in the extension. Trade-off accepted:
   extension code rides ET's version train.
 - **`extensions/atoms.jl` prototypes + ext/: keep, but split.** The
-  graph half (`interaction_graph`, `nlist2graph`,
-  `forces_from_edge_grads`) is the system→ETGraph entry point and stays
-  with `graphs/`; note `NeighbourListsExt` currently constructs PStates
-  directly — must become container-agnostic (or gain a DP trigger) once
-  DP leaves the hard deps. The chemistry half (`bond_len`, agnesi
+  graph half (`interaction_graph`, `nlist2graph`) is the system→ETGraph
+  entry point and stays with `graphs/`; note `NeighbourListsExt`
+  currently constructs PStates directly — must become container-agnostic
+  (or gain a DP trigger) once DP leaves the hard deps.
+  (`forces_from_edge_grads` was deleted in `restruct_edgegrads`; its
+  generic core replacement is `node_grads_from_edge_grads`, see §10.) The chemistry half (`bond_len`, agnesi
   defaults in `AtomsBaseExt`) belongs with ACEradials (which already
   has `elements.jl`/`transforms.jl`), not ET. Weakdep stubs themselves
   are harmless — no load cost, a dozen empty functions.
@@ -269,6 +270,27 @@ and refinements relative to the plan above:
 - **`NeighbourListsExt` gains DP as a second trigger**
   (`["NeighbourLists", "DecoratedParticles"]`) — took the cheap option;
   making it container-agnostic is deferred to the graphs/ step.
+
+*Trigger analysis (PR `restruct_edgegrads`).* After `restruct_chemistry`,
+ET's only atoms extension is `NeighbourListsExt` = the
+neighbourlist→ETGraph builder, and its trigger
+`["NeighbourLists", "DecoratedParticles"]` is correct:
+  - *NeighbourLists* must be a trigger — the ext calls
+    `NeighbourLists.PairList`; an extension may use only its triggers +
+    the parent's hard deps, and NeighbourLists is deliberately not an ET
+    hard dep.
+  - *AtomsBase* deliberately not a trigger — `AbstractSystem` and every
+    accessor (species/position/cell_vectors/periodicity/Unitful) reach
+    through `NeighbourLists.AtomsBase` (NeighbourLists hard-depends on
+    AtomsBase). An extra trigger would only delay activation (all
+    triggers must load first).
+  - *DecoratedParticles* is a trigger because the ext **constructs
+    PStates** for all edge/node data (per #110, particles must be state
+    types; bare NamedTuples lack tangent arithmetic). Revisit only when
+    the graphs/ step parametrises the edge container.
+  - Transitive loads count, so ACEpotentials-style consumers (hard deps
+    on NeighbourLists + DP) activate it automatically; direct ET script
+    users need `using NeighbourLists, DecoratedParticles`.
 - **`TransSelSplines` signatures relaxed** from
   `AbstractVector{<: XState}` to `AbstractVector` (duck-typed; the
   tangent-arithmetic contract applies, not a container restriction).
@@ -425,6 +447,13 @@ Outstanding items: review `test_lux_models.jl`
 (SelectLinL coverage vs test_splines overlap) before finalizing the
 restructure.
 
+- ACEpotentials forces/virial wrapper: `restruct_edgegrads` deleted
+  `forces_from_edge_grads` and replaced it with the generic core
+  primitive `node_grads_from_edge_grads(G, w_edges)` (position part of
+  the adjoint of `(x, cell) ↦ 𝐫_e`, no force sign). The forces wrapper
+  (apply the `−` sign, units, `AbstractSystem` handling) and the virial
+  (the cell part of the same adjoint) belong in ACEpotentials.jl — to be
+  added there (repo not in this workspace).
 - A storage layout: flat + spec indexing vs per-l blocks vs flat with
   block views (§4). Prototype against CP before committing.
 - Public differentiation API: ChainRules-only surface over in-place

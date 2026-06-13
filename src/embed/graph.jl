@@ -151,3 +151,32 @@ function rrule(::typeof(reshape_embedding), ϕ2, X::ETGraph)
 
    return ϕ3, _pb_ϕ
 end
+
+
+"""
+   node_grads_from_edge_grads(G::ETGraph, w_edges) -> Vector
+
+Scatter edge cotangents onto nodes. For an edge `e` running from node
+`i(e)` to node `j(e)`, the edge vector is
+`𝐫_e = x_{j(e)} - x_{i(e)} (+ shift)`, and the adjoint of the map
+`x ↦ 𝐫_e` accumulates
+```
+   ∂x_i = Σ_{e : j(e) = i} w_e  −  Σ_{e : i(e) = i} w_e ,
+```
+where `w_e` is the cotangent (gradient) with respect to `𝐫_e`. This is
+the position part of the adjoint of `(x, cell) ↦ 𝐫_e`; the cell part of
+the same adjoint yields the virial, which is handled downstream (e.g. in
+a forces/virial wrapper in ACEpotentials).
+
+`w_edges` must be an indexable collection of node-vector-shaped
+cotangents (e.g. `SVector{3}`s extracted from edge gradient states); the
+result is a `Vector` with one entry per node, of the same element type.
+"""
+function node_grads_from_edge_grads(G::ETGraph, w_edges)
+   g = zeros(eltype(w_edges), nnodes(G))
+   for (i, j, w) in zip(G.ii, G.jj, w_edges)
+      g[i] -= w
+      g[j] += w
+   end
+   return g
+end
