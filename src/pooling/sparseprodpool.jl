@@ -461,7 +461,7 @@ function _jacobian_X!(A::AbstractArray, ∂A::AbstractArray,
          @simd ivdep for j = 1:maxneigs
             bR = Rnl[j, i, ϕR]
             bY = Ylm[j, i, ϕY]
-            a += bR * bY   # TODO: switch to muladd! 
+            a = muladd(bR, bY, a)
 
             ∂bR = ∂Rnl[j, i, ϕR]
             ∂bY = ∂Ylm[j, i, ϕY]
