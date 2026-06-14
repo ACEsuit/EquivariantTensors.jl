@@ -17,8 +17,10 @@ conventions) and therefore lives outside the application-agnostic
 **subdirectory package** of the
 [EquivariantTensors.jl](https://github.com/ACEsuit/EquivariantTensors.jl)
 repository, so that radials and ET internals can co-evolve in atomic PRs
-while keeping independent release streams. See `agents/radials.md` for the
-design notes and decision record.
+while keeping independent release streams. See the
+[Architecture](https://ACEsuit.github.io/EquivariantTensors.jl/dev/architecture/)
+docs for where this fits in the ecosystem, and `agents/radials.md` for the
+design notes, decision record and remaining future work.
 
 The code originates from `ACEpotentials.jl/src/models/`; the original
 `LearnableRnlrzzBasis` / `SplineRnlrzzBasis` types were renamed to

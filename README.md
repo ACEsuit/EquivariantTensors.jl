@@ -10,6 +10,8 @@ The plan is that it becomes the backend for several [ACEsuit]() packages such as
 
 The package is a work in progress. It is already usable, but functionality is still incomplete. A key goal is to provide full `ChainRules` and `Lux` integration, including optimized CPU and GPU kernels, and shared interfaces to enable drop-in replacements for different tensor format. Key components from various `ACEsuit` packages that can be shared are slowly being moved into this package. 
 
+For an orientation map of the package layout and how it relates to `Polynomials4ML`, `DecoratedParticles` and `ACEradials`, see the [Architecture](https://ACEsuit.github.io/EquivariantTensors.jl/dev/architecture/) page of the documentation.
+
 ## Contributing
 
 Contributions are very welcome. Until clear guidelines and practices are established, we recommend to open an issue where the bugfix or enhancement can be discussed, before starting a pull request. We will do our best to respond in a timely manner.
