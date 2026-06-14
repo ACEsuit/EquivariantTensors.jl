@@ -10,6 +10,22 @@ preserving* and need a trustworthy guardrail.
 This is **P0** of the post-restructure priorities (see the chat synthesis and
 `restructure.md` §10 test-suite-cleanup item).
 
+**Round 2 cleanup (CO feedback, 2026-06-14):** `test_initializers` rng-determinism
+uses `≈` not `==`; `test_sparse_ace[_cplx]` use the shared `LTM.DotL` (generalised
+to accept `SVector` features) + `DIFF.grad_*_ps` instead of redefining `DotL` and
+hand-coding the gradient checks; `test_ace_ka.jl` → simplified **`test_ace_ext.jl`**
+(keeps the `ACEKA` prototype + the `evaluate`/jacobian gradient checks, drops the
+graph/GPU/sequential checks now covered elsewhere).
+
+**Open test TODOs:**
+- `evaluate_with_grad` is not differentiable w.r.t. parameters (allocates Float32
+  buffers + a hand-written pullback with no rrule) — the `test_ace_ext.jl` check
+  is `@test_broken`. Make it differentiable, then flip to `@test`.
+- Re-port a `SelectLinL` finite-diff (input-gradient) test (the removed
+  `dormant/test_embed.jl` used the old `NTtransform` API).
+- Salvage the `frule` tests from `dormant/test_forwarddiff.jl` into the active
+  pooling/sparse tests.
+
 ## Current state
 
 **Active suite (`runtests.jl`) — solid at the unit level:**

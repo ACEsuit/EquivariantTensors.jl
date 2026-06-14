@@ -24,5 +24,5 @@ _rms(A) = sqrt(sum(abs2, A) / length(A))   # ≈ σ for zero-mean samples
 @test isapprox(_rms(ET.et_normal(MersenneTwister(1), 4000; σ = 0.3)), 0.3; rtol = 0.1)
 @test isapprox(_rms(ET.et_normal(MersenneTwister(2), 4000)), 1.0; rtol = 0.1)   # default σ = 1
 
-## rng determinism
-@test ET.et_normal(MersenneTwister(7), 3, 3) == ET.et_normal(MersenneTwister(7), 3, 3)
+## rng determinism (same seed ⇒ same draw; compare with ≈, never == for floats)
+@test ET.et_normal(MersenneTwister(7), 3, 3) ≈ ET.et_normal(MersenneTwister(7), 3, 3)

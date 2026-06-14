@@ -43,7 +43,7 @@ end
 @testset "ACE Models" begin
     @testset "Pullback" begin include("acemodels/test_sparse_ace.jl"); end
     @testset "Pullback complex" begin include("acemodels/test_sparse_ace_cplx.jl"); end
-    @testset "ACE KA and grad" begin include("acemodels/test_ace_ka.jl"); end
+    @testset "ACE prototype (ext)" begin include("acemodels/test_ace_ext.jl"); end
     @testset "End-to-end model" begin include("acemodels/test_model.jl"); end
 end
 
