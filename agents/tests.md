@@ -147,11 +147,12 @@ the open decision below.)
 
 ## Known bugs surfaced by this work
 
-- **GPU full-model position gradient is wrong.** In `test_ace_ka2_new.jl` the
-  Zygote gradient of a full model w.r.t. edge positions disagrees between CPU and
-  Metal (`@error("This test currently fails!")`). This is a real correctness bug
-  in the GPU reverse path, currently hidden by the test being dormant. Reviving
-  the test as `@test_broken` makes it visible; fixing it is its own task.
+- **GPU full-model position gradient — Metal-specific.** The original report
+  (`test_ace_ka2_new.jl`, `@error("This test currently fails!")`) was on Metal.
+  **Verified on a CUDA A100 (2026-06-14): the CPU-vs-GPU position gradient is
+  correct in both F32 and F64** (forward + parameter gradients too). So
+  `test_model.jl` runs it as a real `@test` everywhere and `@test_broken` only
+  on Metal. Fixing the Metal reverse path is its own task (needs Metal hardware).
 - **Complex Zygote gradient** flagged "fails currently" in
   `test_sparse_ace_cplx.jl`. Parked to `dormant/` pending the maintain-complex
   decision (below), not fixed or `@test_broken` in the active suite.

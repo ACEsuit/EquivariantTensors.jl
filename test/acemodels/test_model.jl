@@ -86,11 +86,16 @@ let Dtot = 8, maxl = 6, ORD = 3
          println_slim(@test all(isapprox(Array(gW_d[i]), gW[i]; rtol = rtol)
                                 for i in 1:length(gW)))
 
-         # position gradient: CPU vs GPU — KNOWN BROKEN (GPU reverse-path bug;
-         # tracked in agents/tests.md "Known bugs", not hidden).
+         # position gradient: CPU vs GPU. Correct on CUDA (verified on an A100,
+         # F32 + F64); a known failure on Metal only (the original report). So a
+         # real @test everywhere except @test_broken on Metal. See agents/tests.md.
          gz   = DIFF.grad_zy(Xc, model, ps, st)
          gz_d = DIFF.grad_zy(X_d, model, ps_d, st_d)
-         @test_broken all(Array(gz_d.edge_data) .≈ gz.edge_data)
+         if gpu_backend == "Metal"
+            @test_broken all(Array(gz_d.edge_data) .≈ gz.edge_data)
+         else
+            println_slim(@test all(Array(gz_d.edge_data) .≈ gz.edge_data))
+         end
       end
       println()
    end
