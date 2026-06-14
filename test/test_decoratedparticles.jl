@@ -26,11 +26,11 @@ rand_x_dp() = PState(q = randn(), r = randn(SVector{3, Float64}), z = rand(1:10)
 
 ##
 
-@info("Test EmbedDP - Radial Basis") 
+@info("Test StateEmbed - Radial Basis")
 
 basis = ChebBasis(10)
 trans = x -> 1 / (1 + sum(abs2, x.r))
-embed = ET.EmbedDP(ET.dp_transform(trans), basis)
+embed = ET.StateEmbed(ET.state_transform(trans), basis)
 ps, st = LuxCore.setup(rng, embed)
 
 G = ET.Testing.rand_graph(20; randedge = rand_x_dp)
@@ -49,11 +49,11 @@ println_slim(@test all(∂P1 .≈ ∂P2 ))
 
 ## 
 
-@info("Test EdgeEmbedDP - Solid Harmonics Basis") 
+@info("Test StateEmbed - Solid Harmonics Basis")
 
 basis = real_solidharmonics(4)
 trans = x -> x.r 
-embed = ET.EmbedDP(ET.dp_transform(trans), basis)
+embed = ET.StateEmbed(ET.state_transform(trans), basis)
 ps, st = LuxCore.setup(rng, embed)
 
 G = ET.Testing.rand_graph(20; randedge = rand_x_dp)

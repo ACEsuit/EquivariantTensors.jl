@@ -20,8 +20,8 @@ basis = ChebBasis(5)
 ##
 
 @info("  DP input, transformed into scalar transform")
-trans = ET.dp_transform(x -> 1 / (1+x.r))
-tbasis = ET.EmbedDP(trans, basis)
+trans = ET.state_transform(x -> 1 / (1+x.r))
+tbasis = ET.StateEmbed(trans, basis)
 X = [ PState(;r = 10 * rand()) for _ in 1:10 ]
 ps, st = LuxCore.setup(rng, tbasis)
 
@@ -33,10 +33,10 @@ println_slim(@test P1 ≈ P2)
 
 @info("   DP input, scalar input transform, select output transform")
 
-trans = ET.dp_transform(x -> 1 / (1+x.r))
+trans = ET.state_transform(x -> 1 / (1+x.r))
 basis = ChebBasis(5)
 sellin = ET.SelectLinL(5, 10, 3, x -> x.z)
-tbasis = ET.EmbedDP(trans, basis, sellin)
+tbasis = ET.StateEmbed(trans, basis, sellin)
 ps, st = LuxCore.setup(rng, tbasis)
 
 X = [ PState(;r = 10 * rand(), z = rand(1:3)) for _ in 1:10 ]
@@ -51,6 +51,6 @@ println_slim(@test P1 ≈ B2)
 
 # TODO: a SelectLinL gradient (fdtest) — salvage from the removed
 # dormant/test_embed.jl (it was the only direct SelectLinL fd test, but on the
-# old NTtransform API). Differentiate the EmbedDP(trans, basis, SelectLinL)
+# old NTtransform API). Differentiate the StateEmbed(trans, basis, SelectLinL)
 # output w.r.t. the input PState positions, Zygote vs ForwardDiff. See
 # agents/tests.md.
