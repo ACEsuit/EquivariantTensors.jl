@@ -17,8 +17,8 @@ separate agent owns it.
 
 ## Defer → CP / carrier agent (`groups/O3/`, `symmop`, sparse carrier)
 
-These sit in the code the CP/TRACE agent is actively working; left as-is to
-avoid conflicts. Most are type-stability / notation-consistency cleanups:
+**Decision (CO, 2026-06-14): defer all of these** — owned by the CP/TRACE agent.
+Most are type-stability / notation-consistency cleanups:
 - `src/groups/O3/O3.jl:412` — `SetLl` not type stable (removable once `!PI`
   uses the new method).
 - `src/groups/O3/O3.jl:464`, `:479` — `coupling_coeffs` vs `mm_generate` return
@@ -49,33 +49,29 @@ avoid conflicts. Most are type-stability / notation-consistency cleanups:
 - `src/utils/selector.jl:6` — optional sorted-categories variant for large
   category sets (future feature).
 
-## Real issue to confirm (flagged, not fixed)
+## Dead code — REMOVED (CO, 2026-06-14)
 
-- `src/formats/sparse/sparse_ace_utils.jl:129-142` — `_auto_Ylm_spec` calls
-  `_get_natural_Ylm_spec`, but that function's **definition is commented out**
-  (the `# # TODO: not clear this should be here?` block). So `_auto_Ylm_spec`
-  would error if ever hit. Likely a dead path (callers pass `Ylm_spec`
-  explicitly) — carrier owner should confirm and remove `_auto_Ylm_spec` or
-  restore the definition.
+- `src/formats/sparse/sparse_ace_utils.jl` — `_auto_Ylm_spec` called
+  `_get_natural_Ylm_spec`, whose definition was commented out (so the path would
+  error if hit). Confirmed dead (callers pass `Ylm_spec` explicitly); both
+  deleted. *(The sibling `_auto_Rnl_spec` is also only referenced in commented
+  code — left for now, a candidate for the same removal.)*
 
-## Dormant (not `include`d)
+## Dormant (not `include`d) — don't touch for now (CO)
 
 - `src/formats/sparse/symmprod_dag.jl:60`, `:214`,
   `symmprod_dag_kernels.jl:217` — the DAG symmetric-product path is dormant in
   `src/` (and its test is in `test/dormant/`). Revive or retire together; see
   `agents/tests.md`.
 
-## `co_notes_for_later.md` design questions (findings)
+## `co_notes_for_later.md` design questions
 
-- **"where is `setproduct` used?"** — answered: defined in
-  `src/utils/setproduct.jl` (included via `EquivariantTensors.jl`) and used once,
-  in `src/formats/sparse/sparse_ace_utils.jl::_auto_nnllmm_spec`. Live,
-  single-consumer.
-- **EmbedDP / `dp_transform` — really in ET? how much relies on DP?** Open. The
-  structs are in core; their evaluation/diff methods are in
-  `ext/DecoratedParticlesExt.jl` (per restructure.md §5.1). The `selectlinl.jl:30`
-  TODO echoes this. Needs an audit + a rename/relocate decision.
-- **`EdgeEmbed` per-edge + auto-broadcast, move to `graphs/`?** Open design Q.
-- **pooling → embedding (message op vs system embedding)?** Open design Q.
-- **which utils → `lib/ETUtils`?** Open; pairs with the EmbedDP/DP audit.
+- **"where is `setproduct` used?"** — resolved (CO: don't touch). Used once, in
+  `src/formats/sparse/sparse_ace_utils.jl::_auto_nnllmm_spec`.
+- **EmbedDP / `dp_transform` in ET? · per-edge `EdgeEmbed` → `graphs/`? · pooling
+  → embedding?** — analysed in detail with options in
+  [`agents/embedding-design.md`](embedding-design.md) (CO requested a deeper
+  look; ends in a short list of decisions to make).
+- **which utils → `lib/ETUtils`?** — open; pairs with the EmbedDP/DP audit (see
+  the design note).
 - **"go through all TODO notes"** — this file.

@@ -121,29 +121,6 @@ function _auto_Rnl_spec(mb_spec)
 end
 
 """
-   _auto_Ylm_spec(mb_spec) 
-
-takes a list of 𝔸 or 𝔹 specifications (many-body) and return the specification 
-of the Ylm basis functions as a [ (l = ., m = .), ... ] list. 
-"""
-function _auto_Ylm_spec(mb_spec, basis) 
-   lmax = maximum(b.l for bb in mb_spec for b in bb)
-   return _get_natural_Ylm_spec(lmax, basis)
-end
-
-# # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# # TODO: not clear this should be here? But no better idea for now...
-# import Polynomials4ML as _P4ML
-
-# _get_natural_Ylm_spec(lmax, ::typeof(real)) = 
-#       _P4ML.natural_indices(_P4ML.real_sphericalharmonics(5))
-
-# _get_natural_Ylm_spec(lmax, ::typeof(complex)) = 
-#       _P4ML.natural_indices(_P4ML.complex_sphericalharmonics(5))
-# # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-"""
 takes an nnll spec and generates a complete list of all possible nnllmm
 """
 function _auto_nnllmm_spec(nnll_spec)
