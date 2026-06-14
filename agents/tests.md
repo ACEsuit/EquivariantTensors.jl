@@ -36,8 +36,11 @@ This is **P0** of the post-restructure priorities (see the chat synthesis and
    active suite — GPU coverage stops at the kernel level. The only full-model
    CPU-vs-GPU consistency lives in `dormant/` (`test_ace_ka2_new.jl`,
    `test_lux_models.jl`).
-4. **Known-fragile complex path:** `acemodels/test_sparse_ace_cplx.jl` carries an
-   in-file note that the Zygote gradient "fails currently" — resolve or mark.
+4. **Complex path is fragile and its future is undecided:**
+   `acemodels/test_sparse_ace_cplx.jl` flags its Zygote gradient as "fails
+   currently", and whether ET maintains a complex path at all is an **open
+   decision (CO, to make soon)** — so the test is *parked to `dormant/`* rather
+   than fixed in place (see below).
 
 ## Dormant-folder triage (final decisions)
 
@@ -54,10 +57,17 @@ This is **P0** of the post-restructure priorities (see the chat synthesis and
 | `test_prodpool_mult.jl` | **DELETE** | Experimental "not supported yet"; calls obsolete `ACEcore`. |
 | `luxtestmodels.jl`, `diffutils.jl` | **PROMOTE to `test/test_utils/`** | Working helpers for the revived model test (`LTM.build_model`, `DIFF.grad_zy/grad_fd[_ps]`). |
 
-**Orphan:** `test/formats/sparse/test_sparsesymmproddag.jl` is in the active tree
-but *not* in `runtests.jl` (its `symmprod_dag` source is dormant). **Move it to
-`dormant/`** for consistency (or delete with `symmprod_dag` if that path is
-being retired).
+**Active tests to park in `dormant/`** (move the test only — no `src/` change):
+- `test/formats/sparse/test_sparsesymmproddag.jl` — in the active tree but *not*
+  in `runtests.jl` (its `symmprod_dag` source is dormant in `src/`). Move it to
+  `dormant/` for consistency. **Keep the `symmprod_dag` source as-is** — the DAG
+  path is *not* being retired now; only the test is parked.
+- `test/acemodels/test_sparse_ace_cplx.jl` — move to `dormant/`. Its Zygote
+  gradient is flagged "fails currently", and whether ET should maintain a
+  complex path at all is an open decision (CO, soon) — so park it rather than
+  fix-or-`@test_broken` it in the active suite. The carrier-level real/complex
+  switch stays in `groups/` (restructure.md §9); parking the test removes
+  nothing from `src/`.
 
 ## New / expanded coverage to add
 
@@ -79,19 +89,47 @@ being retired).
 4. **`SparseACElayer` focused unit test** (optional if 1 is thorough): the
    `_mul_scal` / `_tupmul` rrules directly via finite differences, independent of
    a full model.
-5. **Complex path** — resolve gap 4: confirm whether
-   `test_sparse_ace_cplx` Zygote actually passes; if not, `@test_broken` + a
-   tracked issue so the suite is honest.
+
+(The complex path is *parked*, not added — see "Active tests to park" above and
+the open decision below.)
 
 ## Infrastructure
 
-- **GPU CI lane.** `CUDA` + `Metal` are heavy default test extras (slow
-  instantiate; can't actually execute on CI). The `dev=identity` fallback means
-  GPU tests already run trivially on CPU, but the deps are still
-  installed/precompiled every `Pkg.test()`. Consider an env-gated GPU group
-  (e.g. `ET_TEST_GPU=cuda|metal`) and a separate CI lane, keeping the default
-  lane lean while preserving KA-on-CPU coverage (the P4ML `ka=true`-on-CPU
-  pattern). Decision to confirm with CO.
+- **Automatic backend detection in `utils_gpu.jl`.** The current helper probes
+  `CUDA.functional()` → `AMDGPU.functional()` → `Metal.functional()`, which
+  requires *all* backend packages to be loaded first (the reason `CUDA`+`Metal`
+  are heavy default test extras). Replace it with a **system-level probe that
+  picks the backend *before* loading any GPU package**, with a `TEST_BACKEND`
+  override:
+  ```julia
+  function detect_gpu_backend()
+      haskey(ENV, "TEST_BACKEND") && return ENV["TEST_BACKEND"]   # manual override
+      if Sys.isapple() && Sys.ARCH == :aarch64
+          return "Metal"
+      elseif !isnothing(Sys.which("nvidia-smi")) && success(`nvidia-smi`)
+          return "CUDA"
+      elseif !isnothing(Sys.which("rocm-smi")) || isdir("/dev/kfd")
+          return "AMDGPU"
+      elseif !isnothing(Sys.which("sycl-ls"))   # crude oneAPI probe
+          return "oneAPI"
+      else
+          return "CPU"
+      end
+  end
+  ```
+  Then conditionally load *only* the detected backend and set `dev`/`gpu`
+  (`identity` for `"CPU"`), wrapping the load in `try … catch` (e.g.
+  `@eval using CUDA`) so a backend that is detected but not installed degrades to
+  CPU with a warning. Consequence: the **default CI runner resolves to `"CPU"`**
+  (no `nvidia-smi`, not apple-aarch64) and loads no GPU package — so `CUDA`/
+  `Metal`/`AMDGPU`/`oneAPI` can be **dropped from the default test deps**, giving
+  a fast, lean `Pkg.test()`; a GPU lane (or a dev machine) installs and loads
+  only its one backend. The KA-on-CPU coverage in the active suite is unaffected
+  (it never needed a GPU package).
+  Notes on the probe: it spawns `nvidia-smi` at load (cheap, fine); Apple-Intel
+  Macs (`x86_64`) fall through to `"CPU"` — relax to `Sys.isapple()` if
+  Metal-on-Intel matters; the `AMDGPU`/`oneAPI` probes are heuristic and can be
+  hardened when those backends are actually exercised.
 - Update `test/dormant/README.md` after the triage (remove deleted entries; note
   what was promoted/merged).
 - Keep the test tree mirroring `src/`; new files land in the matching subdir.
@@ -103,20 +141,35 @@ being retired).
   Metal (`@error("This test currently fails!")`). This is a real correctness bug
   in the GPU reverse path, currently hidden by the test being dormant. Reviving
   the test as `@test_broken` makes it visible; fixing it is its own task.
-- **Complex Zygote gradient** flagged as "fails currently" in
-  `test_sparse_ace_cplx.jl` — verify and track.
+- **Complex Zygote gradient** flagged "fails currently" in
+  `test_sparse_ace_cplx.jl`. Parked to `dormant/` pending the maintain-complex
+  decision (below), not fixed or `@test_broken` in the active suite.
+
+## Open decisions
+
+- **Maintain a complex path at all?** (CO, to make soon.) The complex
+  test is parked meanwhile. If complex is dropped, the parked test and the
+  `groups/` real/complex switch can be retired; if kept, the broken complex
+  Zygote gradient becomes a real fix task.
+- **Drop the GPU backend packages from the default test deps?** The
+  `detect_gpu_backend()` approach makes the default lane resolve to `"CPU"` and
+  load no backend, so `CUDA`/`Metal`/`AMDGPU`/`oneAPI` *can* leave the default
+  `[extras]`/test target (lean `Pkg.test()`), with GPU lanes adding their one
+  backend. Recommended, but it changes CI config — confirm before doing it.
 
 ## Sequencing
 
-1. Triage deletions + move the orphan + promote `LTM`/`DIFF` helpers (pure
-   bookkeeping, no risk).
+1. Triage deletions + move the two active tests to park
+   (`test_sparse_ace_cplx`, `test_sparsesymmproddag`) + promote `LTM`/`DIFF`
+   helpers (pure bookkeeping, no risk; `src/` untouched).
 2. Add the **initializers** unit test and the **end-to-end CPU model test**
    (closes gaps 1–3 on CPU) — this is the guardrail the format-interface refactor
    needs.
 3. Salvage the `SelectLinL` fdtest and the `frule` tests into active files.
-4. Add the **GPU-gated** consistency test with the position-gradient bug as
-   `@test_broken`; resolve/track the complex-Zygote flag.
-5. (Separately) decide the GPU CI lane.
+4. Rework `utils_gpu.jl` to `detect_gpu_backend()`, add the **GPU-gated**
+   consistency test with the position-gradient bug as `@test_broken`.
+5. (Separately, after the deps decision) trim the GPU backends from the default
+   lane and set up the GPU CI lane.
 
 Steps 1–2 are the immediate prerequisite for the P1 format-interface work; 3–5
 can follow.
