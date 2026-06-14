@@ -32,9 +32,9 @@ ET is organised into submodule directories, each a stage of the pipeline
 | Directory | Purpose |
 |-----------|---------|
 | `groups/` | O(3) representation theory: irreps, Clebsch–Gordan coupling, coupling trees, and carrier symmetrisation — the *carrier* of the equivariant tensor. Exposes the `O3` module. |
-| `graphs/` | The `ETGraph` data structure (system ↔ edge-list reshaping) and the atomic-system entry points. Container-agnostic. |
-| `transforms/` | Input transforms on particle states (`DPTransform`). |
-| `embed/` | Embedding layers: `EdgeEmbed`, `EmbedDP` (transform → basis → post). |
+| `graphs/` | The `ETGraph` data structure (system ↔ edge-list reshaping), the `EdgeEmbed` per-edge embedding adapter, and the atomic-system entry points. Container-agnostic. |
+| `transforms/` | Input transforms on particle states (`StateTransform`). |
+| `embed/` | Embedding layers: `StateEmbed` (transform → basis → post). |
 | `pooling/` | `PooledSparseProduct` and its KernelAbstractions kernels: per-edge embeddings → pooled features `A`. |
 | `formats/sparse/` | The sparse tensor format: `SparseSymmProd`, the sparse ACE basis/layer, and A2B symmetrisation maps. The reference format. |
 | `utils/` | Shared utilities: spec generation/indexing, `SelectLinL` (categorical linear layer), weight initialisers (`et_zeros`/`et_normal`), type promotion/`adapt`. |
@@ -50,7 +50,7 @@ ET core depends only on `LuxCore`; heavier or domain-specific glue lives in
 package extensions that auto-load with their trigger packages:
 
 - **`DecoratedParticlesExt`** (trigger: `DecoratedParticles`) — all evaluation
-  and differentiation methods for `DPTransform`/`EmbedDP` on XState particle
+  and differentiation methods for `StateTransform`/`StateEmbed` on XState particle
   data. Calling these without DP loaded fails loudly (acceptable: every real
   consumer loads DP).
 - **`NeighbourListsExt`** (triggers: `NeighbourLists`, `AtomsBase`,

@@ -20,7 +20,7 @@ using Lux: BranchLayer, WrappedFunction
 using KernelAbstractions
 using ConcreteStructs
 import LuxCore
-using EquivariantTensors: EmbedDP, DPTransform, dp_transform, SelectLinL
+using EquivariantTensors: StateEmbed, StateTransform, state_transform, SelectLinL
 
 function trans_splines(trans, splines, selector,  
                        envelope = nothing)
@@ -34,7 +34,7 @@ function trans_splines(trans, splines, selector,
    return TransSelSplines(trans, envelope, selector, refstate)
 end 
 
-function trans_splines(embed::EmbedDP, ps, st; 
+function trans_splines(embed::StateEmbed, ps, st; 
                        yrange = (-1.0, 1.0), nspl = 100, 
                        extract_envelope = false)
    if !(embed.post isa SelectLinL)
@@ -52,12 +52,12 @@ function trans_splines(embed::EmbedDP, ps, st;
       polys_y = embed.basis.l.layers.layer_1 
       @assert polys_y isa P4ML.AbstractP4MLBasis
       env = embed.basis.l.layers.layer_2
-      @assert env isa DPTransform || env isa WrappedFunction
+      @assert env isa StateTransform || env isa WrappedFunction
       bas_fun = polys_y
       env_trans = let trans_f = trans.f,
-                      env_func = env isa DPTransform ? env.f : (y, st) -> env.func(y)
+                      env_func = env isa StateTransform ? env.f : (y, st) -> env.func(y)
          # env_func = y -> (1 - y^2)^2
-         dp_transform( (x, st) -> env_func(trans_f(x, st), NamedTuple()),
+         state_transform( (x, st) -> env_func(trans_f(x, st), NamedTuple()),
                        trans.refstate)
       end
    elseif embed.basis isa P4ML.AbstractP4MLBasis

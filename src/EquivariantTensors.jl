@@ -24,11 +24,12 @@ include("generics.jl")
 # ------------------------------------------------------
 # graphs: ETGraph datastructure + atomic-system entry points
 include("graphs/graph.jl")
+include("graphs/edgeembed.jl")     # EdgeEmbed: per-edge embedding -> graph tensor
 include("graphs/atoms.jl")
 
 # ------------------------------------------------------
 # embedding layers, transforms, & auxiliary functionality
-include("transforms/decpart.jl")
+include("transforms/statetransform.jl")
 
 include("embed/embeddings.jl")
 
