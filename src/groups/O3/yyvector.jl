@@ -57,7 +57,6 @@ end
 # 	end
 # end
 
-# TODO: @boundscheck / @propagate_inbounds
 Base.@propagate_inbounds function Base.getindex(y::SYYVector, i::Int)
 	@boundscheck checkbounds(y,i)
 	return y.data[i] 
