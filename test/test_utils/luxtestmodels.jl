@@ -61,11 +61,12 @@ struct DotL <: AbstractLuxLayer
    nin::Int
 end
 
-function (l::DotL)(x::AbstractVector{<: Number}, ps, st)
-   return dot(x, ps.W), st
-end
+# `sum(W .* x)` (not `dot`) so it also works when `x` is a vector of SVectors
+# (the equivariant L>0 basis features) -> returns an SVector.
+(l::DotL)(x, ps, st) = sum(ps.W .* x), st
 
-initialparameters(rng::AbstractRNG, l::DotL) = ( W = randn(rng, l.nin), )
+# small init keeps model outputs O(0.1) -> good conditioning for the FD checks
+initialparameters(rng::AbstractRNG, l::DotL) = ( W = randn(rng, l.nin) .* 0.1, )
 
 initialstates(rng::AbstractRNG, l::DotL) = NamedTuple()
 

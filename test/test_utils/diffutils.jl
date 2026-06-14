@@ -13,11 +13,12 @@ function grad_fd(G, model, ps, st)
 
    function replace_edges(X, Rmat)
       Rsvec = [ SVector{3}(Rmat[:, i]) for i in 1:size(Rmat, 2) ]
-      new_edgedata = [ (; 𝐫 = 𝐫) for 𝐫 in Rsvec ]
-      return ET.ETGraph( X.ii, X.jj, X.first, 
-                  X.node_data, new_edgedata, X.graph_data, 
+      # edge data must be a state type (PState), not a bare NamedTuple (#110)
+      new_edgedata = [ DP.PState(𝐫 = 𝐫) for 𝐫 in Rsvec ]
+      return ET.ETGraph( X.ii, X.jj, X.first,
+                  X.node_data, new_edgedata, X.graph_data,
                   X.maxneigs )
-   end 
+   end
 
    function _eval_mat(Rmat)
       G_new = replace_edges(G, Rmat)
