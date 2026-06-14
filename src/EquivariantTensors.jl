@@ -72,8 +72,12 @@ include("utils/promotion.jl")
 include("utils/selectlinl.jl")
 include("utils/selector.jl")
 
-# other utilities 
-#  adapt.jl : provides some conversion utilities especially moving 
+# weight-initializer leaf samplers (Random-only); format-aware policy is
+# future work, see agents/initializers.md
+include("utils/initializers.jl")
+
+# other utilities
+#  adapt.jl : provides some conversion utilities especially moving
 #             Float64 to Float32 recursively in NamedTuples etc.
 include("utils/adapt.jl")
 

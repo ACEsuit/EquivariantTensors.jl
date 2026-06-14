@@ -1,8 +1,7 @@
 
-using ConcreteStructs 
-using Lux: AbstractLuxWrapperLayer, AbstractLuxContainerLayer
-using LinearAlgebra: dot 
-import Lux 
+using ConcreteStructs
+using LuxCore: AbstractLuxWrapperLayer, AbstractLuxContainerLayer
+using LinearAlgebra: dot
 
 
 # -------------------------------------------------------------------
