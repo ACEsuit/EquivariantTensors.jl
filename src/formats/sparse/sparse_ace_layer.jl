@@ -1,5 +1,4 @@
 using LuxCore
-using Lux: glorot_normal 
 
 struct SparseACElayer{TBB, NLL} <: AbstractLuxLayer
    symbasis::TBB    # equivariant basis -> L = 0, 1, 2, ... 
@@ -20,7 +19,11 @@ function LuxCore.initialparameters(rng::AbstractRNG, l::SparseACElayer)
     @assert length(LL) == length(nfeats) == length(lens)
 
     ps_symbasis = LuxCore.initialparameters(rng, l.symbasis)
-    params = tuple( [ glorot_normal(rng, lens[i], nfeats[i])
+    # WLL[i] : (lens[i] × nfeats[i]) readout weights, out_f = Σ_k 𝔹_k W[k,f].
+    # Interim init: fan-in-scaled normal (σ = 1/√lens[i]) keeps the untrained
+    # output O(1) — see agents/initializers.md for the planned format-aware
+    # initialisation policy that supersedes this per-format choice.
+    params = tuple( [ et_normal(rng, lens[i], nfeats[i]; σ = inv(sqrt(lens[i])))
                       for i = 1:length(LL) ]... )
     ps = (symbasis = ps_symbasis, WLL = params, )
     return ps
