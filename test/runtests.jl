@@ -8,9 +8,10 @@ include(joinpath(@__DIR__(), "test_utils", "utils_gpu.jl"))
 
 @testset "EquivariantTensors.jl" begin
 
-@testset "Utils" begin 
+@testset "Utils" begin
     @testset "SetProduct" begin include("utils/test_setproduct.jl"); end
     @testset "InvMap" begin include("utils/test_invmap.jl"); end
+    @testset "Initializers" begin include("utils/test_initializers.jl"); end
 end
 
 @testset "Embed" begin 
@@ -39,13 +40,12 @@ end
     @testset "QuadO3" begin include("groups/O3/test_quad_O3.jl"); end
 end
 
-@testset "ACE Models" begin 
+@testset "ACE Models" begin
     @testset "Pullback" begin include("acemodels/test_sparse_ace.jl"); end
     @testset "Pullback complex" begin include("acemodels/test_sparse_ace_cplx.jl"); end
     @testset "ACE KA and grad" begin include("acemodels/test_ace_ka.jl"); end
-    # temporarily remove this testset.
-    # @testset "ACE KA new version" begin include("dormant/test_ace_ka2.jl"); end
-end 
+    @testset "End-to-end model" begin include("acemodels/test_model.jl"); end
+end
 
 @testset "Graphs" begin
     @testset "NeighbourListsExt" begin include("graphs/test_neighbourlistsext.jl"); end

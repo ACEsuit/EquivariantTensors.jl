@@ -45,6 +45,12 @@ P1, _ = tbasis(X, ps, st)
 
 Y = trans(X, st.trans)
 T2 = evaluate(basis, Y)
-B2 = reduce(vcat, T2[i, :]' * ps.post.W[:, :, X[i].z]' 
+B2 = reduce(vcat, T2[i, :]' * ps.post.W[:, :, X[i].z]'
                   for i = 1:length(X))
 println_slim(@test P1 ≈ B2)
+
+# TODO: a SelectLinL gradient (fdtest) — salvage from the removed
+# dormant/test_embed.jl (it was the only direct SelectLinL fd test, but on the
+# old NTtransform API). Differentiate the EmbedDP(trans, basis, SelectLinL)
+# output w.r.t. the input PState positions, Zygote vs ForwardDiff. See
+# agents/tests.md.

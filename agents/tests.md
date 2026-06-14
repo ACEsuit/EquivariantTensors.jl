@@ -62,12 +62,9 @@ This is **P0** of the post-restructure priorities (see the chat synthesis and
   in `runtests.jl` (its `symmprod_dag` source is dormant in `src/`). Move it to
   `dormant/` for consistency. **Keep the `symmprod_dag` source as-is** — the DAG
   path is *not* being retired now; only the test is parked.
-- `test/acemodels/test_sparse_ace_cplx.jl` — move to `dormant/`. Its Zygote
-  gradient is flagged "fails currently", and whether ET should maintain a
-  complex path at all is an open decision (CO, soon) — so park it rather than
-  fix-or-`@test_broken` it in the active suite. The carrier-level real/complex
-  switch stays in `groups/` (restructure.md §9); parking the test removes
-  nothing from `src/`.
+  *(Complex stays active — CO decided to maintain complex for now;
+  `test_sparse_ace_cplx.jl` is not parked. If its Zygote gradient is broken,
+  `@test_broken` it rather than remove it.)*
 
 ## New / expanded coverage to add
 
@@ -117,14 +114,28 @@ the open decision below.)
       end
   end
   ```
-  Then conditionally load *only* the detected backend and set `dev`/`gpu`
-  (`identity` for `"CPU"`), wrapping the load in `try … catch` (e.g.
-  `@eval using CUDA`) so a backend that is detected but not installed degrades to
-  CPU with a warning. Consequence: the **default CI runner resolves to `"CPU"`**
-  (no `nvidia-smi`, not apple-aarch64) and loads no GPU package — so `CUDA`/
-  `Metal`/`AMDGPU`/`oneAPI` can be **dropped from the default test deps**, giving
-  a fast, lean `Pkg.test()`; a GPU lane (or a dev machine) installs and loads
-  only its one backend. The KA-on-CPU coverage in the active suite is unaffected
+  When a GPU is detected, **install the matching backend into the (sandboxed)
+  test env and use it** — `Pkg.add(backend)`, `@eval using …`, set the
+  `gpu`/`dev` *transfer function* (recursive, Adapt/Functors-aware — moves ps/st
+  NamedTuples and ETGraph, unlike a bare array type) — wrapped in `try … catch`
+  so a detected-but-unusable backend degrades to CPU (`dev = identity`) with a
+  warning rather than failing the suite:
+  ```julia
+  const backend = detect_gpu_backend()
+  if backend != "CPU"
+      Pkg.add(backend)            # into the sandboxed test env only
+      @eval using $(Symbol(backend))
+      # set gpu/dev = the transfer function (cu / mtl / gpu_device() / …)
+  end
+  ```
+  Also expose `gpu_supports_f64` (false on F32-only backends, e.g. Metal): the
+  GPU-consistency tests run **F32 always and F64 only when supported**. (`Pkg`
+  must be a test dep for the `Pkg.add`.)
+  Consequence: the **default CI runner resolves to `"CPU"`** (no `nvidia-smi`,
+  not apple-aarch64) and installs no GPU package — so `CUDA`/`Metal`/`AMDGPU`/
+  `oneAPI` are **dropped from the default test deps**, giving a fast, lean
+  `Pkg.test()`; a GPU machine / lane detects its hardware and *installs* the one
+  backend on the fly. The KA-on-CPU coverage in the active suite is unaffected
   (it never needed a GPU package).
   Notes on the probe: it spawns `nvidia-smi` at load (cheap, fine); Apple-Intel
   Macs (`x86_64`) fall through to `"CPU"` — relax to `Sys.isapple()` if
@@ -145,17 +156,16 @@ the open decision below.)
   `test_sparse_ace_cplx.jl`. Parked to `dormant/` pending the maintain-complex
   decision (below), not fixed or `@test_broken` in the active suite.
 
-## Open decisions
+## Decisions (CO, 2026-06-14)
 
-- **Maintain a complex path at all?** (CO, to make soon.) The complex
-  test is parked meanwhile. If complex is dropped, the parked test and the
-  `groups/` real/complex switch can be retired; if kept, the broken complex
-  Zygote gradient becomes a real fix task.
-- **Drop the GPU backend packages from the default test deps?** The
-  `detect_gpu_backend()` approach makes the default lane resolve to `"CPU"` and
-  load no backend, so `CUDA`/`Metal`/`AMDGPU`/`oneAPI` *can* leave the default
-  `[extras]`/test target (lean `Pkg.test()`), with GPU lanes adding their one
-  backend. Recommended, but it changes CI config — confirm before doing it.
+- **Maintain a complex path?** → **yes, for now.** So
+  `test_sparse_ace_cplx.jl` *stays active* (not parked); if its Zygote
+  gradient turns out broken, `@test_broken` it (since complex is maintained)
+  rather than removing it.
+- **Drop the GPU backend packages from the default test deps?** → **yes.**
+  `CUDA`/`Metal` removed from `[extras]` + the test target; `detect_gpu_backend()`
+  resolves the default lane to `"CPU"` (loads no backend), and a GPU lane adds
+  its one backend (`TEST_BACKEND=…` + `Pkg.add`).
 
 ## Sequencing
 
