@@ -6,17 +6,14 @@ ET core required replacing `Lux.glorot_normal` in the sparse readout
 should own a small initializer library tailored to equivariant *tensor*
 formats (analogous to `WeightInitializers.jl`, but format-aware).
 
-## What landed (PR `restruct_rm_lux`)
+## What landed (#121)
 
-- `src/utils/initializers.jl`: the **leaf samplers** `et_zeros`, `et_normal`
-  (`Random`-only, `WeightInitializers`-style `init(rng, [T], dims...)`
-  signature so they drop into LuxCore/Lux `init_*` kwargs and
-  `initialparameters`). Dumb samplers only — no format knowledge.
-- `SparseACElayer.initialparameters` now uses `et_normal` with an **interim**
-  fan-in scaling `σ = 1/√lens[i]` (linear readout ⇒ keeps untrained output
-  O(1)). This is a placeholder for the format-aware policy below.
-- `Lux` dropped from ET core deps (now LuxCore-only); kept as a *test* extra
-  (active tests build `Chain`/`Parallel`/`WrappedFunction` models).
+ET core is now LuxCore-only. `src/utils/initializers.jl` provides the
+`Random`-only **leaf samplers** `et_zeros` / `et_normal`
+(`WeightInitializers`-style `init(rng, [T], dims...)`, default `Float64`);
+`SparseACElayer` uses `et_normal` with an **interim** fan-in scaling
+`σ = 1/√fan_in` — a placeholder for the format-aware policy below. `Lux` is now
+a test-only dep.
 
 ## Why ET needs its own initializers (the core idea)
 

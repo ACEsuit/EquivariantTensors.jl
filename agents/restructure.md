@@ -1,9 +1,13 @@
 # ET Restructuring — Working Notes
 
-Status: rev 2 (2026-06-11), CO's comments on rev 1 folded in as decision
-records. Based on CO's initial thoughts, the research notes in
-`projects/equivarianttensors/notes/` (background, eqcp, eqtucker), and a
-survey of the current code.
+Status: rev 3 (2026-06-14). The **boundary cleanup is complete** (PRs
+#110–#122; resulting layout in `docs/src/architecture.md`, PR history in
+umbrella #109), so the completed sections below are compressed to "DONE"
+stubs. What remains live is the **new-format work** (§3 interface, §4 A
+storage, §6 CP/Tucker/TT + W-fold, §8) and the open questions in §10. The
+design decisions (§1, §6.1, §7, §9) are kept as records. Based on CO's
+thoughts, the research notes in `projects/equivarianttensors/notes/`
+(background, eqcp, eqtucker), and a survey of the code.
 
 ---
 
@@ -64,42 +68,28 @@ Caveats in the noncompact case, relevant to code design:
 
 ---
 
-## 2. Mapping current code onto the pipeline
+## 2. Mapping current code onto the pipeline — DONE
 
-| Pipeline stage | Current code | Restructure verdict |
-|---|---|---|
-| particle embedding φ | `transforms/`, `embed/`, `lib/ACEradials`, P4ML, SpheriCart | out of core (lib / upstream), §5 |
-| graph datastructure | `embed/graph.jl` | **stays in ET** (decision, §5) |
-| particle states / DP diff | `transforms/diffnt.jl`, `embed/embeddings.jl`, `extensions/atoms.jl` | out of core, §5 |
-| pooling → A | `ace/sparseprodpool*.jl` | keep in ET (decision, §4) |
-| products A^⊗N | `ace/sparsesymmprod*.jl`, `symmprod_dag*.jl`, `static_prod.jl` | part of the *sparse format* |
-| carrier (CG, symmetrisation) | `O3/`, `utils/symmop.jl` | shared core, promote |
-| assembled format | `sparse_ace_basis/layer/ka/utils.jl` | becomes `formats/sparse/` |
-| spec utilities | `utils/` (setproduct, invmap, sparseprod, selector) | shared core |
-| species-select linear | `utils/selectlinl.jl` | chemistry-adjacent — lib? |
+The boundary cleanup that this section planned has landed: `src/ace/` split
+into `pooling/` (A) + `formats/sparse/` (AA), `O3/`+`symmop` promoted to
+`groups/`, and the particle/chemistry machinery moved out (see §5). The
+**resulting layout is documented in the Architecture docs**
+(`docs/src/architecture.md`); the **PR-by-PR history** is the checklist in
+umbrella PR #109.
 
-Note the current `src/ace/` mixes two distinct things: the generic pooling
-(A) and the sparse-format-specific symmetric products (AA). They should
-separate.
-
-*Done (PR `restruct_acesplit`):* `src/ace/` split into
-`pooling/` (sparseprodpool + KA kernels) and `formats/sparse/`
-(sparsesymmprod, symmprod_dag (dormant, not included), sparse_ace_*,
-sparsemat_ka); `static_prod.jl` → `utils/` since its kernels are shared
-by pooling and the sparse format. Test tree mirrors the split
-(`test/pooling/`, `test/formats/sparse/`, `test/utils/`). Pure moves,
-no code changes beyond include paths.
-
-*Done (PR `restruct_groups`):* `src/O3/` → `src/groups/O3/` and
-`utils/symmop.jl` → `groups/symmop.jl` (the carrier symmetrisation
-belongs with the group layer, not generic utils). Group tests collected
-in `test/groups/`. Pure moves. The §1 caveat (separate the CG route
-from the compact-only quadrature route inside `groups/`) remains open —
-quad_O3 stays inside the O3 module for now.
+Still open from this section: the §1 caveat — separate the CG route from the
+compact-only quadrature route inside `groups/` (quad_O3 stays in the O3 module
+for now). Tracked in §10.
 
 ---
 
 ## 3. Proposed layout
+
+The *realised* layout (groups/, graphs/, pooling/, formats/sparse/, utils/,
+embed/, transforms/, the extensions and lib/ACEradials) is now documented in
+`docs/src/architecture.md`. What remains live here are the **planned format
+additions** (`formats/cp|tucker|tt`) and the **format-interface decisions**
+below.
 
 ```
 src/
@@ -172,154 +162,23 @@ prototype both access patterns against the CP format before committing.
 
 ---
 
-## 5. PState / DecoratedParticles boundary  *(decided, destinations refined)*
+## 5. PState / DecoratedParticles boundary — DONE
 
-Survey result (rev 1): the DP/XState machinery lives entirely *upstream*
-of A; the tensor core consumes and differentiates plain arrays.
-**Decision: adopt the boundary** — ET core takes embedding arrays and
-defines pullbacks w.r.t. those arrays only.
+**Decision adopted and fully landed.** ET core takes embedding arrays and
+defines pullbacks w.r.t. those arrays only; it is now `LuxCore`-only with
+DecoratedParticles wired in through `DecoratedParticlesExt`. The graph stays
+in ET (container-agnostic `ETGraph`); chemistry/radials moved to
+`lib/ACEradials`; `diffnt` moved into DP (v0.1.4); the Lux→LuxCore trim is
+done (#121). **Live contract worth keeping:** particle/edge data must be
+*state types* with tangent arithmetic (XStates, or arrays of `SVector`s) —
+bare `NamedTuple`s are not supported as particles (CO, #110).
 
-Destination recommendations (per-piece, refined after CO's comments):
+Boundaries are summarised in `docs/src/architecture.md`; PR-by-PR history is
+in umbrella #109 (#110, #113–#117, #121).
 
-- **Graph (`embed/graph.jl`): stays in ET** (CO). All models take graphs
-  as inputs, and pooling relies on the ETGraph structure to convert the
-  edge-embedding 3-tensor to the 2-tensor pooling layout and back. Only
-  move out if a replacement plan exists. Refinement: keep `ETGraph`
-  *container-agnostic* in `edge_data` so that ET does not need DP for the
-  graph itself — DP enters only through what users store in the graph.
-  *Done (PR `restruct_graphs`):* `embed/graph.jl` → `src/graphs/graph.jl`
-  and `extensions/atoms.jl` → `src/graphs/atoms.jl` (keeping the `Atoms`
-  module); the single-file `src/extensions/` directory retired.
-  Container-agnostic was already satisfied (ETGraph is fully parametric
-  and DP-free; the PState question was handled by the DP trigger in
-  #110), so this was a pure move.
-- **`diffnt.jl` (NamedTuple/Dual differentiation tooling): move into DP
-  proper** (not a DP→ForwardDiff extension). It is generic
-  make-structs-differentiable tooling with no ET content; DP already
-  depends on NamedTupleTools + StaticArrays, so ForwardDiff is the only
-  new (light) dep. Against the extension route: differentiability is
-  core to DP's purpose, and extension glue triggered by a package that
-  end users never load directly (ForwardDiff) silently fails to
-  activate — the classic extension footgun.
-- **`EmbedDP`, `decpart.jl`: Pkg extension of ET triggered by DP**
-  (rev 3, supersedes the rev-2 lib recommendation). Rationale: this is
-  a compat shim whose design is under reconsideration — registering a
-  lib package for code that may be redesigned/deprecated has no payoff,
-  while an extension achieves the dependency goal (no hard DP dep in
-  core; glue auto-loads for ET+DP consumers like ACEpotentials).
-  Implementation notes: (a) `embeddings.jl` imports
-  `AbstractLuxWrapperLayer`/`ContainerLayer` via Lux but they live in
-  LuxCore — switch the import, no Lux trigger needed; (b) `decpart`
-  methods on plain NamedTuples (the `NTorDP` union) can stay in core,
-  only XState methods go in the extension. Trade-off accepted:
-  extension code rides ET's version train.
-- **`extensions/atoms.jl` prototypes + ext/: keep, but split.** The
-  graph half (`interaction_graph`, `nlist2graph`) is the system→ETGraph
-  entry point and stays with `graphs/`; note `NeighbourListsExt`
-  currently constructs PStates directly — must become container-agnostic
-  (or gain a DP trigger) once DP leaves the hard deps.
-  (`forces_from_edge_grads` was deleted in `restruct_edgegrads`; its
-  generic core replacement is `node_grads_from_edge_grads`, see §10.) The chemistry half (`bond_len`, agnesi
-  defaults in `AtomsBaseExt`) belongs with ACEradials (which already
-  has `elements.jl`/`transforms.jl`), not ET. Weakdep stubs themselves
-  are harmless — no load cost, a dozen empty functions.
-*Done (PR `restruct_chemistry`):* chemistry/radials moved to
-lib/ACEradials: `transforms/agnesi.jl` → `ACEradials/src/agnesi_dp.jl`
-(its 6-arg constructor is now a method of `ACEradials.agnesi_transform`;
-unification with the scalar `GeneralizedAgnesiTransform` still pending,
-see agents/radials.md §4); ET's whole `AtomsBaseExt` (bond_len +
-LENGTHSCALES data + agnesi defaults) → ACEradials AtomsBase-extension;
-`bond_len`/`agnesi_transform` stubs removed from `ET.Atoms` (graph stubs
-stay); ET drops the AtomsBase and (vestigial) AtomsBuilder weakdeps —
-both remain test-only deps. `test_agnesi.jl` reactivated in ACEradials
-(fixed on arrival: bare-NamedTuple inputs → PStates per the #110
-decision, and stale `s0/s1` field names → the live `z0/z1` convention).
-
-- **DP as a `lib/` of ET: no.** The `lib/` slot is for packages that
-  *depend on* ET (radials pattern). After this restructure ET core no
-  longer depends on DP at all, and DP is independently useful — it
-  remains a standalone package.
-
-Net effect: DecoratedParticles (and possibly Lux→LuxCore) drop out of
-ET's hard deps; ETGraph stays but becomes representation-agnostic.
-
-### 5.1 DP removal — implementation record (PR `restruct_rmdp`)
-
-Status: diffnt landed in DP v0.1.4 (registered); ET side done. Deviations
-and refinements relative to the plan above:
-
-- **NamedTuples are no longer supported as particle/edge types**
-  (decision, CO review on PR #110). The embedding layers and the
-  reshape/pad machinery require *state* containers; the precise contract
-  is "particle/edge data must support tangent arithmetic and a tangent
-  zero" (`zero`, `+`, scalar `*`) — XStates qualify, plain arrays of
-  SVectors qualify, bare NamedTuples don't. Evidence collected in this
-  PR: (a) NT edge data broke pullbacks (`Float32 * NamedTuple`
-  undefined); (b) "zero of a NamedTuple" is ill-defined for categorical
-  fields — the old byte-zeroing `__zero` hack fabricated invalid values,
-  and the PState/VState point-vs-tangent distinction is the actual
-  answer; (c) supporting both containers duplicated every `DPTransform`
-  method across core and ext. The NT differentiation tooling itself
-  stays in DP (generic, useful); ET just doesn't route particles through
-  bare NamedTuples. `ETGraph` remains storage-agnostic.
-- **`EmbedDP`/`DPTransform` structs stay in core** — core files
-  (agnesi, transsplines) dispatch on them — but *all* evaluation and
-  differentiation methods live in the new `ext/DecoratedParticlesExt.jl`.
-  Consequence: calling a `DPTransform`/`EmbedDP` throws MethodError
-  unless DP is loaded (loud failure, acceptable: all real consumers
-  load DP).
-- The `__zero` helper is deleted; `reshape_embedding` /
-  `rev_reshape_embedding` pad with `zero(eltype)`, which DP provides for
-  XState types (incl. `_mod_zero` for categorical fields). Also fixed:
-  `rev_reshape_embedding` previously used `zero` while its forward
-  counterpart used the hack — now consistent.
-- **`NeighbourListsExt` gains DP as a second trigger**
-  (`["NeighbourLists", "DecoratedParticles"]`) — took the cheap option;
-  making it container-agnostic is deferred to the graphs/ step.
-
-*Trigger analysis (PR `restruct_edgegrads`).* After `restruct_chemistry`,
-ET's only atoms extension is `NeighbourListsExt` = the
-neighbourlist→ETGraph builder, and its trigger
-`["NeighbourLists", "DecoratedParticles"]` is correct:
-  - *NeighbourLists* must be a trigger — the ext calls
-    `NeighbourLists.PairList`; an extension may use only its triggers +
-    the parent's hard deps, and NeighbourLists is deliberately not an ET
-    hard dep.
-  - *AtomsBase* was not a trigger under NeighbourLists 0.5 —
-    `AbstractSystem` and the accessors reached through
-    `NeighbourLists.AtomsBase` (a hard dep + re-export of NL 0.5).
-    **Superseded by PR `restruct_nlist06`:** NeighbourLists 0.6 dropped
-    AtomsBase as a hard dep and stopped re-exporting it (the
-    `PairList(sys, rcut)` constructor moved into NL's own
-    `NeighbourListsAtomsBaseExt`). So under 0.6 AtomsBase **must** be a
-    trigger — the ext now imports it directly (`ustrip` via AtomsBase's
-    re-export), and the NL sys-constructor activates because AtomsBase
-    (which pulls Unitful transitively) is loaded. Trigger is now
-    `["NeighbourLists", "AtomsBase", "DecoratedParticles"]`; compat
-    bumped to NeighbourLists 0.6 only.
-  - *DecoratedParticles* is a trigger because the ext **constructs
-    PStates** for all edge/node data (per #110, particles must be state
-    types; bare NamedTuples lack tangent arithmetic). Revisit only when
-    the graphs/ step parametrises the edge container.
-  - Transitive loads count, so ACEpotentials-style consumers (hard deps
-    on NeighbourLists + AtomsBase + DP) activate it automatically; direct
-    ET script users need `using NeighbourLists, AtomsBase,
-    DecoratedParticles`.
-  - *Decision (CO, PR `restruct_atomsdoc`):* keep the builder as the
-    NeighbourListsExt and **document** the load requirement (docstrings
-    on `Atoms.interaction_graph`/`nlist2graph`). The 3-trigger set is
-    intrinsic (NL engine + AtomsBase system + DP states) and the friction
-    is REPL-only — downstream packages auto-activate. A one-import `lib/`
-    glue package was considered and deferred until the graphs/ builder
-    form settles (same reasoning as the EmbedDP lib-vs-ext call).
-- **`TransSelSplines` signatures relaxed** from
-  `AbstractVector{<: XState}` to `AbstractVector` (duck-typed; the
-  tangent-arithmetic contract applies, not a container restriction).
-- **`Testing.rand_graph` keeps PState default edge data**, provided
-  through the extension (`_default_randedge` stub in core, method in
-  the ext).
-- `NamedTupleTools` dropped from deps (only diffnt used it).
-- Lux→LuxCore *not* done here (DP-focused PR); separate step.
+Still open (deferred to a future `graphs/` step): make the edge container /
+`NeighbourListsExt` fully container-agnostic (it currently has a DP trigger
+and constructs PStates). Tracked in §10.
 
 ---
 
@@ -420,13 +279,10 @@ slot-heterogeneous). No general formats now.**
 
 ## 8. Sequencing sketch
 
-1. Boundary cleanup first (no new functionality): split `src/ace/` into
-   `pooling/` + `formats/sparse/`; promote O3+symmop to `groups/`;
-   `graph.jl` → `src/graphs/` (done, PR `restruct_graphs`; also absorbed
-   `extensions/atoms.jl` and retired the `extensions/` directory; the
-   `Atoms` module name kept); move diffnt toward DP (done), EmbedDP/
-   decpart into a DP-triggered extension (done), and the
-   bond_len/agnesi-defaults chemistry toward ACEradials (done, §5).
+1. Boundary cleanup first (no new functionality) — **DONE**: `src/ace/` split,
+   O3+symmop → `groups/`, `graph.jl` → `graphs/`, particle/chemistry machinery
+   out of core, and the Lux→LuxCore trim (#121). See `docs/src/architecture.md`
+   for the result and umbrella #109 for the PR history.
 2. Settle the format I/O contract on the sparse format (incl. the
    Lux/ChainRules-vs-bespoke-pullback question, §3) and the A storage
    layout question (§4). Behaviour-preserving; existing tests must pass.
@@ -470,16 +326,10 @@ Outstanding items: review `test_lux_models.jl`
 (SelectLinL coverage vs test_splines overlap) before finalizing the
 restructure.
 
-- ACEradials ↔ Polynomials4ML spline ownership: PR `restruct_transsplines`
-  moved `transsplines.jl` (the GPU spline radial basis,
-  `trans_splines`/`TransSelSplines`) from ET to `lib/ACEradials` — it is a
-  radial basis and now sits beside ACEradials' `Rnl_splines.jl` /
-  `splinify.jl`. **Breaking:** `ET.trans_splines` → `ACEradials.trans_splines`.
-  This leaves *three* overlapping spline paths in ACEradials; the deferred
-  analysis is where GPU-friendly spline evaluation should really live
-  (fixed upstream in P4ML vs owned by ACEradials) and how the three
-  consolidate. (This move also removed the last `Lux` reference from ET
-  core, enabling the Lux→LuxCore trim.)
+- ACEradials ↔ Polynomials4ML spline ownership — **DONE**: P4ML now owns the
+  GPU-safe cubic-spline kernel and ACEradials' `TransSelSplines` calls it
+  (Agnesi merge #119, P4ML helpers #122 → P4ML v0.5.10, de-fork #120). See
+  `agents/radials.md`.
 
 - ACEpotentials forces/virial wrapper: `restruct_edgegrads` deleted
   `forces_from_edge_grads` and replaced it with the generic core
@@ -502,5 +352,7 @@ restructure.
   kernels, or keep `evaluate`/`pullback` exported (§3).
 - Naming: package-level vocabulary (carrier / coefficients / format?)
   and concrete type names for the new formats.
-- DP follow-through: land `diffnt` in DP (adds ForwardDiff dep there);
-  confirm the EmbedDP/decpart-as-extension recommendation (§5, rev 3).
+- Separate the CG route from the compact-only quadrature route inside
+  `groups/` (quad_O3 currently stays in the O3 module; §1 caveat).
+- Make the edge container / `NeighbourListsExt` fully container-agnostic
+  (deferred to a future `graphs/` step; currently DP-triggered, §5).
