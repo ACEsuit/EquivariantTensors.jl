@@ -1,142 +1,100 @@
 
 using ConcreteStructs
-using LuxCore: AbstractLuxWrapperLayer, AbstractLuxContainerLayer
+using LuxCore: AbstractLuxContainerLayer
 using LinearAlgebra: dot
 
 
 # -------------------------------------------------------------------
 #
-# alternative, maybe simpler embedding layer that utilizes more 
-# of the Lux infrastructure / automatic differentiation.
+# StateEmbed: embed a particle state into a vector — apply a transform to the
+# state (→ a number / SVectors), then a basis (or other layer), with a custom
+# `evaluate_ed` that differentiates through the (XState) input (needed for
+# jacobians). `EmbedDP` is a deprecated alias.
 #
-
-"""
-   struct EdgeEmbed 
-
-Wraps a layer that embeds an edge state into Vector to manage the 
-reformatting of the embedding from a list of embedded states into 
-a 3-dimensionsonal tensor that is aware of the graph structure.
-
-Also implements an evaluate_ed wrapper, which is useful for 
-computing jacobians. 
-"""
-@concrete struct EdgeEmbed <: AbstractLuxWrapperLayer{:layer}
-   layer
-end
-
-function (l::EdgeEmbed)(X::ETGraph, ps, st)
-   Φ2, st = l.layer(X.edge_data, ps, st)
-   Φ3 = reshape_embedding(Φ2, X)
-   return Φ3, st
-end
-
-function evaluate_ed(l::EdgeEmbed, X::ETGraph, ps, st)
-   (Φ2, ∂Φ2), st = evaluate_ed(l.layer, X.edge_data, ps, st)
-   Φ3 = reshape_embedding(Φ2, X)
-   ∂Φ3 = reshape_embedding(∂Φ2, X)
-   return (Φ3, ∂Φ3), st
-end
-
-# NOTE: this should not need an rrule because l.layer should have an rrule 
-#       and reshape_embedding already has an rrule defined.
-#       for some manual test implementations the following is still useful. 
-
-function _pullback_edge_embedding(∂Φ3, dΦ3, X::ETGraph)
-   ∂Φ2 = rev_reshape_embedding(∂Φ3, X)
-   dΦ2 = rev_reshape_embedding(dΦ3, X)
-   return dropdims( sum(∂Φ2 .* dΦ2, dims = 2), dims = 2) 
-end
-
-
-# -------------------------------------------------------------------
+# (`EdgeEmbed`, the graph adapter, now lives in `src/graphs/edgeembed.jl`.)
 
 
 """
-   struct EmbedDP 
+   struct StateEmbed
 
-Embed a particle state into a vector. This is done by first applying a 
-transform to the particle state into a number of SVector and then evaluating 
-the basis (or other layer) on the transformed state. 
-
-This is basically a 3-stage Chain, but with additional logic, specifically 
-the implementation of evaluate_ed allowing differentiation through 
-an XState input. This is e.g. needed for jacobians.
+Embed a particle state into a vector: apply a transform to the state (→ a number
+/ SVectors), then evaluate a basis (or other layer) on the transformed state.
+Essentially a 3-stage `Chain` (`trans → basis → post`), but with a custom
+`evaluate_ed` that differentiates through an XState input — needed e.g. for
+jacobians. `EmbedDP` is a deprecated alias.
 """
-@concrete struct EmbedDP <: AbstractLuxContainerLayer{(:trans, :basis, :post)}
+@concrete struct StateEmbed <: AbstractLuxContainerLayer{(:trans, :basis, :post)}
    trans
    basis
-   post 
+   post
 end
 
-EmbedDP(trans, basis) = EmbedDP(trans, basis, IDpost())
-
-# Base.show(io::IO, ::MIME"text/plain", l::EmbedDP) = 
-#       print(io, "EmbedDP($(l.name))")         
+StateEmbed(trans, basis) = StateEmbed(trans, basis, IDpost())
 
 
-(l::EmbedDP)(X::AbstractArray, ps, st) = _apply_embeddp(l, X, ps, st), st 
+(l::StateEmbed)(X::AbstractArray, ps, st) = _apply_stateembed(l, X, ps, st), st
 
-function _apply_embeddp(l::EmbedDP, X::AbstractArray, ps, st)   
-   # first gets rid of the state variable in the return 
+function _apply_stateembed(l::StateEmbed, X::AbstractArray, ps, st)
+   # first gets rid of the state variable in the return
    # NOTE: here we assume that the transform implicitly broadcasts
    Y, _ = l.trans(X, ps.trans, st.trans)
    P2, _ = l.basis(Y, ps.basis, st.basis)
-   # opportunity for another transformation that depends also on X 
+   # opportunity for another transformation that depends also on X
    # if post == IDpost then this is a no-op
    post_P2, _ = l.post((P2, X), ps.post, st.post)
    return post_P2
 end
 
 
-function evaluate_ed(l::EmbedDP, X::AbstractArray, ps, st)
+function evaluate_ed(l::StateEmbed, X::AbstractArray, ps, st)
    Y, _ = l.trans(X, ps.trans, st.trans)
    P2, dP2 = evaluate_ed(l.basis, Y, ps.basis, st.basis)
 
-   # pushforward the P' through the post-transform layer 
+   # pushforward the P' through the post-transform layer
    # if post == IDpost then this is a no-op
    (pP2, d_pP2), _ = pfwd_ed(l.post, (P2, dP2, X), ps.post, st.post)
 
    # pullback through the transform to get ∂P2
-   # this is kind of a temporary hack and we need to understand why 
-   # there is no simple generic solution ... 
+   # this is kind of a temporary hack and we need to understand why
+   # there is no simple generic solution ...
    ∂_pP2 = _pb_ed(l.trans, d_pP2, X, ps.trans, st.trans)
-   
+
    return (pP2, ∂_pP2), st
 end
 
 
-# EmbedDP is using low-dimensional input, high-dimensional output 
-# hence forward-mode differentiation is preferred. This is provided 
-# by the following rrule. But it should be tested at some point 
-# whether this is really efficient. No rush for the moment, the scaling 
-# at least ought to be ok. 
+# StateEmbed is using low-dimensional input, high-dimensional output
+# hence forward-mode differentiation is preferred. This is provided
+# by the following rrule. But it should be tested at some point
+# whether this is really efficient. No rush for the moment, the scaling
+# at least ought to be ok.
 #
-# TODO: write tests for this 
+# TODO: write tests for this
 #
-function rrule(::typeof(_apply_embeddp), 
-               l::EmbedDP, X::AbstractArray, ps, st)
+function rrule(::typeof(_apply_stateembed),
+               l::StateEmbed, X::AbstractArray, ps, st)
 
    (P, dP), st = evaluate_ed(l, X, ps, st)
 
-   function _pb_embeddp(_∂P)
+   function _pb_stateembed(_∂P)
       ∂P = unthunk(_∂P)
-      ∂X = dropdims( sum(∂P .* dP, dims = 2), dims = 2) 
+      ∂X = dropdims( sum(∂P .* dP, dims = 2), dims = 2)
       return NoTangent(), NoTangent(), ∂X, NoTangent(), NoTangent()
    end
 
-   return P, _pb_embeddp
+   return P, _pb_stateembed
 end
-
-
 
 
 # -------------------------------------------------------------------
 
 struct IDpost <: AbstractLuxLayer
-end 
+end
 
-(l::IDpost)(P_X, ps, st) = P_X[1], st 
+(l::IDpost)(P_X, ps, st) = P_X[1], st
 
 pfwd_ed(l::IDpost, P_dP_X, ps, st) = (P_dP_X[1], P_dP_X[2]), st
 
 
+# --- deprecated alias (pre-2026-06 name) ---
+Base.@deprecate_binding EmbedDP StateEmbed false

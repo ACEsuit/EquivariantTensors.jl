@@ -30,7 +30,7 @@ trans_states = (; params = rand(NCAT))
 trans_fun = let 
    (x, st) -> 1 - 2 / (1 + st.params[x.c] * norm(x.𝐫))
 end 
-trans = ET.dp_transform(trans_fun, trans_states )
+trans = ET.state_transform(trans_fun, trans_states )
 polys_y = P4ML.ChebBasis(indim)
 
 Penv = let polys_y = polys_y
@@ -42,7 +42,7 @@ Penv = let polys_y = polys_y
       ) )
 end
 sellin = ET.SelectLinL(length(polys_y), outdim, NCAT, x -> x.c)
-rembed = ET.EmbedDP(trans, Penv, sellin)
+rembed = ET.StateEmbed(trans, Penv, sellin)
 ps, st = LuxCore.setup(rng, rembed)
 
 # smoothen the splines so that we can sensible errors with few spline points 

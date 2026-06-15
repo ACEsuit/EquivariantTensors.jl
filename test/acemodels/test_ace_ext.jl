@@ -102,9 +102,9 @@ maxl = 8    # maximum degree of spherical/solid harmonics
 ORD  = 3    # correlation order (body-order = ORD + 1)
 
 rbasis = P4ML.ChebBasis(Dtot+1)
-rembed = ET.EdgeEmbed(ET.EmbedDP(ET.dp_transform(x -> 1 / (1 + norm(x.𝐫)^2)), rbasis))
+rembed = ET.EdgeEmbed(ET.StateEmbed(ET.state_transform(x -> 1 / (1 + norm(x.𝐫)^2)), rbasis))
 ybasis = P4ML.real_solidharmonics(maxl; static=true)
-yembed = ET.EdgeEmbed(ET.EmbedDP(ET.dp_transform(x -> x.𝐫), ybasis))
+yembed = ET.EdgeEmbed(ET.StateEmbed(ET.state_transform(x -> x.𝐫), ybasis))
 
 mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD, minn = 0, maxn = Dtot, maxl = maxl,
                   level = bb -> sum((b.n + b.l) for b in bb; init=0), maxlevel = Dtot)

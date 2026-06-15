@@ -21,12 +21,26 @@ A_{nlm} = \sum_{j} R_{nl}(r_j, \mu_j) Y_l^m( \hat{\bm r}_j ),
 where $R_{nl}$ is a radial embedding, possibly depending on a categorical 
 variable $\mu_j$ and $Y_l^m$ are spherical harmonics. 
 
-### Constructor 
+### Constructor
 ```julia
 PooledSparseProduct(spec)
 ```
-where `spec` is a list of $(k_1, \dots, k_N)$ tuples or vectors, or 
-`AbstractMatrix` where each column specifies such a tuple. 
+where `spec` is a list of $(k_1, \dots, k_N)$ tuples or vectors, or
+`AbstractMatrix` where each column specifies such a tuple.
+
+### Standalone usage
+
+Although `PooledSparseProduct` is the pooling stage of the ACE pipeline
+(`embed → pool → AA → 𝔹`), it is a self-contained layer with no dependence on
+graphs or the rest of ET: it simply consumes a tuple of input embeddings
+`BB = (Φ¹, …, Φᴺ)` (each `Φᵗ` a `nX × K_t` matrix over the `nX` inputs $x_j$)
+and pools them into the feature vector `A`. It can therefore be used on its own
+wherever a fused sparse tensor product + sum-pooling over a multi-set of inputs
+is needed:
+```julia
+basis = PooledSparseProduct(spec)
+A, _ = basis((Φ¹, Φ²), ps, st)      # A[k] = ∑ⱼ Φ¹[j, k₁] Φ²[j, k₂]
+```
 """
 struct PooledSparseProduct{NB} <: AbstractETLayer 
    spec::Vector{NTuple{NB, Int}}
@@ -461,7 +475,7 @@ function _jacobian_X!(A::AbstractArray, ∂A::AbstractArray,
          @simd ivdep for j = 1:maxneigs
             bR = Rnl[j, i, ϕR]
             bY = Ylm[j, i, ϕY]
-            a += bR * bY   # TODO: switch to muladd! 
+            a = muladd(bR, bY, a)
 
             ∂bR = ∂Rnl[j, i, ϕR]
             ∂bY = ∂Ylm[j, i, ϕY]

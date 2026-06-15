@@ -9,41 +9,41 @@
 module DecoratedParticlesExt
 
 import EquivariantTensors as ET
-import EquivariantTensors: DPTransform, evaluate, evaluate_ed
+import EquivariantTensors: StateTransform, evaluate, evaluate_ed
 using DecoratedParticles: XState, PState, grad_fd
 using LinearAlgebra: dot
 
 # ---------------------------------------------------------
-# DPTransform methods; particles must be XStates (cf. the NOTE in
+# StateTransform methods; particles must be XStates (cf. the NOTE in
 # src/transforms/decpart.jl — bare NamedTuples are not supported)
 
-(l::DPTransform)(x::XState, ps, st) = l.f(x, st), st
+(l::StateTransform)(x::XState, ps, st) = l.f(x, st), st
 
 # this non-standard calling convention assumes that st is not changed
-(l::DPTransform)(x::XState, st) = l.f(x, st)
+(l::StateTransform)(x::XState, st) = l.f(x, st)
 
-(l::DPTransform)(x::AbstractVector{<: XState}, ps, st) =
+(l::StateTransform)(x::AbstractVector{<: XState}, ps, st) =
          l(x, st), st
 
-(l::DPTransform)(x::AbstractVector{<: XState}, st) =
+(l::StateTransform)(x::AbstractVector{<: XState}, st) =
          broadcast(l.f, x, Ref(st))
 
-evaluate(l::DPTransform, x::XState, ps, st) =
+evaluate(l::StateTransform, x::XState, ps, st) =
          l.f(x, st)
 
 # ---------------------------------------------------------
 # derivatives w.r.t. particle inputs
 
-evaluate_ed(l::DPTransform, x::XState, ps, st) =
+evaluate_ed(l::StateTransform, x::XState, ps, st) =
          (l.f(x, st), grad_fd(l.f, x, st))
 
-function evaluate_ed(l::DPTransform, x::AbstractVector{<: XState}, ps, st)
+function evaluate_ed(l::StateTransform, x::AbstractVector{<: XState}, ps, st)
    Y = broadcast(l.f, x, Ref(st))
    dY = broadcast(grad_fd, Ref(l.f), x, Ref(st))
    return (Y, dY), st
 end
 
-function ET._pb_ed(l::DPTransform, Δ::AbstractArray,
+function ET._pb_ed(l::StateTransform, Δ::AbstractArray,
                    X::AbstractVector{<: XState}, ps, st)
    # make sure the closure doesn't capture l, but only l.f
    # and l.f itself cannot capture anything that doesn't run on GPU.

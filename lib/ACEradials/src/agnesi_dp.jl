@@ -11,13 +11,13 @@
 # removed (see agents/radials.md §4 and agents/radials_restructure.md §3.2).
 
 using LinearAlgebra: norm
-import EquivariantTensors: DPTransform, symidx, catcat2idx_sym
+import EquivariantTensors: StateTransform, symidx, catcat2idx_sym
 
 
 @doc raw"""
    agnesi_transform(categories, rins, reqs, rcuts, pin, pcut)
 
-Construct a multi-species generalized Agnesi transform: a `DPTransform` layer
+Construct a multi-species generalized Agnesi transform: a `StateTransform` layer
 that, on an edge / XState descriptor `x`, evaluates a scalar Agnesi transform
 at `r = norm(x.𝐫)`, selecting the per-species-pair parameters via `(x.z0,
 x.z1)`. The scalar transform implements
@@ -81,7 +81,7 @@ function agnesi_transform(categories, rins, reqs, rcuts,
 
    transforms = identity.(transforms)
    # the transforms should all be of the same type so can be stored in an
-   # SVector for efficiency. This is the reference state for the DPTransform.
+   # SVector for efficiency. This is the reference state for the StateTransform.
    st = ( zlist = categories,
           transforms = SVector{length(transforms)}(transforms), )
 
@@ -95,5 +95,5 @@ function agnesi_transform(categories, rins, reqs, rcuts,
       end
    end
 
-   return DPTransform(f_agnesi, st)
+   return StateTransform(f_agnesi, st)
 end

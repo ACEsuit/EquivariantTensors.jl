@@ -11,8 +11,8 @@ import LuxCore:  AbstractLuxLayer, initialparameters, initialstates
 function simple_rembed(Dtot)  
    rbasis = P4ML.legendre_basis(Dtot+1)
    Rn_spec = P4ML.natural_indices(rbasis) 
-   Rembed = ET.EdgeEmbed( ET.EmbedDP( 
-                     ET.dp_transform( x -> 1 / (1 + norm(x.𝐫)) ), 
+   Rembed = ET.EdgeEmbed( ET.StateEmbed( 
+                     ET.state_transform( x -> 1 / (1 + norm(x.𝐫)) ), 
                      rbasis ) )
    return Rembed, Rn_spec
 end
@@ -21,7 +21,7 @@ function yembed(maxl)
    ybasis = P4ML.real_sphericalharmonics(maxl)
    Ylm_spec = P4ML.natural_indices(ybasis)
    Yembed = ET.EdgeEmbed( 
-                  ET.EmbedDP( ET.dp_transform( x -> x.𝐫 ), 
+                  ET.StateEmbed( ET.state_transform( x -> x.𝐫 ), 
                         ybasis ) )
    return Yembed, Ylm_spec
 end 

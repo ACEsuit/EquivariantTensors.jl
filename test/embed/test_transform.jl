@@ -22,8 +22,8 @@ basis = ChebBasis(5)
 ##
 
 @info("  DP input, transformed into scalar transform")
-trans = ET.dp_transform(x -> 1 / (1+x.r))
-tbasis = ET.EmbedDP(trans, basis)
+trans = ET.state_transform(x -> 1 / (1+x.r))
+tbasis = ET.StateEmbed(trans, basis)
 X = [ PState(;r = 10 * rand()) for _ in 1:10 ]
 ps, st = LuxCore.setup(rng, tbasis)
 
@@ -35,10 +35,10 @@ println_slim(@test P1 ≈ P2)
 
 @info("   DP input, scalar input transform, select output transform")
 
-trans = ET.dp_transform(x -> 1 / (1+x.r))
+trans = ET.state_transform(x -> 1 / (1+x.r))
 basis = ChebBasis(5)
 sellin = ET.SelectLinL(5, 10, 3, x -> x.z)
-tbasis = ET.EmbedDP(trans, basis, sellin)
+tbasis = ET.StateEmbed(trans, basis, sellin)
 ps, st = LuxCore.setup(rng, tbasis)
 
 X = [ PState(;r = 10 * rand(), z = rand(1:3)) for _ in 1:10 ]
@@ -53,18 +53,18 @@ println_slim(@test P1 ≈ B2)
 
 ##
 
-@info("   EmbedDP + SelectLinL: gradients & jacobian (vector positions)")
+@info("   StateEmbed + SelectLinL: gradients & jacobian (vector positions)")
 
 # salvaged from the removed dormant/test_embed.jl (old NTtransform API): the
-# only test exercising SelectLinL *through* EmbedDP, i.e. EmbedDP.evaluate_ed
-# with a non-IDpost post. (EmbedDP's rrule returns NoTangent for ps, so only
-# the input/position gradient flows here; SelectLinL param grads are covered in
-# test/utils/test_selectlinl.jl.)
+# only test exercising SelectLinL *through* StateEmbed, i.e.
+# StateEmbed.evaluate_ed with a non-IDpost post. (StateEmbed's rrule returns
+# NoTangent for ps, so only the input/position gradient flows here; SelectLinL
+# param grads are covered in test/utils/test_selectlinl.jl.)
 
 npoly, nout, ncat = 8, 6, 3
-embed = ET.EmbedDP(ET.dp_transform(x -> 1 / (1 + sum(abs2, x.r))),
-                   ChebBasis(npoly),
-                   ET.SelectLinL(npoly, nout, ncat, x -> x.z))
+embed = ET.StateEmbed(ET.state_transform(x -> 1 / (1 + sum(abs2, x.r))),
+                      ChebBasis(npoly),
+                      ET.SelectLinL(npoly, nout, ncat, x -> x.z))
 ps, st = LuxCore.setup(rng, embed)
 X = [ PState(r = randn(SVector{3, Float64}), z = rand(1:ncat)) for _ = 1:12 ]
 nX = length(X)
@@ -92,6 +92,6 @@ println_slim(@test Pe ≈ B1)
 g_ed = [ sum(Δ[i, j] * ∂Pe[i, j].r for j = 1:nout) for i = 1:nX ]
 println_slim(@test all(g_ed[i] ≈ g_fd[i] for i = 1:nX))
 
-# reverse-mode input gradient via the EmbedDP ∘ SelectLinL rrule
+# reverse-mode input gradient via the StateEmbed ∘ SelectLinL rrule
 g_zy = Zygote.gradient(_X -> dot(Δ, embed(_X, ps, st)[1]), X)[1]
 println_slim(@test all(g_zy[i].r ≈ g_fd[i] for i = 1:nX))
