@@ -21,10 +21,22 @@ graph/GPU/sequential checks now covered elsewhere).
 - `evaluate_with_grad` is not differentiable w.r.t. parameters (allocates Float32
   buffers + a hand-written pullback with no rrule) — the `test_ace_ext.jl` check
   is `@test_broken`. Make it differentiable, then flip to `@test`.
-- Re-port a `SelectLinL` finite-diff (input-gradient) test (the removed
-  `dormant/test_embed.jl` used the old `NTtransform` API).
-- Salvage the `frule` tests from `dormant/test_forwarddiff.jl` into the active
-  pooling/sparse tests.
+- ~~Re-port a `SelectLinL` finite-diff (input-gradient) test~~ **DONE** (2026-06-15):
+  thorough standalone unit suite in `test/utils/test_selectlinl.jl` (init, forward
+  batched/single, reverse-mode `∂P`/`∂W` rrule vs FD incl. the `Tuple` variant,
+  `pfwd_ed`) + an EmbedDP∘SelectLinL gradient/jacobian test folded into
+  `test/embed/test_transform.jl` (forward, `evaluate_ed` jacobian, reverse-mode
+  position gradient, all vs ForwardDiff). Note: EmbedDP's rrule returns
+  `NoTangent` for `ps`, so parameter gradients do **not** flow through EmbedDP —
+  SelectLinL param-grads are covered standalone.
+- **`frule`/Dual tests → deferred to a dedicated PR** (forward rules & jacobians
+  analysis). `dormant/test_forwarddiff.jl` (real `frule`/Dual coverage for
+  `PooledSparseProduct` / `SparseSymmProd`) is left parked, to be salvaged there
+  rather than piecemeal here.
+- **Parallel/branch embedding has no active-suite coverage** (old
+  `dormant/test_embed.jl` TEST 4 was a `BranchLayer(Rnl, Ylm)` gradient-additivity
+  test on the removed Lux-`Chain` API). Re-port once the branch/parallel
+  embedding API is settled — tracked as a follow-up, not actioned now.
 
 ## Current state
 
@@ -192,7 +204,9 @@ the open decision below.)
 2. Add the **initializers** unit test and the **end-to-end CPU model test**
    (closes gaps 1–3 on CPU) — this is the guardrail the format-interface refactor
    needs.
-3. Salvage the `SelectLinL` fdtest and the `frule` tests into active files.
+3. ~~Salvage the `SelectLinL` fdtest~~ **DONE** (`test/utils/test_selectlinl.jl`
+   + extended `test/embed/test_transform.jl`). The `frule`/Dual salvage is
+   **deferred** to a dedicated forward-rules/jacobians PR (see Open test TODOs).
 4. Rework `utils_gpu.jl` to `detect_gpu_backend()`, add the **GPU-gated**
    consistency test with the position-gradient bug as `@test_broken`.
 5. (Separately, after the deps decision) trim the GPU backends from the default

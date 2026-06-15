@@ -12,6 +12,7 @@ include(joinpath(@__DIR__(), "test_utils", "utils_gpu.jl"))
     @testset "SetProduct" begin include("utils/test_setproduct.jl"); end
     @testset "InvMap" begin include("utils/test_invmap.jl"); end
     @testset "Initializers" begin include("utils/test_initializers.jl"); end
+    @testset "SelectLinL" begin include("utils/test_selectlinl.jl"); end
 end
 
 @testset "Embed" begin 

@@ -15,6 +15,7 @@ what is still needed to proceed.
   consolidation have landed.
 - **`initializers.md`** — ET weight-initializer design: the leaf samplers that
   landed (#121) and the format-aware policy planned for the CP format.
-- **`tests.md`** — test-suite cleanup & expansion plan (P0): dormant-folder
-  triage, the coverage gaps (esp. `SparseACElayer`), and the end-to-end model
-  test to add.
+- **`tests.md`** — test-suite cleanup & expansion plan (P0), now largely
+  executed: dormant-folder triage, the end-to-end model test, and the
+  `SelectLinL` unit suite have landed; remaining follow-ups are a forward-
+  rules/jacobians PR and parallel/branch-embedding coverage.

@@ -319,12 +319,14 @@ All new format kernels: KA from day one (CO).
 
 ## 10. Remaining open questions
 
-Test-suite cleanup (2026-06-12, PR `restruct_groups`): dormant /
-superfluous tests parked in `test/dormant/` (see its README).
-Outstanding items: review `test_lux_models.jl`
-(only CPU-vs-GPU model consistency coverage); revisit `test_embed.jl`
-(SelectLinL coverage vs test_splines overlap) before finalizing the
-restructure.
+Test-suite cleanup (P0): **executed** on branch `tests_cleanup_plan` — see
+`agents/tests.md` and `test/dormant/README.md`. `test_lux_models.jl` +
+`test_ace_ka2_new.jl` were folded into the active
+`test/acemodels/test_model.jl`; `test_embed.jl`'s `SelectLinL` coverage was
+re-ported (`test/utils/test_selectlinl.jl` +
+`test/embed/test_transform.jl`). Remaining follow-ups: a dedicated
+forward-rules/jacobians PR (the parked `test_forwarddiff.jl` `frule`/Dual
+tests) and parallel/branch-embedding coverage (old `test_embed.jl` TEST 4).
 
 - ACEradials ↔ Polynomials4ML spline ownership — **DONE**: P4ML now owns the
   GPU-safe cubic-spline kernel and ACEradials' `TransSelSplines` calls it
