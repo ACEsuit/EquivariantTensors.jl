@@ -32,6 +32,7 @@ end
 
 @testset "CP / TRACE Format" begin
     @testset "CP basis" begin include("formats/cp/test_cp_basis.jl"); end
+    @testset "CP pipeline" begin include("formats/cp/test_cp_pipeline.jl"); end
 end
 
 @testset "Groups: O3" begin
