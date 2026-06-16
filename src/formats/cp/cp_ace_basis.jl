@@ -26,19 +26,14 @@ import LuxCore: AbstractLuxLayer, initialparameters, initialstates
 
 struct CPACEbasis{NL, TA, TAA, TSYM} <: AbstractLuxLayer
    abasis::TA            # PooledSparseProduct  (full multi-channel A_{nlm}; reused)
+   mixer::EquivLinearL   # Stage-2 channel mixing  Āᵏ = Wˡ·A
    aabasis::TAA          # SparseSymmProd       (∏ₜ Āᵏ, single mixed channel)
    A2Bmaps::TSYM         # NTuple per L         (carrier C^{lη}; reused)
    LL::NTuple{NL, Int}   # output irreps
    lens::NTuple{NL, Int} # #carrier rows (#η) per L
    rank::Int             # K
    ord::Int              # ν  (max correlation / body order)
-   # ---- Stage-2 mixing index (flat A -> single mixed channel Ā) ----
-   distinct_ls::Vector{Int}        # distinct l-values (W has one block per l)
-   nl_count::Vector{Int}           # #radial channels n_l per distinct l
-   mix_l::Vector{Int}              # for each Ā-entry q: index into distinct_ls
-   mix_Acols::Vector{Vector{Int}}  # for each Ā-entry q: full-A columns (one per n)
-   Āspec::Vector{@NamedTuple{n::Int, l::Int, m::Int}}   # single-channel A spec
-   # ----
+   Āspec::Vector{@NamedTuple{n::Int, l::Int, m::Int}}   # single mixed-channel spec
    meta::Dict{String, Any}
 end
 
@@ -107,6 +102,8 @@ function cp_equivariant_tensor(; LL, mb_spec, Rnl_spec, Ylm_spec, basis,
       mix_Acols[q] = [ inv_Afull[(n = n, l = b.l, m = b.m)] for n in ns ]
    end
 
+   mixer = EquivLinearL(K, nl_count, mix_l, mix_Acols, length(Āspec))
+
    LLt = tuple(LL...)
    lens = tuple([ size(A2Bmaps[i], 1) for i = 1:length(A2Bmaps) ]...)
    ord = maximum(length, mb_spec_1)
@@ -114,10 +111,11 @@ function cp_equivariant_tensor(; LL, mb_spec, Rnl_spec, Ylm_spec, basis,
    meta = Dict{String, Any}(
             "Rnl_spec" => Rnl_spec, "Ylm_spec" => Ylm_spec,
             "Aspec_full" => Aspec_full, "Āspec" => Āspec,
-            "mb_spec" => mb_spec, "LL" => LL, "rank" => K)
+            "mb_spec" => mb_spec, "LL" => LL, "rank" => K,
+            "distinct_ls" => distinct_ls)
 
-   return CPACEbasis(abasis, aabasis, A2Bmaps, LLt, lens, K, ord,
-                     distinct_ls, nl_count, mix_l, mix_Acols, Āspec, meta)
+   return CPACEbasis(abasis, mixer, aabasis, A2Bmaps, LLt, lens, K, ord,
+                     Āspec, meta)
 end
 
 
@@ -126,36 +124,15 @@ end
 
 (l::CPACEbasis)(A, ps, st) = _cp_evaluate(l, A, ps.W), st
 
-function initialparameters(rng::AbstractRNG, b::CPACEbasis)
-   # Stage-2 mixing, per-l blocks Wˡ ∈ R^{K × n_l}. Scale ≈ 1/√n_l keeps the
-   # mixed channel Ā ≈ O(1) when A ≈ O(1). The √K / Nth-root calibration
-   # (trace.md §6) is applied together with λ on the layer.
-   W = [ randn(rng, b.rank, n) ./ sqrt(n) for n in b.nl_count ]
-   return (W = W,)
-end
+# the basis owns the Stage-2 mixing W (delegated to the EquivLinearL mixer)
+initialparameters(rng::AbstractRNG, b::CPACEbasis) =
+      initialparameters(rng, b.mixer)
 
 initialstates(rng::AbstractRNG, b::CPACEbasis) = NamedTuple()
 
 
 # ----------------------------------------------------------------------
-#  Stage 2: channel mixing  Āᵏ_{lm} = Σ_n Wˡ_{kn} A_{nlm}   (single rank k)
-
-function _cp_mix!(Ā, b::CPACEbasis, A::AbstractMatrix, W, k::Integer)
-   fill!(Ā, zero(eltype(Ā)))
-   @inbounds for q = 1:length(b.Āspec)
-      Wil = W[b.mix_l[q]]
-      cols = b.mix_Acols[q]
-      for (i, p) in enumerate(cols)
-         w = Wil[k, i]
-         @views Ā[:, q] .+= w .* A[:, p]
-      end
-   end
-   return Ā
-end
-
-
-# ----------------------------------------------------------------------
-#  Forward:  per-rank  mix -> symmetric product -> carrier
+#  Forward:  mix (all K) -> per-rank symmetric product -> carrier
 #  output BB :: NTuple over L, BB[iL] :: (nnodes, K, #η_L)
 
 # element type of B̃_L (scalar for L=0, SVector{2L+1} for L>0)
@@ -164,16 +141,14 @@ _cp_BL_eltype(A2Bmap, ::Type{T}) where {T} = typeof(zero(eltype(A2Bmap)) * one(T
 function _cp_evaluate(b::CPACEbasis, A::AbstractMatrix, W)
    nnodes = size(A, 1)
    K = b.rank
-   T = promote_type(eltype(A), eltype(eltype(eltype(W))))
+   T = promote_type(eltype(A), eltype(eltype(W)))
    nL = length(b.LL)
 
+   Ā = _eql_apply(b.mixer, A, W)                # (nnodes, K, |Āspec|)
    BB = ntuple(iL -> Array{_cp_BL_eltype(b.A2Bmaps[iL], T)}(undef,
                                           nnodes, K, b.lens[iL]), nL)
-   Ā = Matrix{T}(undef, nnodes, length(b.Āspec))
-
    for k = 1:K
-      _cp_mix!(Ā, b, A, W, k)
-      𝔸k = evaluate(b.aabasis, Ā)               # (nnodes, |𝔸|)
+      𝔸k = evaluate(b.aabasis, Ā[:, k, :])      # (nnodes, |𝔸|)
       𝔸kt = permutedims(𝔸k)                     # (|𝔸|, nnodes)
       for iL = 1:nL
          B̃kL = permutedims(b.A2Bmaps[iL] * 𝔸kt) # (nnodes, #η_L)
@@ -204,42 +179,26 @@ function _cp_carrier_pb!(∂𝔸, A2Bmap::SparseMatrixCSC, ∂B̃)
    return ∂𝔸
 end
 
-# Stage-2 adjoint for a single rank k.
-function _cp_mix_pb!(∂A, ∂W, b::CPACEbasis, A, W, ∂Āk, k::Integer)
-   @inbounds for q = 1:length(b.Āspec)
-      il = b.mix_l[q]
-      Wil = W[il]; ∂Wil = ∂W[il]
-      cols = b.mix_Acols[q]
-      for (i, p) in enumerate(cols)
-         w = Wil[k, i]
-         @views ∂A[:, p] .+= w .* ∂Āk[:, q]
-         ∂Wil[k, i] += dot(view(∂Āk, :, q), view(A, :, p))
-      end
-   end
-   return nothing
-end
-
 function _cp_pullback(∂BB, b::CPACEbasis, A::AbstractMatrix, W)
    nnodes = size(A, 1)
    K = b.rank
    nL = length(b.LL)
-   T = promote_type(eltype(A), eltype(eltype(eltype(W))),
-                    eltype.(eltype.(∂BB))...)
+   T = promote_type(eltype(A), eltype(eltype(W)), eltype.(eltype.(∂BB))...)
 
-   ∂A = zeros(T, size(A))
-   ∂W = [ zeros(T, size(w)) for w in W ]
-   Ā = Matrix{T}(undef, nnodes, length(b.Āspec))
+   Ā = _eql_apply(b.mixer, A, W)                # (nnodes, K, |Āspec|)
+   ∂Ā = zeros(T, size(Ā))
    n𝔸 = length(b.aabasis)
 
    for k = 1:K
-      _cp_mix!(Ā, b, A, W, k)
       ∂𝔸k = zeros(T, nnodes, n𝔸)
       for iL = 1:nL
          _cp_carrier_pb!(∂𝔸k, b.A2Bmaps[iL], view(∂BB[iL], :, k, :))
       end
-      ∂Āk = pullback(∂𝔸k, b.aabasis, Ā)          # (nnodes, |Āspec|)
-      _cp_mix_pb!(∂A, ∂W, b, A, W, ∂Āk, k)
+      ∂Āk = pullback(∂𝔸k, b.aabasis, Ā[:, k, :])  # (nnodes, |Āspec|)
+      @views ∂Ā[:, k, :] .= ∂Āk
    end
+
+   ∂A, ∂W = _eql_pullback(∂Ā, b.mixer, A, W)
    return ∂A, ∂W
 end
 

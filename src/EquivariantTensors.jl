@@ -81,6 +81,7 @@ include("utils/initializers.jl")
 # CP / TRACE tensor format (reuses the sparse carrier + symmetric product);
 # Stage-2 channel mixing + low-rank CP of the G-trivial coefficients.
 # Design record: agents/trace.md
+include("formats/cp/equiv_linear.jl")
 include("formats/cp/cp_ace_basis.jl")
 include("formats/cp/cp_ace_layer.jl")
 

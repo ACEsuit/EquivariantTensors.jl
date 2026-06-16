@@ -44,7 +44,7 @@ let
 
    A = randn(rng, 1, length(cp.abasis.spec))
    _, stc = LuxCore.setup(rng, cp)
-   psc = (W = [ ones(1, 1) for _ = 1:length(cp.distinct_ls) ],)
+   psc = (W = [ ones(1, 1) for _ = 1:length(cp.mixer.nl_count) ],)
    BBcp, _ = cp(A, psc, stc)
 
    AAs = ET.evaluate(sparse.aabasis, A[1, :])
@@ -97,6 +97,36 @@ let
       print_tf(@test norm(oQ[2][1, 1] - D1 * o[2][1, 1]) < 1e-8)    # L=1
    end
    println()
+end
+
+##
+
+@info("CP/TRACE: EquivLinearL primitive (mix n, identity on m) + gradient")
+
+let
+   Dtot = 4; maxl = 2; ORD = 2; K = 3
+   rbasis = P4ML.legendre_basis(Dtot+1)
+   ybasis = P4ML.real_sphericalharmonics(maxl)
+   mb = ET.sparse_nnll_set(; ORD=ORD, minn=0, maxn=Dtot, maxl=maxl,
+           level = bb -> sum((b.n+b.l) for b in bb; init=0), maxlevel=Dtot)
+   basis = ET.cp_equivariant_tensor(; LL=(0,), mb_spec=mb,
+           Rnl_spec=P4ML.natural_indices(rbasis),
+           Ylm_spec=P4ML.natural_indices(ybasis), basis=real, rank=K)
+   mixer = basis.mixer
+   ps, st = LuxCore.setup(rng, mixer)
+   A = randn(rng, 5, length(basis.abasis.spec))
+
+   Ā, _ = mixer(A, ps, st)
+   println_slim(@test size(Ā) == (5, K, mixer.len))
+
+   mloss(A, W) = sum(abs2, ET._eql_apply(mixer, A, W))
+   gA = Zygote.gradient(a -> mloss(a, ps.W), A)[1]
+   gA_fd = zero(A); h = 1e-6
+   for i in eachindex(A)
+      Ap = copy(A); Ap[i]+=h; Am = copy(A); Am[i]-=h
+      gA_fd[i] = (mloss(Ap, ps.W) - mloss(Am, ps.W)) / (2h)
+   end
+   println_slim(@test gA ≈ gA_fd)
 end
 
 ##

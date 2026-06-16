@@ -16,6 +16,72 @@ CO are flagged `[CO]`.
 
 ---
 
+## 0. Implementation status (2026-06-16, branch `restruct_tracce`)
+
+**A first, fully-validated CPU reference implementation has landed.** Files:
+
+- `src/formats/cp/equiv_linear.jl` — `EquivLinearL`, the Stage-2 channel-mixing
+  primitive (`Āᵏ_{lm} = Σ_n Wˡ_{kn} A_{nlm}`; per-l, identity on m). Standalone
+  Lux layer + `rrule`. Tucker will reuse it (§5).
+- `src/formats/cp/cp_ace_basis.jl` — `CPACEbasis` + `cp_equivariant_tensor(;
+  LL, mb_spec, Rnl_spec, Ylm_spec, basis, rank)`. Owns `W` (delegated to the
+  mixer). Builds the carrier by calling `sparse_equivariant_tensors` on a
+  **single-channel** `mb_spec` (all `n=1`) and reusing its `aabasis`
+  (`SparseSymmProd`) + `A2Bmaps` — the never-form-`c` per-rank evaluation
+  (mix → symmetric product → carrier). Full hand-written `rrule` (∂A, ∂W).
+- `src/formats/cp/cp_ace_layer.jl` — `CPACElayer`, the Stage-3b `λ` readout
+  (reuses `_tupmul`, which already differentiates `Matrix{SVector}·Matrix`).
+- `test/formats/cp/test_cp_basis.jl` — wired into `runtests.jl`.
+
+**Key realisation that shaped the implementation.** After Stage-2 mixing each
+`l` carries a *single* channel, so the symmetric product treats equal-`l`
+factors as identical. The carrier for that is exactly `symmetrisation_matrix`
+on a single-channel `mb_spec` (all `n=1`) — so the entire Stage-1/3a carrier is
+reused verbatim from the sparse format with **zero new coupling code**. This is
+not just convenient; it is the correct TRACE symmetry (§2). The multi-channel
+richness is recovered by the rank-`K` sum, as it should be.
+
+**Validation (all green, three independent checks):**
+1. **Sparse oracle** — for a single radial channel with `K=1, W=1`, `CPACEbasis`
+   is *bit-identical* (`err = 0`) to the established sparse B-basis.
+2. **Equivariance** — `F_0` rotation-invariant, `F_1` covariant with the real
+   Wigner-D, both to machine precision (~1e-15), on pooled `A` from random
+   configs.
+3. **FD gradients** — Zygote vs finite differences w.r.t. `A`, `W`, `λ`
+   (~1e-10 / ~1e-5).
+
+Full suite: 5290 pass / 1 broken (the +24 are CP).
+
+**What this first cut deliberately does NOT do yet (next steps, by priority):**
+
+1. **KA / GPU kernels.** The reference is plain-Julia CPU (batched over nodes:
+   `A` is `nnodes × |Aspec|`). The `k`-loop, the per-`l` mix, the carrier
+   multiply, and the `λ`-combine should each become KA kernels (§5 GPU story),
+   with the `k`-axis a launch dimension. The pullbacks already separate
+   `∂A`/`∂W` (the `SelectLinL` idiom) so they are KA-ready in structure.
+2. **Type stability.** `W`/`∂W` are `Vector{Matrix}` (ragged per-`l`); the
+   `k`/`l` loops are dynamic. Fine for CPU correctness; for performance, the
+   uniform-`K` fast path (§6 "still open") wants a regular layout (padded 3-D
+   array + offsets) so the mix is a batched gemm.
+3. **Position gradients / `evaluate_ed`** through the full graph pipeline
+   (pool → CP) — only parameter/feature gradients are wired so far. The sparse
+   `_jacobian_X` pattern (§5) is the template.
+4. **Initializer calibration.** `W`/`λ` use interim fan-in scaling; the proper
+   Nth-root law (§6 / `initializers.md`) and its "untrained-output-variance"
+   test are not yet implemented.
+5. **`whatalloc`/Bumper discipline.** The CPU path allocates with `zeros`; the
+   in-place `evaluate!`/`pullback!` + `@no_escape`/`@alloc` discipline (§5) is
+   deferred to the KA pass.
+
+Open `[CO]` items unchanged from below: `EquivLinearL` final name/home (it
+currently lives in `formats/cp/`, not `utils/`); uniform-vs-ragged `K`;
+per-output-`L` `K_L`. The `mb_spec → single-channel` reduction also means the
+constructor currently ignores any radial richness *within* an `l` beyond
+folding it into `W`'s `n_l` — worth confirming this matches your intent for how
+`mb_spec` should specify a TRACE basis.
+
+---
+
 ## 1. Scope & relationship to ACE / MACE / TRACE
 
 The forced architecture (`eqcp.qmd`, summarised in `restructure.md` §1):
