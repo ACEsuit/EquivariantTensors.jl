@@ -1,7 +1,8 @@
 # CP / TRACE format — implementation plan
 
-Status: rev 1 (2026-06-14). Design record for the **equivariant CP /
-TRACE** tensor format in ET. Based on the research notes
+Status: rev 2 (2026-06-15, addressed CO review; rev 1: 2026-06-14). Design
+record for the **equivariant CP / TRACE** tensor format in ET. Based on the
+research notes
 (`projects/equivarianttensors/notes/`: `eqcp.qmd`, `background.qmd`,
 `eqtucker.qmd`), the TRACE paper (arXiv:2210.01705, PRL 131 028001) and the
 MACE paper (arXiv:2206.07697, NeurIPS 2022), and a survey of the ET code
@@ -74,19 +75,23 @@ manifestly equivariant. In ET this is the `symmetrisation_matrix` output
 **Stage 2 — Schur channel mixing.** For each output channel `k = 1…K`,
 
 ```
-Ā_{k l m} = Σ_n W_{k n} A_{n l m}            (W independent of l, m)
+Ā^l_{k m} = Σ_n W^l_{k n} A_{n l m}          (per-l mixing; identity on m)
 ```
-==> unclear why W should be independent of l, it seems this would give 
-    useful additional freedom? Confirm how MACE implements this, as 
-    W_{knl} or as W_{kn}?
 
-Schur's lemma forces the equivariant linear map on `R^M` to act *only* on
-the multiplicity index `n` and as identity on `(l,m)` (`eqcp.qmd`, Stage 2;
-`restructure.md` §6.1). `W ∈ R^{K × n}` (one matrix; or per-`l` blocks
-`W^l ∈ R^{K × n_l}` when `n` ranges differ by `l` — see §4). This is the
-TRACE eq. (6) `Ā_{i,klm} = Σ_zn W^k_zn A_{i,znlm}` and MACE eq. (10)'s
-inner `Σ_k̃ w_{kk̃l_ξ} A_{k̃l_ξm_ξ}`. (Species `z` is folded into `n` per
-`restructure.md` §9: `n` = "everything invariant".)
+Schur's lemma forces the equivariant linear map to act *only* on the
+multiplicity index `n`, as identity on the irrep components `m`, and
+**block-diagonally in `l`** (it may not mix different irrep types). Within
+each `l`-block the multiplicity space is the `n`-index, so the general
+admissible map is an **independent matrix `W^l ∈ R^{K × n_l}` per `l`** — not
+a single `l`-independent `W`. Sharing `W` across `l` is only a parameter-tying
+special case you would impose deliberately; the free (and correct default)
+form is per-`l`, which is exactly the extra freedom you flagged. This matches
+**MACE**: its channel-mixing weight `w_{kk̃l_ξ}` (eq. 10) carries the `l_ξ`
+index — i.e. MACE implements it as `W_{knl}` (per-`l`), not `W_{kn}`. (TRACE
+eq. (6) `Ā_{i,klm} = Σ_zn W^k_zn A_{i,znlm}` writes a single `W^k`, but its
+multiplicity range `zn` is taken per irrep, so it is the same per-`l` object;
+species `z` is folded into `n` per `restructure.md` §9: `n` = "everything
+invariant".)
 
 **Stage 3 — symmetric CP of the `G`-trivial `c`.** The coefficient tensor
 `c_η` (order `ν = N`, `G`-trivial, `S_N`-symmetric) is expanded rank-`K`:
@@ -175,9 +180,14 @@ Notes on reuse:
   the `∏_t Ā^k` part.
 
 
-==> categorical variables can appear in the construction of A (not 
-    a concern for TRACE) and in the readout i.e. the λ_{kη} parameters.
-    those are the only places I can think of. 
+**Categorical variables (where they enter).** Two places only: (a) in the
+construction of `A` — species / one-hot channels folded into the `n` index;
+handled **upstream** in pooling, *not* a TRACE/CP concern; and (b) in the
+**readout**, where the `λ_{kη}` coefficients may be made category-dependent.
+That second case — selecting `λ` by a categorical — is exactly what
+`SelectLinL` is for. So `SelectLinL` belongs to **Stage 3b** (the `λ`
+readout), not Stage 2: this sharpens the "Stage 2 `W` ≠ `SelectLinL`" note
+above. Stage 2's `W` is the equivariant `n`-mixing and never sees categories.
 
 ---
 
@@ -204,12 +214,9 @@ that Stage 2 uses. This commits CP to the block *access pattern* without
 forcing a storage change on the rest of ET — and gives `restructure.md` §4
 the prototype it asked for ("prototype both access patterns against CP
 before committing"). If the view turns out to cost too much on GPU, fall
-back to materialising per-`l` blocks once per forward pass. `[CO]` decision:
-block-view vs materialised blocks — settle by benchmarking the Stage-2
-matmul on GPU.
-
-==> this is a good suggestion. please try this first but make a note 
-    to return to this question later. 
+back to materialising per-`l` blocks once per forward pass. **Decision (CO):
+implement the block-view first**; revisit (block-view vs materialised blocks)
+later by benchmarking the Stage-2 matmul on GPU — tracked in §6.
 
 ---
 
@@ -219,11 +226,11 @@ Mirror the sparse trio (`restructure.md` §3). New dir `src/formats/cp/`:
 
 ```
 src/formats/cp/
-  cp_ace_basis.jl   # CPACEbasis type + spec/constructor; forward (no params)
-                    #   carrier + the per-k contraction skeleton (Stage 1+3a
-                    #   structure); evaluate / evaluate_ed / pullback! /
-                    #   whatalloc; Lux initial{parameters,states}
-  cp_ace_layer.jl   # CPACElayer (Lux): owns W (Stage 2) + λ (Stage 3b);
+  cp_ace_basis.jl   # CPACEbasis type + spec/constructor; OWNS W (Stage 2
+                    #   channel mixing) + carrier + per-k contraction
+                    #   (Stage 1+3a); evaluate / evaluate_ed / pullback! /
+                    #   whatalloc; Lux initial{parameters,states} for W
+  cp_ace_layer.jl   # CPACElayer (Lux): OWNS λ (Stage 3b readout) only;
                     #   wraps the basis; readout to features per L
   cp_ace_ka.jl      # KA kernels: per-k channel mixing, per-k coupling,
                     #   λ-combine; batched (node) versions; pullbacks
@@ -231,16 +238,33 @@ src/formats/cp/
                     #   (lifted to formats/carrier.jl or specs/)
 ```
 
-==> I think there is a confusion here, the basis owns W, but the 
-    layer (readout) owns λ
+(Resolved per CO: the **basis owns `W`**, the **layer/readout owns `λ`** —
+applied in the comments above and the struct/params prose below.)
 
 Also (shared, from §3): lift the carrier spec plumbing out of
 `sparse_ace_utils.jl` into `formats/carrier.jl` (or `specs/`) so both
-formats build `(Abasis, 𝔸basis-per-k, A2Bmaps, specs)` the same way. The
-Stage-2 primitive `EquivLinearL` `[CO name]` can live in `utils/` (sibling
-to `selectlinl.jl`) since Tucker will reuse it.
+formats build `(Abasis, 𝔸basis-per-k, A2Bmaps, specs)` the same way.
+
+**What `EquivLinearL` is (the Stage-2 primitive).** A small equivariant
+learnable linear layer that does *only* the channel mixing
+`Ā^l_{k m} = Σ_n W^l_{kn} A_{n l m}`: it takes pooled `A` as per-`l` blocks
+`A^l ∈ R^{n_l × (2l+1)}` and, for each `l`, left-multiplies by the learnable
+`W^l ∈ R^{K × n_l}` to give `Ā^l ∈ R^{K × (2l+1)}`. Equivariant by
+construction (Schur: mixes `n`, identity on `m`, independent per `l`; §2). It
+is the moral sibling of `SelectLinL` — same KA matmul + two-kernel
+(`∂A`,`∂W`) pullback idiom — but it *mixes* the multiplicity index `n`,
+whereas `SelectLinL` *selects* a weight slice by a **categorical** input on a
+flat feature matrix. Different jobs: `EquivLinearL` = Stage-2 equivariant
+mixing (owned by the basis); `SelectLinL` = Stage-3b categorical `λ` readout
+(§3). It lives in `utils/` beside `selectlinl.jl`; Tucker reuses it. Name
+still `[CO]`.
 
 ### Main type(s)
+
+The **basis owns `W`** (Stage-2 channel mixing is part of *building* the
+equivariant features); the **layer owns `λ`** (the Stage-3b readout). The
+struct fields below are fixed config — `W` is the basis's *learnable
+parameter*, produced by its Lux `initialparameters` (not a struct field).
 
 ```julia
 struct CPACEbasis{NL, TA, TAA, TSYM} <: AbstractLuxLayer
@@ -253,14 +277,16 @@ struct CPACEbasis{NL, TA, TAA, TSYM} <: AbstractLuxLayer
    ord        # ν   (body / correlation order)
    meta       # Dict (specs, n_l offsets for the block view, basis switch)
 end
+# basis ps = (W = …,)
+#   W : Stage-2 mixing = the shared CP factors (gauge G2: merged form);
+#       per-l blocks  W^l ∈ R^{K × n_l}   (Schur: acts on n only, per l)
 ```
 
 `evaluate` returns features per `L` as a `Tuple` (one entry per output
 `L`), matching the sparse `𝔹`-basis I/O contract (`restructure.md` §3,
 duck-typed). For an invariant model `LL = (0,)`.
 
-**Learnable parameters** live on the *layer*, not the basis (mirrors
-`SparseACElayer` holding `WLL`):
+**The layer owns the readout `λ`** (mirrors `SparseACElayer` holding `WLL`):
 
 ```julia
 struct CPACElayer{TB, NLL} <: AbstractLuxLayer
@@ -269,10 +295,9 @@ struct CPACElayer{TB, NLL} <: AbstractLuxLayer
    ord::Int
    # nfeatures etc. as in SparseACElayer
 end
-# ps = (W = …,  λ = …)
-#   W : Stage-2 mixing  = the shared CP factors (gauge G2: merged form)
-#       per-l blocks  W^l ∈ R^{K × n_l}      (Schur: acts on n only)
-#   λ : Stage-3 coefficients  λ_{kη}  per output-L block (and per feature)
+# layer ps = (λ = …,)
+#   λ : Stage-3 coefficients  λ_{kη}  per output-L block (and per feature);
+#       may be category-dependent — the SelectLinL readout role (§3)
 ```
 
 Constructor signature (kwargs, matching `sparse_equivariant_tensor`):
@@ -364,13 +389,14 @@ the heterogeneous-spec instability); KA-only GPU (no CUDA in shared paths).
 
 ### Learnable params & gauge steering
 
-`λ` and `W` are learnable; the carrier `C` and specs are fixed state
-(`initialstates`). Gauge redundancy (§2 G2/G3): the **merged** `W`-as-CP-
-factor form removes the Stage2-vs-Stage3 double-count (G2). For G3 (W vs
-radial fold), the constructor/initializer should steer toward **one**
-learnable side — default: fixed/orthonormal radials + learnable `W`+`λ`
-for training; ACEradials' fold + splined radials for deployment (ET does
-*not* enforce this, only documents/defaults it — `restructure.md` §6.1).
+`W` (on the basis) and `λ` (on the layer) are learnable; the carrier `C` and
+specs are fixed state (`initialstates`). Gauge redundancy (§2 G2/G3): the
+**merged** `W`-as-CP-factor form removes the Stage2-vs-Stage3 double-count
+(G2). For G3 (W vs radial fold), the constructor/initializer should steer
+toward **one** learnable side — default: fixed/orthonormal radials +
+learnable `W`+`λ` for training. The deploy-side fold/compression (ACEradials'
+splined radials) is **deferred (CO)** — not needed now, address later (ET
+does *not* enforce this, only documents/defaults it — `restructure.md` §6.1).
 
 ---
 
@@ -429,31 +455,35 @@ settling and (3) the dense-via-sparse constructor. Refinement:
 4. (§8.4) CP format proper: basis → layer → KA, with initializers.
 5. Tucker reuses `EquivLinearL` + carrier infra (gated on `eqtucker.qmd`).
 
-### Open questions / decisions needed `[CO]`
+### Decisions (CO) & remaining open questions
 
-- **A-storage** (§4): flat + block-view vs materialised per-`l` blocks —
-  benchmark the Stage-2 gemm on GPU. *The* key data-structure call
-  (`restructure.md` §4, §10).
-  ==> agreed
-- **W placement / gauge (G2,G3)**: confirm the **merged** `W`-as-CP-factor
-  form and the train-vs-deploy fold default (§5, `restructure.md` §6.1).
-  ==> agreed, and no need to do the deploy compression now, we 
-      can address this later 
-- **Dense reference path**: standalone in `formats/cp/`, or reuse the
-  sparse dense constructor as oracle (recommend reuse — §6 testing #1).
-  ==> yes try this for testing 
-- **Parity twist (G4)**: expose the even-`ν` pseudo-scalar option, or park?
-  (Recommend park — TRACE doesn't use it; `eqcp.qmd` point 3.)
-  ==> yes park 
-- **Rank-selection / spec API**: is `rank = K` a scalar, or per-output-`L`
-  / per-`(l-block)`? TRACE uses a single global `K`; per-block `K_L` is a
-  cheap generalisation worth leaving room for in the constructor.
-  ==> agree to keep the general form, unless there are performance 
-      gains (storage access?) by keeping them the same? 
-- **`EquivLinearL` naming + home** (the Stage-2 primitive) and whether it
-  subsumes / lives beside `selectlinl.jl` (`restructure.md` §10 naming).
-  ==> unclear to me that EquivLinearL is, please explain again 
-- **Differentiation API**: ChainRules-only surface vs exported
-  `pullback!` — inherit whatever §8.2 decides for the sparse format
-  (`restructure.md` §3).
-  ==> work with pullback for now and put Chainrules on top.
+**Resolved (CO):**
+
+- **A-storage** (§4): **try flat + block-view first**; revisit (block-view vs
+  materialised per-`l` blocks) later by benchmarking the Stage-2 gemm on GPU.
+  Still *the* key data-structure call (`restructure.md` §4, §10) — just not
+  blocking the first cut.
+- **W placement / gauge (G2,G3)**: adopt the **merged** `W`-as-CP-factor form;
+  default to learnable `W`+`λ` with fixed radials for training. The deploy-side
+  fold/compression is **deferred** — not needed now (§5, `restructure.md` §6.1).
+- **Ownership**: the **basis owns `W`**, the **layer owns `λ`** (§5).
+- **Dense reference path**: **reuse the sparse dense constructor as the test
+  oracle** — no duplicate carrier code (§6 testing #1).
+- **Parity twist (G4)**: **park** — TRACE doesn't use it (`eqcp.qmd` point 3).
+- **Differentiation API**: implement `pullback!` first, then put a ChainRules
+  `rrule` on top of it (`restructure.md` §3).
+
+**Still open:**
+
+- **Rank-selection / spec API**: keep the **general** form (per-output-`L` /
+  per-`(l-block)` `K_L`) in the constructor, defaulting to a single global `K`.
+  Sub-question (CO): does forcing a uniform `K` buy enough performance to
+  prefer it? Likely a *mild* win only — a uniform `K` keeps `W`/`λ` regular (no
+  ragged shapes), so the `k`-axis is one uniform GPU launch dimension and
+  storage stays contiguous; per-block `K_L` needs padding or an offsets table
+  and a ragged launch. Plan: expose the general API but make the uniform-`K`
+  path the fast default; specialise the ragged path only if benchmarks show it
+  hurts.
+- **`EquivLinearL` naming + home** (the Stage-2 primitive — defined in §5):
+  the name and whether it lives beside `selectlinl.jl` is still `[CO]`
+  (`restructure.md` §10).
