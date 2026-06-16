@@ -30,6 +30,10 @@ end
     @testset "SparseMatrix-KA" begin include("formats/sparse/test_sparsemat_ka.jl"); end
 end
 
+@testset "CP / TRACE Format" begin
+    @testset "CP basis" begin include("formats/cp/test_cp_basis.jl"); end
+end
+
 @testset "Groups: O3" begin
     @testset "SYYVector" begin include("groups/O3/test_yyvector.jl"); end
     @testset "Clebsch Gordan Coeffs" begin include("groups/O3/test_clebschgordans.jl"); end
