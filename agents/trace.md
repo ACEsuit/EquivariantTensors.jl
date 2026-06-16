@@ -63,9 +63,12 @@ Full suite: 5290 pass / 1 broken (the +24 are CP).
    `k`/`l` loops are dynamic. Fine for CPU correctness; for performance, the
    uniform-`K` fast path (§6 "still open") wants a regular layout (padded 3-D
    array + offsets) so the mix is a batched gemm.
-3. **Position gradients / `evaluate_ed`** through the full graph pipeline
-   (pool → CP) — only parameter/feature gradients are wired so far. The sparse
-   `_jacobian_X` pattern (§5) is the template.
+3. **Efficient `evaluate_ed`** (forward-over-reverse Jacobian). End-to-end
+   *position gradients* (forces) already work through the full graph pipeline
+   (graph → EdgeEmbed → pool → CP → energy) via Zygote — validated against
+   ForwardDiff to ~1e-15 in `test/formats/cp/test_cp_pipeline.jl`. What's
+   deferred is the *efficient* fused Jacobian (the sparse `_jacobian_X` pattern,
+   §5), not correctness.
 4. **Initializer calibration.** `W`/`λ` use interim fan-in scaling; the proper
    Nth-root law (§6 / `initializers.md`) and its "untrained-output-variance"
    test are not yet implemented.
