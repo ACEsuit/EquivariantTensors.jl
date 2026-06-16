@@ -64,9 +64,10 @@ let
    yidx = P4ML.natural_indices(ybasis)
    mb = ET.sparse_nnll_set(; ORD=ORD, minn=0, maxn=Dtot, maxl=maxl,
            level = bb -> sum((b.n+b.l) for b in bb; init=0), maxlevel=Dtot)
-   basis = ET.cp_equivariant_tensor(; LL=(0,1), mb_spec=mb,
+   LL = (0, 1, 2)
+   basis = ET.cp_equivariant_tensor(; LL=LL, mb_spec=mb,
            Rnl_spec=P4ML.natural_indices(rbasis), Ylm_spec=yidx, basis=real, rank=K)
-   layer = ET.CPACElayer(basis, (1, 1))
+   layer = ET.CPACElayer(basis, ntuple(_ -> 1, length(LL)))
    ps, st = LuxCore.setup(rng, layer)
 
    rand_rot() = (Q = @SMatrix randn(3, 3); exp(Q - Q'))
@@ -87,14 +88,19 @@ let
       return YQ / Y
    end
 
+   # F_L(Q·A) = D^L(Q) F_L(A) for every output L (L=0 ⇒ invariance)
+   DL = [ Q -> wignerD(L, Q) for L in LL ]
    for _ = 1:8
       Rs = [ rand_ball() for _ = 1:6 ]
       Q = rand_rot()
-      D1 = wignerD(1, Q)
       o,  _ = layer(poolA(Rs), ps, st)
       oQ, _ = layer(poolA([ Q*r for r in Rs ]), ps, st)
-      print_tf(@test abs(o[1][1, 1] - oQ[1][1, 1]) < 1e-9)          # L=0
-      print_tf(@test norm(oQ[2][1, 1] - D1 * o[2][1, 1]) < 1e-8)    # L=1
+      for (iL, L) in enumerate(LL)
+         D = L == 0 ? ones(1, 1) : DL[iL](Q)
+         vL  = L == 0 ? [o[iL][1, 1]]  : collect(o[iL][1, 1])
+         vQL = L == 0 ? [oQ[iL][1, 1]] : collect(oQ[iL][1, 1])
+         print_tf(@test norm(vQL - D * vL) < 1e-8)
+      end
    end
    println()
 end
