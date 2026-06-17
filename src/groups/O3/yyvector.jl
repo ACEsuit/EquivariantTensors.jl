@@ -8,7 +8,12 @@ end
 
 SYYVector(v::AbstractVector) = SYYVector(tuple(v...))
 
-SYYVector(data::NTuple{N, T}) where {N, T} = 
+# disambiguate from the StaticArrays `StaticArray`-from-`StaticArray`
+# constructor (which cannot infer `L`); route static vectors (e.g. SpheriCart
+# harmonics output) through the `NTuple` constructor that computes `L`.
+SYYVector(v::StaticVector) = SYYVector(tuple(v...))
+
+SYYVector(data::NTuple{N, T}) where {N, T} =
          try SYYVector{Int(sqrt(N)-1), N, T}(data) 
          catch 
             error("length of the input should be L^2 for some Int L!") 

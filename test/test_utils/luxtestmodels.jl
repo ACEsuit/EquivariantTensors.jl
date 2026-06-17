@@ -1,8 +1,9 @@
 
 module LTM 
 
-import Polynomials4ML as P4ML 
-import EquivariantTensors as ET 
+import Polynomials4ML as P4ML
+import SpheriCart
+import EquivariantTensors as ET
 using LuxCore, LinearAlgebra, Random, Lux 
 import LuxCore:  AbstractLuxLayer, initialparameters, initialstates
 
@@ -18,7 +19,7 @@ function simple_rembed(Dtot)
 end
 
 function yembed(maxl) 
-   ybasis = P4ML.real_sphericalharmonics(maxl)
+   ybasis = SpheriCart.SphericalHarmonics(maxl)
    Ylm_spec = P4ML.natural_indices(ybasis)
    Yembed = ET.EdgeEmbed( 
                   ET.StateEmbed( ET.state_transform( x -> x.𝐫 ), 

@@ -10,6 +10,7 @@ using LinearAlgebra, Lux, Random, EquivariantTensors, Test, StaticArrays,
 using ACEbase.Testing: print_tf, println_slim
 import EquivariantTensors as ET
 import Polynomials4ML as P4ML
+import SpheriCart
 import Optimisers: destructure
 
 ##
@@ -103,7 +104,7 @@ ORD  = 3    # correlation order (body-order = ORD + 1)
 
 rbasis = P4ML.ChebBasis(Dtot+1)
 rembed = ET.EdgeEmbed(ET.StateEmbed(ET.state_transform(x -> 1 / (1 + norm(x.𝐫)^2)), rbasis))
-ybasis = P4ML.real_solidharmonics(maxl; static=true)
+ybasis = SpheriCart.SolidHarmonics(maxl; static=true)
 yembed = ET.EdgeEmbed(ET.StateEmbed(ET.state_transform(x -> x.𝐫), ybasis))
 
 mb_spec = ET.sparse_nnll_set(; L = 0, ORD = ORD, minn = 0, maxn = Dtot, maxl = maxl,
