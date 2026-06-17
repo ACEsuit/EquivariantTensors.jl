@@ -122,31 +122,34 @@ end
 
 
 # ----------------------------------------------------------------------
-#  Lux integration
+#  Lux integration — the basis is `mixer ∘ carrier`: the Stage-2 mixing is a
+#  *generic* sublayer (used only through the Lux contract, so it can be swapped),
+#  and only the carrier part carries a hand-written rrule. Zygote composes the
+#  mixer's own rrule with the carrier's.
 
-(l::CPACEbasis)(A, ps, st) = _cp_evaluate(l, A, ps.W), st
+function (b::CPACEbasis)(A, ps, st)
+   Ā, _ = b.mixer(A, ps.mixer, st.mixer)        # (nnodes, K, |Āspec|)
+   return _cp_carrier(b, Ā), st
+end
 
-# the basis owns the Stage-2 mixing W (delegated to the EquivLinearL mixer)
 initialparameters(rng::AbstractRNG, b::CPACEbasis) =
-      initialparameters(rng, b.mixer)
+      (; mixer = initialparameters(rng, b.mixer))
 
-initialstates(rng::AbstractRNG, b::CPACEbasis) = NamedTuple()
+initialstates(rng::AbstractRNG, b::CPACEbasis) =
+      (; mixer = initialstates(rng, b.mixer))
 
 
 # ----------------------------------------------------------------------
-#  Forward:  mix (all K) -> per-rank symmetric product -> carrier
-#  output BB :: NTuple over L, BB[iL] :: (nnodes, K, #η_L)
+#  Carrier:  per-rank symmetric product + carrier contraction
+#     Ā (nnodes, K, |Āspec|)  ->  BB :: NTuple over L, BB[iL] :: (nnodes, K, #η_L)
 
 # element type of B̃_L (scalar for L=0, SVector{2L+1} for L>0)
 _cp_BL_eltype(A2Bmap, ::Type{T}) where {T} = typeof(zero(eltype(A2Bmap)) * one(T))
 
-function _cp_evaluate(b::CPACEbasis, A::AbstractMatrix, W)
-   nnodes = size(A, 1)
+function _cp_carrier(b::CPACEbasis, Ā::AbstractArray{T, 3}) where {T}
+   nnodes = size(Ā, 1)
    K = b.rank
-   T = promote_type(eltype(A), eltype(eltype(W)))
    nL = length(b.LL)
-
-   Ā = _eql_apply(b.mixer, A, W)                # (nnodes, K, |Āspec|)
    BB = ntuple(iL -> Array{_cp_BL_eltype(b.A2Bmaps[iL], T)}(undef,
                                           nnodes, K, b.lens[iL]), nL)
    for k = 1:K
@@ -162,7 +165,8 @@ end
 
 
 # ----------------------------------------------------------------------
-#  Pullback w.r.t. the input features A and the mixing parameters W.
+#  Carrier pullback (∂Ā <- ∂BB). The mixing pullback (∂A, ∂W <- ∂Ā) is the
+#  mixer's own rrule; Zygote composes the two.
 
 # ∂𝔸[node,j] += Σ_η ⟨∂B̃[node,η], C[η,j]⟩   (carrier adjoint, one rank/L)
 _cp_dotc(a, b) = sum(a .* b)   # scalar*scalar or SVector⋅SVector
@@ -181,35 +185,31 @@ function _cp_carrier_pb!(∂𝔸, A2Bmap::SparseMatrixCSC, ∂B̃)
    return ∂𝔸
 end
 
-function _cp_pullback(∂BB, b::CPACEbasis, A::AbstractMatrix, W)
-   nnodes = size(A, 1)
+function _cp_carrier_pullback(∂BB, b::CPACEbasis, Ā::AbstractArray{T, 3}) where {T}
+   nnodes = size(Ā, 1)
    K = b.rank
    nL = length(b.LL)
-   T = promote_type(eltype(A), eltype(eltype(W)), eltype.(eltype.(∂BB))...)
-
-   Ā = _eql_apply(b.mixer, A, W)                # (nnodes, K, |Āspec|)
-   ∂Ā = zeros(T, size(Ā))
+   T∂ = promote_type(T, eltype.(eltype.(∂BB))...)
+   ∂Ā = zeros(T∂, size(Ā))
    n𝔸 = length(b.aabasis)
 
    for k = 1:K
-      ∂𝔸k = zeros(T, nnodes, n𝔸)
+      ∂𝔸k = zeros(T∂, nnodes, n𝔸)
       for iL = 1:nL
          _cp_carrier_pb!(∂𝔸k, b.A2Bmaps[iL], view(∂BB[iL], :, k, :))
       end
       ∂Āk = pullback(∂𝔸k, b.aabasis, Ā[:, k, :])  # (nnodes, |Āspec|)
       @views ∂Ā[:, k, :] .= ∂Āk
    end
-
-   ∂A, ∂W = _eql_pullback(∂Ā, b.mixer, A, W)
-   return ∂A, ∂W
+   return ∂Ā
 end
 
 
-function rrule(::typeof(_cp_evaluate), b::CPACEbasis, A::AbstractMatrix, W)
-   BB = _cp_evaluate(b, A, W)
+function rrule(::typeof(_cp_carrier), b::CPACEbasis, Ā::AbstractArray{<:Any, 3})
+   BB = _cp_carrier(b, Ā)
    function _pb(∂BB)
-      ∂A, ∂W = _cp_pullback(unthunk.(unthunk(∂BB)), b, A, W)
-      return NoTangent(), NoTangent(), ∂A, ∂W
+      ∂Ā = _cp_carrier_pullback(unthunk.(unthunk(∂BB)), b, Ā)
+      return NoTangent(), NoTangent(), ∂Ā
    end
    return BB, _pb
 end

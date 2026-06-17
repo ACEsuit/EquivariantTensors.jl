@@ -44,7 +44,7 @@ let
 
    A = randn(rng, 1, length(cp.abasis.spec))
    _, stc = LuxCore.setup(rng, cp)
-   psc = (W = [ ones(1, 1) for _ = 1:length(cp.mixer.nl_count) ],)
+   psc = (mixer = (W = [ ones(1, 1) for _ = 1:length(cp.mixer.nl_count) ],),)
    BBcp, _ = cp(A, psc, stc)
 
    AAs = ET.evaluate(sparse.aabasis, A[1, :])
@@ -140,7 +140,7 @@ let
             Ylm_spec=P4ML.natural_indices(ybasis), basis=real, rank=K,
             init = ET.et_zeros)
    ps0, _ = LuxCore.setup(rng, basis0)
-   println_slim(@test all(all(iszero, W) for W in ps0.W))
+   println_slim(@test all(all(iszero, W) for W in ps0.mixer.W))
 end
 
 ##
@@ -175,14 +175,14 @@ let
 
    # ∂/∂(W, λ)
    gps = Zygote.gradient(p -> loss(A, p), ps)[1]
-   W = ps.basis.W
+   W = ps.basis.mixer.W
    okW = true
    for il in eachindex(W), idx in eachindex(W[il])
       Wp = deepcopy(W); Wp[il][idx] += h
       Wm = deepcopy(W); Wm[il][idx] -= h
-      g = (loss(A, (basis=(W=Wp,), λ=ps.λ)) -
-           loss(A, (basis=(W=Wm,), λ=ps.λ))) / (2h)
-      okW &= isapprox(gps.basis.W[il][idx], g; atol=1e-5, rtol=1e-4)
+      g = (loss(A, (basis=(mixer=(W=Wp,),), λ=ps.λ)) -
+           loss(A, (basis=(mixer=(W=Wm,),), λ=ps.λ))) / (2h)
+      okW &= isapprox(gps.basis.mixer.W[il][idx], g; atol=1e-5, rtol=1e-4)
    end
    println_slim(@test okW)
 

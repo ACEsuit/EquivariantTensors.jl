@@ -93,6 +93,14 @@ folding it into `W`'s `n_l` — worth confirming this matches your intent for ho
   separate format. The §6 "general per-`L` `K_L` API" idea is **dropped**.
 - **`Āspec` moved into the `EquivLinearL` mixer** (it is the mixer's output
   spec); the redundant `CPACEbasis.Āspec` field is removed (still in `meta`).
+- **The mixer is a *generic* sublayer.** `CPACEbasis` no longer hard-codes
+  `EquivLinearL` (no `_eql_apply` / flat `ps.W`): it nests the mixer params
+  (`ps.basis.mixer.W`), threads `st.mixer`, and calls the mixer through the Lux
+  contract (`b.mixer(A, ps.mixer, st.mixer)`). The basis is now `mixer ∘
+  _cp_carrier`; only the carrier (`k`-loop + in-place writes) keeps a manual
+  rrule, and Zygote composes it with the mixer's own rrule (which also removes
+  the previous double-computation of `Ā`). Any equivariant-linear mixer can be
+  swapped in.
 - **`EquivLinearL` relocation to a shared folder / `utils/` is postponed** to the
   channel-interface step (its API will move from gather-tables to a graded
   input/output leg then) — kept in `formats/cp/` for the prototype.
