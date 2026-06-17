@@ -24,16 +24,16 @@ import ChainRulesCore: NoTangent, rrule, unthunk
 import LuxCore: AbstractLuxLayer, initialparameters, initialstates
 
 
-struct CPACEbasis{NL, TA, TAA, TSYM} <: AbstractLuxLayer
+struct CPACEbasis{NL, TA, TM, TAA, TSYM} <: AbstractLuxLayer
    abasis::TA            # PooledSparseProduct  (full multi-channel A_{nlm}; reused)
-   mixer::EquivLinearL   # Stage-2 channel mixing  Āᵏ = Wˡ·A
+   mixer::TM             # EquivLinearL: Stage-2 channel mixing Āᵏ = Wˡ·A; owns
+                         #   the mixed-channel spec (mixer.Āspec)
    aabasis::TAA          # SparseSymmProd       (∏ₜ Āᵏ, single mixed channel)
    A2Bmaps::TSYM         # NTuple per L         (carrier C^{lη}; reused)
    LL::NTuple{NL, Int}   # output irreps
    lens::NTuple{NL, Int} # #carrier rows (#η) per L
    rank::Int             # K
    ord::Int              # ν  (max correlation / body order)
-   Āspec::Vector{@NamedTuple{n::Int, l::Int, m::Int}}   # single mixed-channel spec
    meta::Dict{String, Any}
 end
 
@@ -60,16 +60,19 @@ Base.show(io::IO, b::CPACEbasis) =
 # (trace.md §2 — this is not just convenient, it is the correct TRACE symmetry).
 
 """
-   cp_equivariant_tensor(; LL, mb_spec, Rnl_spec, Ylm_spec, basis, rank)
+   cp_equivariant_tensor(; LL, mb_spec, Rnl_spec, Ylm_spec, basis, rank,
+                           init = EquivLinearL default)
 
 Build a CP / TRACE equivariant tensor *basis* (`CPACEbasis`). Same carrier
 arguments as `sparse_equivariant_tensors`; `rank` is the CP rank `K`. Returns a
 `CPACEbasis` whose learnable parameter is the Stage-2 channel-mixing `W` (per-l
-blocks `Wˡ ∈ R^{K × n_l}`). Combine with a `CPACElayer` for the Stage-3b `λ`
+blocks `Wˡ ∈ R^{K × n_l}`). `init` is the weight initialiser for `W`, any
+`(rng, dims...) -> AbstractArray` (e.g. `et_zeros`, `et_normal`); it is forwarded
+to the `EquivLinearL` mixer. Combine with a `CPACElayer` for the Stage-3b `λ`
 readout. See `agents/trace.md`.
 """
 function cp_equivariant_tensor(; LL, mb_spec, Rnl_spec, Ylm_spec, basis,
-                                 rank::Integer)
+                                 rank::Integer, init = _eql_default_init)
    K = rank
 
    # --- full (multi-channel) pooling spec: all (n,l,m), (n,l) ∈ mb_spec ---
@@ -102,7 +105,7 @@ function cp_equivariant_tensor(; LL, mb_spec, Rnl_spec, Ylm_spec, basis,
       mix_Acols[q] = [ inv_Afull[(n = n, l = b.l, m = b.m)] for n in ns ]
    end
 
-   mixer = EquivLinearL(K, nl_count, mix_l, mix_Acols, length(Āspec))
+   mixer = EquivLinearL(K, nl_count, mix_l, mix_Acols, Āspec; init = init)
 
    LLt = tuple(LL...)
    lens = tuple([ size(A2Bmaps[i], 1) for i = 1:length(A2Bmaps) ]...)
@@ -114,8 +117,7 @@ function cp_equivariant_tensor(; LL, mb_spec, Rnl_spec, Ylm_spec, basis,
             "mb_spec" => mb_spec, "LL" => LL, "rank" => K,
             "distinct_ls" => distinct_ls)
 
-   return CPACEbasis(abasis, mixer, aabasis, A2Bmaps, LLt, lens, K, ord,
-                     Āspec, meta)
+   return CPACEbasis(abasis, mixer, aabasis, A2Bmaps, LLt, lens, K, ord, meta)
 end
 
 

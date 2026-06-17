@@ -83,6 +83,28 @@ constructor currently ignores any radial richness *within* an `l` beyond
 folding it into `W`'s `n_l` — worth confirming this matches your intent for how
 `mb_spec` should specify a TRACE basis.
 
+### PR #130 review decisions (2026-06-17, CO)
+
+- **Rank `K` stays a single global value** (no per-`L`/per-order `K_L`). The
+  per-output freedom is already in `λ` (indexed per-`(L, η)`, and `η` carries
+  the order); `Āᵏ` are *shared* channels across all `L`/orders, so per-block `K`
+  would need a separate `W` per output — breaking the shared-`W`=CP-factor gauge
+  and the never-form-`c` cost. Per-output independent CP, if ever wanted, is a
+  separate format. The §6 "general per-`L` `K_L` API" idea is **dropped**.
+- **`Āspec` moved into the `EquivLinearL` mixer** (it is the mixer's output
+  spec); the redundant `CPACEbasis.Āspec` field is removed (still in `meta`).
+- **`EquivLinearL` relocation to a shared folder / `utils/` is postponed** to the
+  channel-interface step (its API will move from gather-tables to a graded
+  input/output leg then) — kept in `formats/cp/` for the prototype.
+- **General `et_` initialisers**: `EquivLinearL` (`W`) and `CPACElayer` (`λ`) now
+  take an `init` kwarg (`(rng, dims...) -> array`, default fan-in-scaled
+  `et_normal`); `cp_equivariant_tensor` forwards `init` to the mixer.
+- **Performance (deferred to the perf pass)**: the per-`k` loop in `_cp_evaluate`
+  instantiates the sparse `AA` basis each rank. For TRACE the `AA` basis should
+  **never be instantiated** — fuse the single-channel `∏ₜ Āᵏ` + carrier
+  contraction into one (KA) kernel. JSON handles the Unicode `meta` keys
+  (`Āspec`/`𝔸spec`) fine; `meta` is not currently serialised.
+
 ---
 
 ## 1. Scope & relationship to ACE / MACE / TRACE

@@ -123,7 +123,7 @@ let
    A = randn(rng, 5, length(basis.abasis.spec))
 
    Ā, _ = mixer(A, ps, st)
-   println_slim(@test size(Ā) == (5, K, mixer.len))
+   println_slim(@test size(Ā) == (5, K, length(mixer)))
 
    mloss(A, W) = sum(abs2, ET._eql_apply(mixer, A, W))
    gA = Zygote.gradient(a -> mloss(a, ps.W), A)[1]
@@ -133,6 +133,14 @@ let
       gA_fd[i] = (mloss(Ap, ps.W) - mloss(Am, ps.W)) / (2h)
    end
    println_slim(@test gA ≈ gA_fd)
+
+   # custom weight initialiser flows through to the mixer / basis
+   basis0 = ET.cp_equivariant_tensor(; LL=(0,), mb_spec=mb,
+            Rnl_spec=P4ML.natural_indices(rbasis),
+            Ylm_spec=P4ML.natural_indices(ybasis), basis=real, rank=K,
+            init = ET.et_zeros)
+   ps0, _ = LuxCore.setup(rng, basis0)
+   println_slim(@test all(all(iszero, W) for W in ps0.W))
 end
 
 ##
