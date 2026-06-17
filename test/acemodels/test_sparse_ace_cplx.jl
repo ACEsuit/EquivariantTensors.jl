@@ -1,5 +1,6 @@
 
 import Polynomials4ML as P4ML
+import SpheriCart
 import EquivariantTensors as ET
 using StaticArrays, LinearAlgebra, Random, Test
 using Zygote, LuxCore, Lux
@@ -14,7 +15,7 @@ include(joinpath(@__DIR__(), "..", "test_utils", "diffutils.jl"))       # DIFF
 ##
 Dtot = 8; maxl = 6; ORD = 3
 rbasis = P4ML.legendre_basis(Dtot+1)
-ybasis = P4ML.real_sphericalharmonics(maxl)
+ybasis = SpheriCart.SphericalHarmonics(maxl)
 
 nnll_long = ET.sparse_nnll_set(; ORD = ORD, minn = 0, maxn = Dtot, maxl = maxl,
                   level = bb -> sum((b.n + b.l) for b in bb; init=0), maxlevel = Dtot)

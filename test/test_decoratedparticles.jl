@@ -9,6 +9,7 @@ using ACEbase.Testing: println_slim, print_tf
 import EquivariantTensors as ET
 import DecoratedParticles as DP
 import Polynomials4ML as P4ML
+import SpheriCart
 
 rng = MersenneTwister(1234)
 
@@ -51,7 +52,7 @@ println_slim(@test all(∂P1 .≈ ∂P2 ))
 
 @info("Test StateEmbed - Solid Harmonics Basis")
 
-basis = real_solidharmonics(4)
+basis = SpheriCart.SolidHarmonics(4)
 trans = x -> x.r 
 embed = ET.StateEmbed(ET.state_transform(trans), basis)
 ps, st = LuxCore.setup(rng, embed)
