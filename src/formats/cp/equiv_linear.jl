@@ -25,11 +25,44 @@ using LinearAlgebra: dot
 using Random: AbstractRNG
 
 
+"""
+   struct EquivLinearL
+
+Equivariant linear "channel-mixing" layer. It maps a matrix of pooled input
+features `A` to `K` mixed output channels `Ā` by taking, separately within each
+angular block `l`, a learnable linear combination of the input radial channels —
+the *same* combination for every component `m` of that block. This is the only
+form an equivariant linear map can take (Schur's lemma): it may mix freely within
+a multiplicity (radial) space, must be block-diagonal across degrees `l`, and
+acts as the identity on the `2l+1` components of each `l`.
+
+### Arrays
+
+- input  `A`  : `(nnodes, nA)` matrix — column `p` is one input feature, labelled
+  by an `(n, l, m)` triple (radial channel `n`, degree `l`, order `m`).
+- params `W`  : a `Vector` of matrices, `W[il]` of size `(K, n_l)` — one block
+  per distinct `l` (`il = 1 … length(nl_count)`), with `n_l = nl_count[il]` the
+  number of input radial channels at that `l`.
+- output `Ā`  : `(nnodes, K, nĀ)` array — `Ā[node, k, q]` is mixed channel `k` of
+  output slot `q`, where `q = 1 … length(Āspec)` runs over the distinct output
+  `(l, m)` pairs (the radial index `n` has been contracted away).
+
+### Index tables (data-independent; built by `cp_equivariant_tensor`)
+
+- `mix_l[q]`     : the `W`-block index `il` used for output slot `q`.
+- `mix_Acols[q]` : the columns of `A` that feed slot `q` — one per radial channel
+  `n`, i.e. all columns sharing slot `q`'s `(l, m)`, ordered by `n`.
+- `Āspec[q]`     : the `(n=1, l, m)` label of output slot `q`.
+
+The only learnable parameter is `W` (`ps.W`); the layer carries no state. See
+`_eql_apply` for the exact computation, and `agents/trace.md` /
+`agents/eqtensor_interface.md` for its role as the CP/TRACE Stage-2 mixing.
+"""
 struct EquivLinearL{FI} <: AbstractLuxLayer
    rank::Int                       # K mixed channels
    nl_count::Vector{Int}           # #radial channels n_l per distinct l
-   mix_l::Vector{Int}              # for each output entry q: index into the W blocks
-   mix_Acols::Vector{Vector{Int}}  # for each q: input columns (one per n)
+   mix_l::Vector{Int}              # for each output slot q: index into the W blocks
+   mix_Acols::Vector{Vector{Int}}  # for each q: input columns of A (one per n)
    Āspec::Vector{@NamedTuple{n::Int, l::Int, m::Int}}   # output (mixed-channel) spec
    init::FI                        # weight initialiser, called as init(rng, K, n_l)
 end
@@ -57,7 +90,19 @@ initialstates(rng::AbstractRNG, l::EquivLinearL) = NamedTuple()
 (l::EquivLinearL)(A, ps, st) = _eql_apply(l, A, ps.W), st
 
 
-# Ā :: (nnodes, K, len)   Āᵏ_{·q} = Σ_i Wˡ_{ki} A_{·, cols[i]}
+# Forward pass, in array form. For each output slot `q` (a distinct `(l, m)`
+# pair) let
+#     il   = mix_l[q]            # which W block
+#     cols = mix_Acols[q]        # columns of A for slot q, one per radial channel
+#     Wq   = W[il]               # size (K, n_l)
+# Then for every node and every output channel `k = 1 … K`:
+#
+#     Ā[node, k, q] = sum( Wq[k, i] * A[node, cols[i]]  for i = 1:n_l )
+#
+# i.e. mixed channel `Ā[:, k, q]` is the `Wq[k, :]`-weighted sum of the input
+# columns that share slot `q`'s `(l, m)`. The loop below vectorises over the
+# node axis (the `.+=` over `A[:, cols[i]]`) and accumulates one (k, i) term at
+# a time. Output `Ā` is `(nnodes, K, nĀ)` with `nĀ = length(Āspec)`.
 function _eql_apply(l::EquivLinearL, A::AbstractMatrix, W)
    nnodes = size(A, 1)
    K = l.rank
