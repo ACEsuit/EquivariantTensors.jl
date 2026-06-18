@@ -49,9 +49,12 @@ acts as the identity on the `2l+1` components of each `l`.
 
 ### Index tables (data-independent; built by `cp_equivariant_tensor`)
 
-- `mix_l[q]`     : the `W`-block index `il` used for output slot `q`.
+- `mix_l[q]`     : the `W`-block index `il` for slot `q` — the position of slot
+  `q`'s degree `l` in the sorted list of distinct `l`'s. There is one block per
+  distinct `l`, so all slots `q` sharing the same `l` share the same `il`.
 - `mix_Acols[q]` : the columns of `A` that feed slot `q` — one per radial channel
-  `n`, i.e. all columns sharing slot `q`'s `(l, m)`, ordered by `n`.
+  `n`, i.e. all columns sharing slot `q`'s `(l, m)`, ordered by `n`. Its length
+  is `n_l = nl_count[il]`.
 - `Āspec[q]`     : the `(n=1, l, m)` label of output slot `q`.
 
 The only learnable parameter is `W` (`ps.W`); the layer carries no state. See
@@ -90,19 +93,26 @@ initialstates(rng::AbstractRNG, l::EquivLinearL) = NamedTuple()
 (l::EquivLinearL)(A, ps, st) = _eql_apply(l, A, ps.W), st
 
 
-# Forward pass, in array form. For each output slot `q` (a distinct `(l, m)`
-# pair) let
-#     il   = mix_l[q]            # which W block
-#     cols = mix_Acols[q]        # columns of A for slot q, one per radial channel
-#     Wq   = W[il]               # size (K, n_l)
-# Then for every node and every output channel `k = 1 … K`:
+# Forward pass, in array form. Indices:
+#   node          : a row of A (one pooled input / node) — the vectorised axis;
+#   k  = 1 … K    : an output mixed channel;
+#   q  = 1 … nĀ   : an output slot, i.e. a distinct (l, m); Āspec[q] = (n=1, l, m);
+#   il = mix_l[q] : the W-block index for slot q = the position of its degree l in
+#                   the sorted distinct l's (one block per l, so all (l,m) with
+#                   the same l share il);
+#   i  = 1 … n_l  : a radial channel at this l. It indexes BOTH the W-block column
+#                   (Wq[k, i] = weight of the i-th radial channel into channel k)
+#                   AND the gather list (cols[i] = the column of A holding that
+#                   radial channel's (n, l, m) feature).
+# With  cols = mix_Acols[q]  (the n_l columns of A for slot q) and  Wq = W[il]
+# (size K × n_l):
 #
 #     Ā[node, k, q] = sum( Wq[k, i] * A[node, cols[i]]  for i = 1:n_l )
 #
-# i.e. mixed channel `Ā[:, k, q]` is the `Wq[k, :]`-weighted sum of the input
-# columns that share slot `q`'s `(l, m)`. The loop below vectorises over the
-# node axis (the `.+=` over `A[:, cols[i]]`) and accumulates one (k, i) term at
-# a time. Output `Ā` is `(nnodes, K, nĀ)` with `nĀ = length(Āspec)`.
+# i.e. mixed channel Ā[:, k, q] is the Wq[k, :]-weighted sum over the radial
+# channels — the columns of A sharing slot q's (l, m). The loop below vectorises
+# over the node axis (the `.+=` on A[:, cols[i]]) and accumulates one (k, i) term
+# at a time. Output Ā is (nnodes, K, nĀ) with nĀ = length(Āspec).
 function _eql_apply(l::EquivLinearL, A::AbstractMatrix, W)
    nnodes = size(A, 1)
    K = l.rank
