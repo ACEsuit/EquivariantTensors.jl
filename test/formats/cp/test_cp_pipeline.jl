@@ -14,6 +14,7 @@ using DecoratedParticles: PState
 using ACEbase.Testing: println_slim
 import EquivariantTensors as ET
 import Polynomials4ML as P4ML
+import SpheriCart
 
 rng = MersenneTwister(11)
 
@@ -21,7 +22,7 @@ rng = MersenneTwister(11)
 
 Dtot = 8; maxl = 4; ORD = 3; K = 5
 rbasis = P4ML.ChebBasis(Dtot+1)
-ybasis = P4ML.real_solidharmonics(maxl; static=true)
+ybasis = SpheriCart.SolidHarmonics(maxl; static=true)
 mb = ET.sparse_nnll_set(; L=0, ORD=ORD, minn=0, maxn=Dtot, maxl=maxl,
         level = bb -> sum((b.n+b.l) for b in bb; init=0), maxlevel=Dtot)
 cpbasis = ET.cp_equivariant_tensor(; LL=(0,), mb_spec=mb,

@@ -16,6 +16,7 @@ using LuxCore, Zygote
 using ACEbase.Testing: println_slim, print_tf
 import EquivariantTensors as ET
 import Polynomials4ML as P4ML
+import SpheriCart
 
 rng = MersenneTwister(1234)
 
@@ -25,7 +26,7 @@ rng = MersenneTwister(1234)
 
 let
    maxl = 2
-   ybasis = P4ML.real_sphericalharmonics(maxl)
+   ybasis = SpheriCart.SphericalHarmonics(maxl)
    yidx = P4ML.natural_indices(ybasis)
    Rnl_spec = [(n = 1,)]
    mb1 = [ [(n=1,l=0)], [(n=1,l=1)],
@@ -60,7 +61,7 @@ end
 let
    Dtot = 5; maxl = 3; ORD = 3; K = 4
    rbasis = P4ML.legendre_basis(Dtot+1)
-   ybasis = P4ML.real_sphericalharmonics(maxl)
+   ybasis = SpheriCart.SphericalHarmonics(maxl)
    yidx = P4ML.natural_indices(ybasis)
    mb = ET.sparse_nnll_set(; ORD=ORD, minn=0, maxn=Dtot, maxl=maxl,
            level = bb -> sum((b.n+b.l) for b in bb; init=0), maxlevel=Dtot)
@@ -112,7 +113,7 @@ end
 let
    Dtot = 4; maxl = 2; ORD = 2; K = 3
    rbasis = P4ML.legendre_basis(Dtot+1)
-   ybasis = P4ML.real_sphericalharmonics(maxl)
+   ybasis = SpheriCart.SphericalHarmonics(maxl)
    mb = ET.sparse_nnll_set(; ORD=ORD, minn=0, maxn=Dtot, maxl=maxl,
            level = bb -> sum((b.n+b.l) for b in bb; init=0), maxlevel=Dtot)
    basis = ET.cp_equivariant_tensor(; LL=(0,), mb_spec=mb,
@@ -150,7 +151,7 @@ end
 let
    Dtot = 5; maxl = 2; ORD = 2; K = 3
    rbasis = P4ML.legendre_basis(Dtot+1)
-   ybasis = P4ML.real_sphericalharmonics(maxl)
+   ybasis = SpheriCart.SphericalHarmonics(maxl)
    mb = ET.sparse_nnll_set(; ORD=ORD, minn=0, maxn=Dtot, maxl=maxl,
            level = bb -> sum((b.n+b.l) for b in bb; init=0), maxlevel=Dtot)
    basis = ET.cp_equivariant_tensor(; LL=(0,1), mb_spec=mb,
