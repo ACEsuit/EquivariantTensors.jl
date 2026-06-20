@@ -1,6 +1,7 @@
 
 import EquivariantTensors: O3
 using Polynomials4ML, StaticArrays, BlockDiagonals
+import SpheriCart
 using Test
 
 include("../../test_utils/utils_testO3.jl")
@@ -12,8 +13,8 @@ for L1 = 0:2, L2 = 0:2, basis in (real, complex)
    # print("L1 = $L1, L2 = $L2, basis = $basis : ")
    L = L1 + L2 
    trans = O3.TYVec2YMat(L1, L2; basis = basis)
-   ybasis = ( basis == real ? real_sphericalharmonics(L)
-                            : complex_sphericalharmonics(L) )
+   ybasis = ( basis == real ? SpheriCart.SphericalHarmonics(L)
+                            : SpheriCart.ComplexSphericalHarmonics(L) )
    𝐫 = @SVector randn(3)
    θ = π * rand(3)
    Q = O3.Q_from_angles(θ)
@@ -36,8 +37,8 @@ end
 @info("Test O3 Yvector -> Cart Vec transformation")
 let basis = real, L = 1
    trans = O3.TYVec2CartVec(basis) 
-   ybasis = ( basis == real ? real_sphericalharmonics(L)
-                            : complex_sphericalharmonics(L) )
+   ybasis = ( basis == real ? SpheriCart.SphericalHarmonics(L)
+                            : SpheriCart.ComplexSphericalHarmonics(L) )
    𝐫 = @SVector randn(3)
    θ = π * rand(3)
    Q = O3.Q_from_angles(θ)
@@ -61,8 +62,8 @@ println()
 @info("Test O3 Yvector -> Cart Mat transformation")
 let basis = real, L = 2
    trans = O3.TYVec2CartMat(basis) 
-   ybasis = ( basis == real ? real_sphericalharmonics(L)
-                            : complex_sphericalharmonics(L) )
+   ybasis = ( basis == real ? SpheriCart.SphericalHarmonics(L)
+                            : SpheriCart.ComplexSphericalHarmonics(L) )
    for _ = 1:10                            
       𝐫 = @SVector randn(3)
       θ = π * rand(3)
