@@ -77,6 +77,14 @@ include("utils/selector.jl")
 # future work, see agents/initializers.md
 include("utils/initializers.jl")
 
+# ------------------------------------------------------
+# CP / TRACE tensor format (reuses the sparse carrier + symmetric product);
+# Stage-2 channel mixing + low-rank CP of the G-trivial coefficients.
+# Design record: agents/trace.md
+include("formats/cp/equiv_linear.jl")
+include("formats/cp/cp_ace_basis.jl")
+include("formats/cp/cp_ace_layer.jl")
+
 # other utilities
 #  adapt.jl : provides some conversion utilities especially moving
 #             Float64 to Float32 recursively in NamedTuples etc.
