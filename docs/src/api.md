@@ -157,7 +157,7 @@ C^{\mathbf{n},\mathbf{l},L}_{a,\mathbf{m}}
 \mathbf{A}_{\mathbf{n}\mathbf{l}\mathbf{m}}(R).
 ```
 
-Here the tensor product basis is chosen according to the value of `PI`.
+Here the tensor product basis `\mathbf{A}` is chosen according to the value of `PI`.
 
 The expansion coefficients `C` are chosen so that the resulting `B` basis satisfies GE or GE-PI, with the requested reflection parity. They are returned by [`O3.coupling_coeffs`](@ref EquivariantTensors.O3.coupling_coeffs).
 
