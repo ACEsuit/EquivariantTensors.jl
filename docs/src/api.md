@@ -145,7 +145,7 @@ and the tensor product basis is
 A_{n_i l_i m_i}(R).
 ```
 
-This matches the convention used by the building blocks above: `A` stores one-particle features, and `AA` stores their tensor products.
+This matches the convention used by the building blocks above, where `A` and `AA` refer to the one-particle features and their tensor products, respectively.
 
 The coupled basis functions with target order `L` are chosen as linear combinations
 
