@@ -8,6 +8,8 @@
 
 The plan is that it becomes the backend for several [ACEsuit]() packages such as [ACEpotentials.jl](https://github.com/ACEsuit/ACEpotentials.jl) and [ACEhamiltonians.jl](https://github.com/ACEsuit/ACEhamiltonians.jl). 
 
+The symmetrization and coupling-coefficient construction in this package follows the efficient kernel method proposed in [Efficient construction and explicit dimensionality of Lie group-equivariant and permutation-invariant spaces](https://arxiv.org/pdf/2604.01975).
+
 The package is a work in progress. It is already usable, but functionality is still incomplete. A key goal is to provide full `ChainRules` and `Lux` integration, including optimized CPU and GPU kernels, and shared interfaces to enable drop-in replacements for different tensor format. Key components from various `ACEsuit` packages that can be shared are slowly being moved into this package. 
 
 ## Contributing
