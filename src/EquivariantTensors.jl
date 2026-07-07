@@ -54,6 +54,10 @@ include("formats/sparse/sparse_ace_utils.jl")
 include("formats/sparse/sparsemat_ka.jl")
 
 # ------------------------------------------------------
+# experimental format: equivariant (Rnl * Ylm) tensor product layer
+include("formats/exp/equivprod.jl")
+
+# ------------------------------------------------------
 # groups: O3 irreps, CG coupling, carrier symmetrisation
 include("groups/O3/O3.jl")
 # (O3.jl includes O3_utils.jl, yyvector.jl, O3_transformations.jl,

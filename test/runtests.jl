@@ -30,6 +30,10 @@ end
     @testset "SparseMatrix-KA" begin include("formats/sparse/test_sparsemat_ka.jl"); end
 end
 
+@testset "Experimental Format" begin
+    @testset "EquivariantTensorProduct" begin include("formats/exp/test_equivprod.jl"); end
+end
+
 @testset "Groups: O3" begin
     @testset "SYYVector" begin include("groups/O3/test_yyvector.jl"); end
     @testset "Clebsch Gordan Coeffs" begin include("groups/O3/test_clebschgordans.jl"); end

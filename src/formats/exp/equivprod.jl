@@ -32,7 +32,7 @@ Behaves exactly like an equivariant linear ACE basis, but without the pooling.
 Takes as input a tuple of (R, Y) edge embeddings and produces an output that 
 is equivalent to an equivariant ACE basis.
 """
-struct EquivariantTensorProduct{NL} 
+struct EquivariantTensorProduct{NL} <: AbstractLuxLayer
    ranges::NTuple{NL, Vector{Int}}  # ranges[i] = radial indices for the LL[i] output
    LL::NTuple{NL, Int}
    # ----
@@ -86,14 +86,24 @@ function _assert_sphericart_spec(Ylm_spec, Lmax)
    return nothing
 end
 
-# ------ Lux ps and st 
+# ------ Lux layer interface
 
-initialparameters(rng::AbstractRNG, bas::EquivariantTensorProduct) = 
-         NamedTuple() 
+Base.show(io::IO, op::EquivariantTensorProduct) =
+         print(io, "EquivariantTensorProduct(LL = $(op.LL))")
 
-initialstates(rng::AbstractRNG, bas::EquivariantTensorProduct) =
-         (  ranges = bas.ranges,
-                LL = bas.LL, )
+# total number of output features across all L; the L-output carries
+# length(ranges[i]) features, each of which is an SVector{2L+1}.
+Base.length(op::EquivariantTensorProduct) = sum(length, op.ranges; init = 0)
+
+initialparameters(rng::AbstractRNG, op::EquivariantTensorProduct) =
+         NamedTuple()
+
+initialstates(rng::AbstractRNG, op::EquivariantTensorProduct) =
+         ( ranges = op.ranges, LL = op.LL, )
+
+# Lux forward pass: Φ is the (Rnl, Ylm) tuple / namedtuple of edge embeddings
+# produced by the preceding embedding layer; returns (𝔹, st).
+(op::EquivariantTensorProduct)(Φ, ps, st) = evaluate(op, Φ..., ps, st), st
 
 
 # -------- evaluation kernels 
