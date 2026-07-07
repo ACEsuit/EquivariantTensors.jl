@@ -1,8 +1,17 @@
 #
 # implementation of an equivariant tensor product
-# - should behave exactly like an equivariant linear ACE basis: 
+# should behave exactly like an equivariant linear ACE basis: 
 #   input (Rnl, Ylm) => output (B0, B1, ...) 
-# -
+# initial use case is in ACEoperators, but it is quite generic so we are 
+# keeping it here. 
+# 
+# The naming is not ideal, as this is a very specific Rnl * Ylm product. 
+# in general this should allow products of multiple Y vectors. 
+#
+# This is kept as an experimental new layer. It is not guaranteed to be 
+# backwards compatible and can change without notice.
+# 
+
 
 using StaticArrays: SVector
 using SpheriCart: lm2idx
@@ -23,7 +32,7 @@ Behaves exactly like an equivariant linear ACE basis, but without the pooling.
 Takes as input a tuple of (R, Y) edge embeddings and produces an output that 
 is equivalent to an equivariant ACE basis.
 """
-struct EquivariantTensorProduct{NL} # make it a Lux container layer
+struct EquivariantTensorProduct{NL} 
    ranges::NTuple{NL, Vector{Int}}  # ranges[i] = radial indices for the LL[i] output
    LL::NTuple{NL, Int}
    # ----
