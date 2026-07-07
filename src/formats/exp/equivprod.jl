@@ -51,14 +51,60 @@ function EquivariantTensorProduct(LL, Rnl_spec, Ylm_spec)
    return EquivariantTensorProduct(prodspec, ranges, LL, meta)
 end
 
+# ------ Lux ps and st 
 
-# ------ Claude: don't edit below here
+initialparameters(rng::AbstractRNG, bas::EquivariantTensorProduct) = 
+         NamedTuple() 
 
-function evaluate(op::EquivariantTensorProduct, Rnl, Ylm, ps, st)
-   # ϕ is a tuple of (R, Y) features 
-   # ps is a tuple of (l, l') angular momentum indices 
-   # st is a tuple of (s, s') spin indices 
-   error("not implemented")
+initialstates(rng::AbstractRNG, bas::EquivariantTensorProduct) =
+         (  prodspec = bas.prodspec,
+            ranges = bas.ranges,
+            LL = bas.LL,
+         )
+
+
+# -------- evaluation kernels 
+
+# format of Rnl, Ylm 3-tensor is determined by EdgeEmbedding
+# that is the three dimensions are (j_neig, i_node, k_feat)
+
+function evaluate(op::EquivariantTensorProduct, 
+         Rnl::AbstractArray{T, 3}, Ylm::AbstractArray{T, 3}, ps, st) where {T} 
+   # just dispatch this to the ka_evaluate function.          
 end
 
 
+function ka_evaluate(op::EquivariantTensorProduct, 
+         Rnl::AbstractArray{T, 3}, Ylm::AbstractArray{T, 3}, ps, st) where {T}
+
+   # 1. allocate the output arrays (one for each L in LL)
+
+   # 2. for each L launch a separate kernel _ka_evaluate_L(...) 
+   #    compute the entries of the output arrays directly, sketch is
+   #    given below. sync after launching all kernels. 
+
+   # return 𝔹 a tuple of feature vectors   
+end
+
+
+@kernel function _ka_evaluate_L!(::Type{EquivariantTensorProduct}, 
+         𝔹L,          # abstractvector SVector{2*L+1, T}, to write into 
+         Rnl, Ylm,    # const abstractvector T
+         prodspec,    # const abstractvector Int
+         range,       # const abstractvector Int
+         L::Int)
+   # get the j_neig, i_node, k_feat indices, these go over the 
+   # dimensions of 𝔹 
+   
+   # the k_feat index points to range[k_feat] which gives an index of 
+   # prodspec, which is a pair of indices iR into Rnl and iY into Ylm; 
+   # here we have a bug it seems. it should be a single index into Rnl and 2L+1 
+   # indices into Ylm (m = -L, ..., L). Fix this in the construction of 
+   # the prodspec: provide not an index iY into Ylm but only the l value
+   # then use the sphericart (l, m) -> index into Ylm mapping to 
+   # extract all (Ylm)_{l, m} for m = -l, ..., l as an SVector. (best 
+   # with a new generated function). -> yL_vec
+
+   # produce the Rnl[iR] * yL_vec and write it into 𝔹L[j_neig, i_node, k_feat]
+
+end
