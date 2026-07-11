@@ -1,0 +1,592 @@
+using ChainRulesCore
+using ChainRulesCore: NoTangent
+
+export PooledSparseProduct 
+
+
+@doc raw"""
+`struct PooledSparseProduct` : 
+This implements a fused (tensor) product and pooling operation. Suppose 
+we are given $N$ embeddings $\phi^{(i)}_{k_i}$ then the pooled sparse product 
+generates feature vectors of the form 
+```math 
+A_{k_1, \dots, k_N} = \sum_{j} \prod_{t = 1}^N \phi^{(t)}_{k_t}(x_j)
+```
+where $x_j$ are an list of inputs (multi-set). 
+
+The canonical example is 
+```math 
+A_{nlm} = \sum_{j} R_{nl}(r_j, \mu_j) Y_l^m( \hat{\bm r}_j ),
+```
+where $R_{nl}$ is a radial embedding, possibly depending on a categorical 
+variable $\mu_j$ and $Y_l^m$ are spherical harmonics. 
+
+### Constructor
+```julia
+PooledSparseProduct(spec)
+```
+where `spec` is a list of $(k_1, \dots, k_N)$ tuples or vectors, or
+`AbstractMatrix` where each column specifies such a tuple.
+
+### Standalone usage
+
+Although `PooledSparseProduct` is the pooling stage of the ACE pipeline
+(`embed → pool → AA → 𝔹`), it is a self-contained layer with no dependence on
+graphs or the rest of ET: it simply consumes a tuple of input embeddings
+`BB = (Φ¹, …, Φᴺ)` (each `Φᵗ` a `nX × K_t` matrix over the `nX` inputs $x_j$)
+and pools them into the feature vector `A`. It can therefore be used on its own
+wherever a fused sparse tensor product + sum-pooling over a multi-set of inputs
+is needed:
+```julia
+basis = PooledSparseProduct(spec)
+A, _ = basis((Φ¹, Φ²), ps, st)      # A[k] = ∑ⱼ Φ¹[j, k₁] Φ²[j, k₂]
+```
+"""
+struct PooledSparseProduct{NB} <: AbstractETLayer 
+   spec::Vector{NTuple{NB, Int}}
+end
+
+function PooledSparseProduct()
+   return PooledSparseProduct(NTuple{NB, Int}[])
+end
+
+function PooledSparseProduct(spect::AbstractVector{<: Tuple})
+   return PooledSparseProduct(spect)
+end
+
+# each column defines a basis element
+function PooledSparseProduct(spec::AbstractMatrix{<: Integer})
+   @assert all(spec .> 0)
+   spect = [ Tuple(spec[:, i]...) for i = 1:size(spec, 2) ]
+   return PooledSparseProduct(spect)
+end
+
+Base.length(basis::PooledSparseProduct) = length(basis.spec)
+
+function Base.show(io::IO, basis::PooledSparseProduct{NB}) where {NB}
+   print(io, "PooledSparseProduct{$NB}(...)")
+end
+
+# (basis::PooledSparseProduct)(args...) = evaluate(basis, args...)
+
+# function evaluate(basis::PooledSparseProduct, BB)
+#    TV, nA = whatalloc(evaluate!, basis, BB)
+#    A = zeros(TV, nA) 
+#    evaluate!(A, basis, BB)
+#    return A
+# end
+
+
+# ----------------------- evaluation and allocation interfaces 
+
+_valtype(basis::PooledSparseProduct, BB::Tuple) = 
+      mapreduce(eltype, promote_type, BB)
+
+_gradtype(basis::PooledSparseProduct, BB::Tuple) = 
+      mapreduce(eltype, promote_type, BB)
+
+function _generate_input_1(basis::PooledSparseProduct{NB}) where {NB} 
+   NN = [ maximum(b[i] for b in basis.spec) for i = 1:NB ]
+   BB = ntuple(i -> randn(NN[i]), NB)
+   return BB 
+end 
+
+function _generate_input(basis::PooledSparseProduct{NB}; nX = rand(5:15)) where {NB} 
+   NN = [ maximum(b[i] for b in basis.spec) for i = 1:NB ]
+   BB = ntuple(i -> randn(nX, NN[i]), NB)
+   return BB 
+end 
+
+function _generate_batch(basis::PooledSparseProduct, args...; kwargs...) 
+   error("PooledSparseProduct is not implemented for batch inputs")
+end
+
+
+# ----------------------- evaluation kernels 
+
+# Valentin Churavy's Version (which we don't really understand)
+#
+# # Stolen from KernelAbstractions
+# import Base.Cartesian: @nexprs
+# import Adapt 
+# struct ConstAdaptor end
+# import Base.Experimental: @aliasscope
+# Adapt.adapt_storage(::ConstAdaptor, a::Array) = Base.Experimental.Const(a)
+# constify(arg) = Adapt.adapt(ConstAdaptor(), arg)
+# 
+# function evaluate!(A, basis::PooledSparseProduct{NB}, BB) where {NB}
+#    @assert length(BB) == NB
+#    # evaluate the 1p product basis functions and add/write into _A
+#    BB = constify(BB)
+#    spec = constify(basis.spec)
+#    @aliasscope begin # No store to A aliases any read from any B
+#       for (iA, ϕ) in enumerate(spec)
+#          @inbounds A[iA] += BB_prod(ϕ, BB)
+#       end
+#    end
+#    return nothing 
+# end
+
+const TupVec = Tuple{Vararg{AbstractVector}}
+const TupMat = Tuple{Vararg{AbstractMatrix}}
+# const TupMatGPU = Tuple{Vararg{AbstractMatrix}}
+const TupTen3 = Tuple{Vararg{AbstractArray{T, 3}}} where {T}
+const TupVecMat = Union{TupVec, TupMat}
+
+function whatalloc(evaluate!, basis::PooledSparseProduct{NB}, BB::TupVecMat) where {NB}
+   TV = _valtype(basis, BB)
+   nA = length(basis)
+   return (TV, nA) 
+end
+
+function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupVec) where {NB}
+   spec = basis.spec
+   @assert length(A) >= length(spec)
+   fill!(A, 0)
+   @inbounds for (iA, ϕ) in enumerate(spec)
+      b = ntuple(t -> BB[t][ϕ[t]], NB)
+      A[iA] = @fastmath(prod(b))
+   end
+   return A
+end
+
+using KernelAbstractions, GPUArraysCore
+using KernelAbstractions: @atomic
+
+function evaluate!(A, basis::PooledSparseProduct{NB}, BB::TupMat, 
+                   nX = size(BB[1], 1)) where {NB}
+   @assert all(B->size(B, 1) >= nX, BB)
+   spec = basis.spec
+   fill!(A, 0)
+   @inbounds for (iA, ϕ) in enumerate(spec)
+      a = zero(eltype(A))
+      @simd ivdep for j = 1:nX
+         b = ntuple(t -> BB[t][j, ϕ[t]], NB)
+         a += @fastmath(prod(b))
+      end
+      A[iA] = a
+   end
+   return A
+end
+
+evaluate!(A::AbstractGPUArray, basis::PooledSparseProduct{NB}, BB::TupMat, nX = size(BB[1], 1)) where {NB} = 
+		ka_evaluate!(A, basis, BB, nX)
+
+
+# special-casing NB = 1 for correctness 
+function evaluate!(A, basis::PooledSparseProduct{1}, 
+                   BB::Tuple{<: AbstractMatrix},
+                   nX = size(BB[1], 1))
+   @assert size(BB[1], 1) >= nX
+   BB1 = BB[1] 
+   spec = basis.spec
+   fill!(A, zero(eltype(A)))
+   @inbounds for (iA, ϕ) in enumerate(spec)
+      ϕ1 = ϕ[1]
+      a = zero(eltype(A))
+      @simd ivdep for j = 1:nX
+         b1 = BB1[j, ϕ1]
+         a += b1
+      end
+      A[iA] = a
+   end
+   return A
+end
+
+
+# special-casing NB = 2 for performance reasons
+function evaluate!(A, basis::PooledSparseProduct{2}, 
+                   BB::Tuple{<: AbstractMatrix, <: AbstractMatrix},
+                   nX = size(BB[1], 1))
+   @assert all(B->size(B, 1) >= nX, BB)
+   BB1, BB2 = BB
+   spec = basis.spec
+   fill!(A, zero(eltype(A)))
+   @inbounds for (iA, ϕ) in enumerate(spec)
+      ϕ1, ϕ2 = ϕ
+      a = zero(eltype(A))
+      @simd ivdep for j = 1:nX
+         b1 = BB1[j, ϕ1]
+         b2 = BB2[j, ϕ2]
+         a = muladd(b1, b2, a)
+      end
+      A[iA] = a
+   end
+   return A
+end
+
+# -------------------- reverse mode gradient
+
+using StaticArrays
+
+
+function whatalloc(::typeof(pullback!), 
+                   ∂A, basis::PooledSparseProduct{NB}, BB::TupMat) where  {NB}
+   TA = promote_type(eltype.(BB)..., eltype(∂A))
+   return ntuple(i -> (TA, size(BB[i])...), NB)                   
+end
+
+function whatalloc(::typeof(pullback!),
+                   ∂A, basis::PooledSparseProduct{NB}, BB::TupVec) where  {NB}
+   TA = promote_type(eltype.(BB)..., eltype(∂A))
+   return ntuple(i -> (TA, length(BB[i])), NB)
+end
+
+function pullback(∂A, basis::PooledSparseProduct, BB)
+   alc = whatalloc(pullback!, ∂A, basis, BB)
+   ∂BB = ntuple(i -> zeros(alc[i]...), length(BB))
+   pullback!(∂BB, ∂A, basis, BB)
+   return ∂BB
+end
+
+
+
+# Unpack positional ∂B args into a tuple for WithAlloc interface.
+# Generated for NB = 1..8.
+for _NB in 1:8
+   _∂Bs = [Symbol("∂B$i") for i in 1:_NB]
+   @eval pullback!($(Expr.(:(::), _∂Bs,
+                     :AbstractMatrix)...),
+                   ∂A, basis::PooledSparseProduct{$_NB},
+                   BB::TupMat) =
+      pullback!(($(Expr.(:tuple, _∂Bs...))), ∂A, basis, BB)
+end
+
+@generated function pullback!(
+      ∂BB::Tuple, ∂A,
+      basis::PooledSparseProduct{NB}, BB::TupMat,
+      ) where {NB}
+
+   # unpack BB and ∂BB into local variables
+   unpack_BB = [:($(Symbol("B$i")) = BB[$i]) for i in 1:NB]
+   unpack_∂BB = [:($(Symbol("∂B$i")) = ∂BB[$i])
+                  for i in 1:NB]
+
+   # extract spec indices
+   unpack_ϕ = [:($(Symbol("ϕ$i")) = ϕ[$i]) for i in 1:NB]
+
+   # read b values from BB
+   read_b = [:($(Symbol("b$i")) =
+               $(Symbol("B$i"))[j, $(Symbol("ϕ$i"))])
+             for i in 1:NB]
+
+   # gradient accumulation expressions
+   if NB == 1
+      grad_exprs = [:(∂B1[j, ϕ1] += ∂A_iA)]
+   else
+      grad_exprs = Expr[]
+      for i in 1:NB
+         others = [Symbol("b$k") for k in 1:NB if k != i]
+         prod_ex = others[1]
+         for k in 2:length(others)
+            prod_ex = :($prod_ex * $(others[k]))
+         end
+         ∂Bi = Symbol("∂B$i")
+         ϕi = Symbol("ϕ$i")
+         push!(grad_exprs,
+            :($∂Bi[j, $ϕi] = muladd(
+               ∂A_iA, $prod_ex, $∂Bi[j, $ϕi])))
+      end
+   end
+
+   quote
+      nX = size(BB[1], 1)
+      @assert length(∂A) == length(basis)
+      @assert length(BB) == length(∂BB) == $NB
+      $(unpack_BB...)
+      $(unpack_∂BB...)
+      for i = 1:$NB
+         fill!(∂BB[i], zero(eltype(∂BB[i])))
+      end
+      @inbounds for (iA, ϕ) in enumerate(basis.spec)
+         ∂A_iA = ∂A[iA]
+         $(unpack_ϕ...)
+         @simd ivdep for j = 1:nX
+            $(read_b...)
+            $(grad_exprs...)
+         end
+      end
+      return ∂BB
+   end
+end
+
+
+# ---------------------------------------------------------------
+#  reverse over reverse 
+
+#    A = evaluate(basis, BB)
+#  ∂BB = pullback(∂A, basis, BB) 
+# ∂∂BB is the perturbation to ∂BB
+
+function whatalloc(::typeof(pullback2!), ∂∂BB, ∂A, 
+                   basis::PooledSparseProduct{NB}, BB) where {NB}
+   TA = promote_type(eltype.(BB)..., eltype(∂A), eltype.(∂∂BB)...)
+   return ( (TA, size(∂A)...), 
+            ntuple(i -> (TA, size(BB[i])...), NB)...)
+end
+
+# function pullback2(∂A, basis::PooledSparseProduct, BB)
+#    alc = whatalloc(pullback!, ∂A, basis, BB)
+#    ∂BB = ntuple(i -> zeros(alc[i]...), length(BB))
+#    pullback!(∂BB, ∂A, basis, BB)
+#    return ∂BB
+# end
+
+
+# Unpack positional ∇_BB args into a tuple for WithAlloc.
+for _NB in 1:8
+   _∇s = [Symbol("∇_BB$i") for i in 1:_NB]
+   _typed = [Expr(:(::), s, :AbstractMatrix) for s in _∇s]
+   @eval pullback2!(∇_∂A, $(_typed...), ∂∂BB, ∂A,
+                    basis::PooledSparseProduct{$_NB}, BB) =
+      pullback2!(∇_∂A, ($(Expr.(:tuple, _∇s...))),
+                 ∂∂BB, ∂A, basis, BB)
+end
+
+
+function pullback2!(∇_∂A, ∇_BB::Tuple,  # outputs 
+                    ∂∂BB,    # perturbation 
+                    ∂A, basis::PooledSparseProduct{NB}, BB)  where {NB}
+
+   function _dual(i)
+      T = promote_type(eltype(BB[i]), eltype(∂∂BB[i]))
+      return Dual{T}(zero(T), one(T))
+   end
+
+   @no_escape begin 
+      dd = ntuple(_dual, NB)
+      BB_d = ntuple(i -> @alloc(typeof(dd[i]), size(BB[i])...), NB)
+      for i = 1:NB
+         @inbounds for t = 1:length(BB[i])
+            BB_d[i][t] = BB[i][t] + dd[i] * ∂∂BB[i][t]
+         end
+      end
+      A_d = @withalloc evaluate!(basis, BB_d)
+      ∂BB_d = @withalloc pullback!(∂A, basis, BB_d)
+      @inbounds for t = 1:length(A_d)
+         ∇_∂A[t] = extract_derivative(eltype(∇_∂A), A_d[t])
+      end
+      @inbounds for i = 1:NB
+         for t = 1:length(∂BB_d[i])
+            Ti = eltype(∇_BB[i])
+            ∇_BB[i][t] = extract_derivative(Ti, ∂BB_d[i][t])
+         end
+      end
+   end
+   return ∇_∂A, ∇_BB
+end
+
+
+# ---------------------------------------------------------------
+#  Pushforward  
+
+using ForwardDiff: value
+
+function whatalloc(::typeof(pushforward!), 
+                   basis::PooledSparseProduct{NB}, BB, ∂BB) where {NB}
+   TA = promote_type(eltype.(BB)...) 
+   T∂A = promote_type(TA, eltype.(∂BB)...)
+   return (TA, length(basis)), (T∂A, length(basis))
+end
+
+function pushforward!(A::AbstractVector, ∂A, 
+                      basis::PooledSparseProduct{NB}, 
+                      BB::TupMat, ∂BB) where {NB}
+
+   function _dual(i)
+      T = promote_type(eltype(BB[i]), eltype(∂BB[i]))
+      return Dual{T}(zero(T), one(T))
+   end
+
+   @no_escape begin 
+      dd = ntuple(_dual, NB)
+      BB_d = ntuple(i -> @alloc(typeof(dd[i]), size(BB[i])...), NB)
+      for i = 1:NB
+         @inbounds for t = 1:length(BB[i])
+            BB_d[i][t] = BB[i][t] + dd[i] * ∂BB[i][t]
+         end
+      end
+      A_d = @withalloc evaluate!(basis, BB_d)
+      for t = 1:length(A_d)
+         A[t] = value(eltype(A), A_d[t])
+         ∂A[t] = extract_derivative(eltype(∂A), A_d[t])
+      end
+   end
+   return A, ∂A 
+end
+
+#
+# A kind of pushforward, but very specific, used to compute Jacobians. 
+#
+# This internal function doesn't just compute a basic pushforward for a 
+# simple unidirectional perturbation of BB but computes the full Jacobian 
+#   ∂A / ∂X  
+# where X are the inputs from which BB are computed. 
+#
+# The implicit assumption is that the Rnl, Ylm come in a very specific format 
+# which is specific to ACE models, i.e. each Rnl^ij = Rnl(xij) and so forth. 
+# this significantly simplifies the bookkeeping, but also means this 
+# pushforward is not generic but only specific to ACE models. 
+#
+# For simplicity, this is an implementation for NB = 2 only. Once this 
+# is verified to be correct, we can generalize it to arbitrary NB.
+#
+# Documenting some information about inputs and output:  
+#
+# BB = (Rnl, Ylm) 
+# with each of these coming in the format (maxneigs, nnodes, nfeatures)
+# The output will be 
+#    A : nnodes x nfeat(A) 
+#    ∂A : maxneigs x nnodes x nfeat(A) 
+#
+function _jacobian_X(basis::PooledSparseProduct{2},
+                     BB::TupTen3, ∂BB::TupTen3, 
+                     spec = basis.spec)
+   
+   Rnl, Ylm = BB 
+   ∂Rnl, ∂Ylm = ∂BB 
+   maxneigs, nnodes, lenR = size(Rnl) 
+   _, _, lenY = size(Ylm)
+   nA = length(basis)
+   @assert size(∂Rnl) == (maxneigs, nnodes, lenR)
+   @assert size(∂Ylm) == (maxneigs, nnodes, lenY)
+
+   # allocate output 
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   T∂A = promote_type(TA, eltype(∂Rnl), eltype(∂Ylm))
+   A = similar(Rnl, TA, (nnodes, nA))
+   ∂A = similar(Rnl, T∂A, (maxneigs, nnodes, nA))
+
+   _jacobian_X!(A, ∂A, basis, spec, Rnl, ∂Rnl, Ylm, ∂Ylm)
+
+   return A, ∂A
+end
+
+function _jacobian_X!(A::AbstractArray, ∂A::AbstractArray, 
+                       basis::PooledSparseProduct{2},
+                       spec, 
+                       Rnl, ∂Rnl, Ylm, ∂Ylm, )
+
+   maxneigs, nnodes, _ = size(Rnl) 
+
+   @inbounds for (iA, (ϕR, ϕY)) in enumerate(spec)
+      for i = 1:nnodes 
+         a = zero(eltype(A))
+         @simd ivdep for j = 1:maxneigs
+            bR = Rnl[j, i, ϕR]
+            bY = Ylm[j, i, ϕY]
+            a = muladd(bR, bY, a)
+
+            ∂bR = ∂Rnl[j, i, ϕR]
+            ∂bY = ∂Ylm[j, i, ϕY]
+            ∂A[j, i, iA] = ∂bR * bY + bR * ∂bY
+         end
+         A[i, iA] = a
+      end
+   end
+   return nothing 
+end 
+
+# --------------------- connect with ChainRules 
+# can this be generalized again? 
+
+
+import ChainRulesCore: rrule, NoTangent
+
+function rrule(::typeof(evaluate), basis::PooledSparseProduct{NB}, BB::TupMat) where {NB}
+   A = evaluate(basis, BB)
+
+   function pb(Δ)
+      ∂BB = pullback(Δ, basis, BB)
+      return NoTangent(), NoTangent(), ∂BB
+   end 
+
+   return A, pb 
+end
+
+
+function rrule(::typeof(pullback), Δ, basis::PooledSparseProduct, BB)
+   ∂BB = pullback(Δ, basis, BB)
+
+   function pb(Δ2)
+      ∂2_Δ, ∂2_BB = pullback2(Δ2, Δ, basis, BB)
+      return NoTangent(), ∂2_Δ, NoTangent(), ∂2_BB
+   end
+
+   return ∂BB, pb
+end
+
+# --------------------- frules for forward-mode AD
+
+import ChainRulesCore: frule, Tangent
+
+function frule((_, Δbasis, ΔBB), ::typeof(evaluate), basis::PooledSparseProduct, BB)
+   A = evaluate(basis, BB)
+   # Use existing pushforward! implementation
+   _, ∂A = @withalloc pushforward!(basis, BB, ΔBB)
+   return A, ∂A
+end
+
+function frule((_, Δbasis, ΔBB), ::typeof(evaluate!), A, basis::PooledSparseProduct, BB)
+   evaluate!(A, basis, BB)
+   # Use existing pushforward! implementation
+   _, ∂A = @withalloc pushforward!(basis, BB, ΔBB)
+   return A, ∂A
+end
+
+
+# --------------------- connect with Lux 
+# it looks like we could use the standard P4ML basis wrapper 
+# but technically the pooling operation changes the behaviour in
+# a few ways and we need to be very careful about this
+
+import LuxCore: AbstractLuxLayer, initialparameters, initialstates
+
+struct PooledSparseProductLayer{NB} <: AbstractLuxLayer 
+   basis::PooledSparseProduct{NB}
+   meta::Dict{String, Any}
+end
+
+function lux(basis::PooledSparseProduct; 
+               name = String(nameof(typeof(basis))), 
+               meta = Dict{String, Any}("name" => name))
+   @assert haskey(meta, "name")
+   return PooledSparseProductLayer(basis, meta)
+end
+
+initialparameters(rng::AbstractRNG, layer::PooledSparseProductLayer) = 
+      NamedTuple() 
+
+initialstates(rng::AbstractRNG, layer::PooledSparseProductLayer) =
+      NamedTuple()
+
+(l::PooledSparseProductLayer)(BB, ps, st) = begin
+   out = evaluate(l.basis, BB)
+   return out, st
+end
+
+
+# --------------------- prototype batched evaluation (for testing only) 
+
+function evaluate(basis::PooledSparseProduct{NB}, BB::TupTen3) where {NB}
+   nneigs = size(BB[1], 1) 
+   nnodes = size(BB[1], 2) 
+   A = zeros(eltype(BB[1]), nnodes, length(basis))
+   for i = 1:nnodes 
+      A[i, :] = evaluate(basis, ntuple(j -> BB[j][:, i, :], NB))
+   end 
+   return A 
+end
+
+function pullback(∂A, basis::PooledSparseProduct{NB}, BB::TupTen3) where {NB}
+   nneigs = size(BB[1], 1) 
+   nnodes = size(BB[1], 2) 
+   ∂BB = ntuple(i -> similar(BB[i]), NB)
+   for i = 1:nnodes 
+      ∂BB_i = pullback(∂A[i, :], basis, ntuple(j -> BB[j][:, i, :], NB))
+      for t = 1:NB 
+         ∂BB[t][:, i, :] = ∂BB_i[t]
+      end      
+   end 
+   return ∂BB
+end

@@ -47,3 +47,8 @@ function _make_smatrix(obj, NZ)
    end
    return SMatrix{NZ, NZ}(fill(obj, (NZ, NZ)))
 end
+
+
+# bond-length heuristics for chemical species; methods are provided by
+# ext/AtomsBaseExt (triggered by loading AtomsBase)
+function bond_len end
