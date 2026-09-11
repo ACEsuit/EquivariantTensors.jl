@@ -1,5 +1,5 @@
 using Rotations
-import PartialWaveFunctions, WignerD 
+import PartialWaveFunctions
 
 #  NOTE: Ctran(L) is the transformation matrix from rSH to cSH. More specifically, 
 #        if we write Polynomials4ML rSH as R_{lm} and cSH as Y_{lm} and their 
@@ -214,28 +214,9 @@ function Q_from_angles(θ::AbstractVector{<: Real})
    return Rotations.RotZYZ(θ...)
 end
 
-function D_from_angles(l::Integer, θ::AbstractVector{<: Real}, ::typeof(complex))
-   @assert length(θ) == 3
-   return conj.(WignerD.wignerD(l, θ...))
-end
-
-"""
-   D_from_angles(l, θ, basis)
-
-Here, `l::Integer` and `θ` a 3-element vector or tuple, `basis` must be either 
-`real` or `complex`. Output is a Wigner-D matrix such that `y ∘ Q = D * y` 
-with `y` real/complex spherical harmonics. 
-"""
-function D_from_angles(l::Integer, θ::AbstractVector{<: Real}, ::typeof(real))
-   @assert length(θ) == 3
-   cD = WignerD.wignerD(l, θ...)
-   T = Ctran(l)
-   return real.(T * conj.( cD ) * T')
-end
-
-"""
-produces a rotation Q and Wigner-D matrix D such that `y ∘ Q = D * y` with `y`
-real spherical harmonics. 
-"""
-QD_from_angles(l::Integer, θ::AbstractVector{<: Real}, RC) = 
-         Q_from_angles(θ), D_from_angles(l, θ, RC)
+# NOTE: `D_from_angles` and `QD_from_angles` used to live here. They construct 
+#       a Wigner-D matrix via WignerD.jl so that equivariance can be checked as 
+#       `y ∘ Q = D * y`. They had no callers in `src/`, were not exported, and 
+#       were used only by the test suite, so they now live in 
+#       `test/test_utils/utils_testO3.jl` and WignerD.jl is a test-only 
+#       dependency.

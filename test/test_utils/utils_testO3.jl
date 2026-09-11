@@ -2,6 +2,8 @@ using Test, SpheriCart, StaticArrays, BlockDiagonals
 using SpheriCart: idx2lm, lm2idx 
 using EquivariantTensors.O3: Ctran
 using ACEbase.Testing: println_slim, print_tf
+import WignerD
+import EquivariantTensors: O3
 
 ##
 
@@ -286,6 +288,43 @@ function eval_basis(ll, Ure, Mll, X; Real = true)
  
     return val 
 end
+
+# -----------------------------------------------------------------
+#  complex and real D matrices 
+#
+#  These construct a Wigner-D matrix such that `y ∘ Q = D * y`, which is how 
+#  the tests check equivariance. They lived in `src/O3/O3_utils.jl` until it 
+#  became clear they had no callers there: keeping them in `src/` made 
+#  WignerD.jl a hard dependency of the package, and WignerD pins 
+#  StructArrays <= 0.6, which conflicts with other packages users may want 
+#  alongside EquivariantTensors. The rotation `Q_from_angles` needs only 
+#  Rotations.jl and stays in `O3_utils.jl`.
+
+"""
+   D_from_angles(l, θ, basis)
+
+Here, `l::Integer` and `θ` a 3-element vector or tuple, `basis` must be either 
+`real` or `complex`. Output is a Wigner-D matrix such that `y ∘ Q = D * y` 
+with `y` real/complex spherical harmonics. 
+"""
+function D_from_angles(l::Integer, θ::AbstractVector{<: Real}, ::typeof(complex))
+   @assert length(θ) == 3
+   return conj.(WignerD.wignerD(l, θ...))
+end
+
+function D_from_angles(l::Integer, θ::AbstractVector{<: Real}, ::typeof(real))
+   @assert length(θ) == 3
+   cD = WignerD.wignerD(l, θ...)
+   T = Ctran(l)
+   return real.(T * conj.( cD ) * T')
+end
+
+"""
+produces a rotation Q and Wigner-D matrix D such that `y ∘ Q = D * y` with `y`
+real spherical harmonics. 
+"""
+QD_from_angles(l::Integer, θ::AbstractVector{<: Real}, RC) = 
+         O3.Q_from_angles(θ), D_from_angles(l, θ, RC)
 
 global ___UTILS_TESTO3___ = true 
 
