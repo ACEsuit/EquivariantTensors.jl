@@ -1,5 +1,5 @@
 
-using SparseArrays: SparseMatrixCSC
+using SparseArrays: SparseMatrixCSC, nzrange, rowvals, nonzeros
 using LinearAlgebra: mul!
 import ChainRulesCore: NoTangent, rrule, ZeroTangent
 import LuxCore: AbstractLuxLayer, initialparameters, initialstates, apply 
@@ -174,6 +174,101 @@ function pullback(∂BB, tensor::SparseACEbasis{T}, Rnl, Ylm, A) where {T}
    ∂Rnl = zeros(alc_∂Rnl...)
    ∂Ylm = zeros(alc_∂Ylm...)
    return pullback!(∂Rnl, ∂Ylm, ∂BB, tensor, Rnl, Ylm, A)
+end
+
+
+# --------------------------------------------------------
+#  Row-wise pushforward (Jacobian w.r.t. the per-row inputs)
+#
+#  Rnl, Ylm : nX x #R, nX x #Y single-node embeddings (one row per neighbour)
+#  ∂Rnl, ∂Ylm : one tangent per row, e.g. ∂Rnl[j, n] = ∂Rnl[j, n] / ∂𝐫_j 
+#               as an SVector{3}; any tangent type with T * T∂ -> T∂ works 
+#  B  : length(tensor) 
+#  ∂B : nX x length(tensor), ∂B[j, k] = ∑_t ∂B[k]/∂BB[t][j, :] ⋅ ∂BB[t][j, :]
+#
+#  This composes the row-wise pushforwards of the A and AA bases with the 
+#  coupling map. Only a single scalar (L = 0) output is supported, as for 
+#  `_jacobian_X`; for L > 0 the tangents would have to be outer products.
+
+function whatalloc(::typeof(pushforward_rows!), 
+                   tensor::SparseACEbasis, Rnl, Ylm, ∂Rnl, ∂Ylm)
+   @assert length(tensor.A2Bmaps) == 1 "pushforward_rows! supports a single (L = 0) output"
+   A2Bmap = tensor.A2Bmaps[1]
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   TB = _promote_mul_type(eltype(A2Bmap), TA)
+   T∂A = _rows_tangent_type(TA, (∂Rnl, ∂Ylm))
+   T∂B = _promote_mul_type(TB, T∂A)
+   nX = size(Rnl, 1)
+   return (TB, length(tensor)), (T∂B, nX, length(tensor))
+end
+
+function pushforward_rows!(B::AbstractVector, ∂B::AbstractMatrix, 
+                           tensor::SparseACEbasis, 
+                           Rnl::AbstractMatrix, Ylm::AbstractMatrix, 
+                           ∂Rnl::AbstractMatrix, ∂Ylm::AbstractMatrix)
+   @assert length(tensor.A2Bmaps) == 1 "pushforward_rows! supports a single (L = 0) output"
+   A2Bmap = tensor.A2Bmaps[1]
+   nX = size(Rnl, 1)
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   T∂A = _rows_tangent_type(TA, (∂Rnl, ∂Ylm))
+   @no_escape begin 
+      A = @alloc(TA, length(tensor.abasis))
+      ∂A = @alloc(T∂A, nX, length(tensor.abasis))
+      pushforward_rows!(A, ∂A, tensor.abasis, (Rnl, Ylm), (∂Rnl, ∂Ylm))
+      AA = @alloc(TA, length(tensor.aabasis))
+      ∂AA = @alloc(T∂A, nX, length(tensor.aabasis))
+      pushforward_rows!(AA, ∂AA, tensor.aabasis, A, ∂A)
+      _pushforward_rows_A2B!(B, ∂B, A2Bmap, AA, ∂AA)
+   end 
+   return B, ∂B
+end
+
+function pushforward_rows(tensor::SparseACEbasis, Rnl, Ylm, ∂Rnl, ∂Ylm)
+   alc_B, alc_∂B = whatalloc(pushforward_rows!, tensor, Rnl, Ylm, ∂Rnl, ∂Ylm)
+   B = zeros(alc_B...)
+   ∂B = zeros(alc_∂B...)
+   return pushforward_rows!(B, ∂B, tensor, Rnl, Ylm, ∂Rnl, ∂Ylm)
+end
+
+# B = A2B * AA;  ∂B[j, k] = ∑_iAA A2B[k, iAA] ∂AA[j, iAA]
+function _pushforward_rows_A2B!(B::AbstractVector, ∂B::AbstractMatrix, 
+                                A2B::SparseMatrixCSC, 
+                                AA::AbstractVector, ∂AA::AbstractMatrix)
+   nX = size(∂AA, 1)
+   @assert size(A2B, 2) == length(AA) == size(∂AA, 2)
+   @assert length(B) == size(A2B, 1) && size(∂B) == (nX, size(A2B, 1))
+   fill!(B, zero(eltype(B)))
+   fill!(∂B, zero(eltype(∂B)))
+   rv = rowvals(A2B); nz = nonzeros(A2B)
+   @inbounds for iAA = 1:size(A2B, 2)
+      aa = AA[iAA]
+      for p in nzrange(A2B, iAA)
+         k = rv[p]; c = nz[p]
+         B[k] += c * aa
+         @simd ivdep for j = 1:nX
+            ∂B[j, k] += c * ∂AA[j, iAA]
+         end
+      end
+   end
+   return B, ∂B
+end
+
+# generic fallback for a dense (or otherwise non-CSC) coupling matrix
+function _pushforward_rows_A2B!(B::AbstractVector, ∂B::AbstractMatrix, 
+                                A2B::AbstractMatrix, 
+                                AA::AbstractVector, ∂AA::AbstractMatrix)
+   nX = size(∂AA, 1)
+   @assert size(A2B, 2) == length(AA) == size(∂AA, 2)
+   @assert length(B) == size(A2B, 1) && size(∂B) == (nX, size(A2B, 1))
+   mul!(B, A2B, AA)
+   @inbounds for k = 1:size(A2B, 1), j = 1:nX
+      d = zero(eltype(∂B))
+      for iAA = 1:size(A2B, 2)
+         d += A2B[k, iAA] * ∂AA[j, iAA]
+      end
+      ∂B[j, k] = d
+   end
+   return B, ∂B
 end
 
 

@@ -290,6 +290,71 @@ function pushforward!(AA, ∂AA, basis::SparseSymmProd,
 end
 
 
+# -------------- Row-wise pushforward 
+#
+# `A` is a single (pooled) input, `∂A` holds one tangent per row j, 
+# ∂A[j, :] (e.g. the Jacobian of A w.r.t. the j-th neighbour, cf. the 
+# row-wise pushforward of `PooledSparseProduct`). Then 
+#
+#    AA[iAA]     = ∏_t A[ϕ[t]]
+#    ∂AA[j, iAA] = ∑_t (∏_{s≠t} A[ϕ[s]]) ∂A[j, ϕ[t]]
+#
+# The tangent type only needs to satisfy T * T∂ -> T∂. This is the 
+# single-node, in-place counterpart of the batched `_jacobian_X`. 
+
+function whatalloc(::typeof(pushforward_rows!), 
+                   basis::SparseSymmProd, 
+                   A::AbstractVector, ∂A::AbstractMatrix)
+   nAA = length(basis)
+   TAA = _valtype(basis, eltype(A))
+   T∂AA = _promote_mul_type(TAA, eltype(∂A))
+   nX = size(∂A, 1)
+   return (TAA, nAA), (T∂AA, nX, nAA)
+end
+
+@generated function pushforward_rows!(AA::AbstractVector, ∂AA::AbstractMatrix, 
+                                      basis::SparseSymmProd{ORD}, 
+                                      A::AbstractVector, ∂A::AbstractMatrix
+                                      ) where {ORD}
+   quote 
+      nX = size(∂A, 1)
+      @assert size(∂A, 2) == length(A)
+      @assert length(AA) >= length(basis)
+      @assert size(∂AA, 1) == nX && size(∂AA, 2) >= length(basis)
+      if basis.hasconst
+         AA[1] = one(eltype(AA))
+         @inbounds for j = 1:nX 
+            ∂AA[j, 1] = zero(eltype(∂AA))
+         end
+      end
+      @nexprs $ORD N -> _pushforward_rows_AA!(AA, ∂AA, 
+                                              basis.ranges[N], basis.specs[N], 
+                                              A, ∂A, nX)
+      return AA, ∂AA
+   end
+end
+
+function _pushforward_rows_AA!(AA::AbstractVector, ∂AA::AbstractMatrix, 
+                               iiAA,   # index range for order N
+                               spec::Vector{NTuple{N, Int}},  # spec for order N 
+                               A::AbstractVector, ∂A::AbstractMatrix, 
+                               nX::Integer) where {N}
+   @assert length(iiAA) == length(spec)
+   TAA = eltype(AA)
+   @inbounds for (iAA, ϕ) in zip(iiAA, spec)
+      Avals = ntuple(t -> TAA(A[ϕ[t]]), N)
+      # aa = ∏ₜ A[ϕ[t]],  ∇aa[t] = ∂aa / ∂A[ϕ[t]]
+      aa, ∇aa = _static_prod_ed(Avals) 
+      AA[iAA] = aa
+      @simd ivdep for j = 1:nX
+         ∂Avals = ntuple(t -> ∂A[j, ϕ[t]], N)
+         ∂AA[j, iAA] = _static_dot(∇aa, ∂Avals)
+      end
+   end
+   return nothing 
+end
+
+
 #
 # a kind of pushforward, but very specific, used to compute Jacobians.
 # see _jacobian_X(basis::PooledSparseProduct{2}, ...) for more details.

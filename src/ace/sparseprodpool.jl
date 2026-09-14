@@ -401,6 +401,58 @@ function pushforward!(A::AbstractVector, ∂A,
    return A, ∂A 
 end
 
+# ---------------------------------------------------------------
+#  Row-wise pushforward 
+#
+# `pushforward!` propagates a single tangent through the product and the 
+# pooling, i.e. ∂A[iA] = ∑_j ∑_t (∏_{s≠t} BB[s][j, ϕ[s]]) ∂BB[t][j, ϕ[t]]. 
+# `pushforward_rows!` keeps one tangent per input row j (per neighbour / 
+# edge in an ACE model) and does not sum over j: 
+#
+#    A[iA]    = ∑_j ∏_t BB[t][j, ϕ[t]]
+#    ∂A[j, iA] = ∑_t (∏_{s≠t} BB[s][j, ϕ[s]]) ∂BB[t][j, ϕ[t]]
+#
+# The tangent element types only need to satisfy T * T∂ -> T∂, so that with 
+# SVector{3} tangents ∂BB[t][j, :] = ∂BB[t][j, :] / ∂𝐫_j the output is the 
+# Jacobian ∂A / ∂𝐫_j. This is the single-node, in-place counterpart of the 
+# batched `_jacobian_X`, but generic in NB and in the tangent type. 
+
+_rows_tangent_type(TA, ∂BB::Tuple) = 
+      mapreduce(∂B -> _promote_mul_type(TA, eltype(∂B)), promote_type, ∂BB)
+
+function whatalloc(::typeof(pushforward_rows!), 
+                   basis::PooledSparseProduct{NB}, 
+                   BB::TupMat, ∂BB::TupMat) where {NB}
+   TA = _valtype(basis, BB)
+   T∂A = _rows_tangent_type(TA, ∂BB)
+   nX = size(BB[1], 1)
+   return (TA, length(basis)), (T∂A, nX, length(basis))
+end
+
+function pushforward_rows!(A::AbstractVector, ∂A::AbstractMatrix, 
+                           basis::PooledSparseProduct{NB}, 
+                           BB::TupMat, ∂BB::TupMat) where {NB}
+   nX = size(BB[1], 1)
+   @assert length(BB) == length(∂BB) == NB
+   @assert all(B -> size(B, 1) == nX, BB) && all(B -> size(B, 1) == nX, ∂BB)
+   @assert length(A) >= length(basis)
+   @assert size(∂A, 1) == nX && size(∂A, 2) >= length(basis)
+   TA = eltype(A)
+   @inbounds for (iA, ϕ) in enumerate(basis.spec)
+      a = zero(TA)
+      @simd ivdep for j = 1:nX
+         b = ntuple(t -> TA(BB[t][j, ϕ[t]]), NB)
+         ∂b = ntuple(t -> ∂BB[t][j, ϕ[t]], NB)
+         p, g = _static_prod_ed(b)
+         a += p
+         ∂A[j, iA] = _static_dot(g, ∂b)
+      end
+      A[iA] = a
+   end
+   return A, ∂A
+end
+
+
 #
 # A kind of pushforward, but very specific, used to compute Jacobians. 
 #
