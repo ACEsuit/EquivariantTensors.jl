@@ -43,6 +43,10 @@ function sparse_equivariant_tensors(;
    Aspec = sort( unique( reduce(vcat, 𝔸spec) ) )
    Aspec_raw = _make_idx_A_spec(Aspec, Rnl_spec, Ylm_spec)
    𝔸spec_raw = _make_idx_AA_spec(𝔸spec, Aspec)
+   # guard the invariant the fix above establishes: if this ever fails, the 
+   # columns of `symm` and the outputs of `𝔸basis` are misaligned again.
+   @assert issorted(𝔸spec_raw, by = length)
+
    Abasis = PooledSparseProduct(Aspec_raw)
    𝔸basis = SparseSymmProd(𝔸spec_raw)
 
@@ -79,6 +83,21 @@ function sparse_equivariant_tensor(;
    symm, 𝔸spec = symmetrisation_matrix(L, mb_spec; 
                                        prune = true, PI = true, basis = basis)
 
+   # `SparseSymmProd` re-sorts its spec by correlation order (sparsesymmprod.jl: 
+   # `if !issorted(spec, by=length); spec = sort(spec, by=length)`). The columns 
+   # of `symm` index 𝔸spec in its ORIGINAL order, so unless the same permutation 
+   # is applied here the two disagree and the resulting basis is silently 
+   # non-equivariant -- correct shapes, wrong values, nothing raised. Sorting 
+   # now (rather than relying on `sort` and `sortperm` breaking ties identically) 
+   # means SparseSymmProd sees a sorted spec and leaves it alone. 
+   # `sparse_equivariant_tensors` already does the equivalent; this is the 
+   # singular version catching up.
+   # Use the same total order as `sparse_equivariant_tensors` so the basis is 
+   # canonical: the output no longer depends on the order `mb_spec` arrived in.
+   p = sortperm(𝔸spec, by = bb -> (length(bb), bb))
+   𝔸spec = 𝔸spec[p]
+   symm = symm[:, p]
+
    # now we work backwards to generate the Aspec 
    Aspec = sort( unique( reduce(vcat, 𝔸spec) ) )
    
@@ -89,6 +108,10 @@ function sparse_equivariant_tensor(;
    𝔸spec_raw = _make_idx_AA_spec(𝔸spec, Aspec)
 
    # now we have all information ready to generate the equivariant tensor 
+   # guard the invariant the fix above establishes: if this ever fails, the 
+   # columns of `symm` and the outputs of `𝔸basis` are misaligned again.
+   @assert issorted(𝔸spec_raw, by = length)
+
    Abasis = PooledSparseProduct(Aspec_raw)
    𝔸basis = SparseSymmProd(𝔸spec_raw)
    
