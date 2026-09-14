@@ -16,6 +16,14 @@ function _static_prod_ed(b::NTuple{1, T}) where {T <: Number}
 end
 
 
+# ∑ₜ g[t] * ∂b[t] for a tuple of scalars g and a tuple of tangents ∂b; the
+# tangent type only needs to support T * T∂ -> T∂ (e.g. SVector{3, T}).
+_static_dot(g::NTuple{1}, ∂b::NTuple{1}) = g[1] * ∂b[1]
+
+_static_dot(g::NTuple{N}, ∂b::NTuple{N}) where {N} = 
+      g[1] * ∂b[1] + _static_dot(Base.tail(g), Base.tail(∂b))
+
+
 function _static_prod_ed2(b::NTuple{N, T}) where {N, T <: Number}
    b2 = b[2:N]
    p2, g2, h22 = _static_prod_ed2(b2)

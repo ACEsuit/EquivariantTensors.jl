@@ -24,6 +24,7 @@ end
     @testset "StaticProd" begin include("ace/test_static_prod.jl"); end 
     @testset "SparseProdPool" begin include("ace/test_sparseprodpool.jl"); end 
     @testset "SparseSymmetricProduct" begin include("ace/test_sparsesymmprod.jl"); end 
+    @testset "PushforwardRows" begin include("ace/test_pushforward_rows.jl"); end 
     @testset "SparseMatrix-KA" begin include("ace/test_sparsemat_ka.jl"); end
 end
 
