@@ -21,7 +21,7 @@ inva = invmap(a)
 inva[a[i]] == i  # true for all i
 ```
 """
-function invmap(a::AbstractVector, hashfcn = identity)
+function invmap(a::AbstractVector, hashfcn::F = identity) where {F}
    h = hashfcn.(a)
    p = sortperm(h) 
    permute!(h, p)

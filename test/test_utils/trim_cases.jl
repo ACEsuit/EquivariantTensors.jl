@@ -10,18 +10,22 @@ const TRIM_CASES = [(2, 2, 2), (2, 2, 3), (1, 2, 4), (1, 1, 5), (1, 0, 8)]
 function trim_mb_spec(maxn::Int, maxl::Int, ord::Int)
    chans = [(n = n, l = l) for l in 0:maxl for n in 1:maxn]
    mb = Vector{TRIM_NL}[]
-   bb = TRIM_NL[]
-   function rec(start::Int)
-      if !isempty(bb) && iseven(sum(b.l for b in bb))
-         push!(mb, copy(bb))
-      end
-      length(bb) == ord && return
-      for i in start:length(chans)
-         push!(bb, chans[i]); rec(i); pop!(bb)
-      end
-   end
-   rec(1)
+   _trim_rec!(mb, TRIM_NL[], chans, ord, 1)
    return mb
+end
+
+# (a top-level recursive function, not a closure: a recursive closure is boxed,
+# which --trim cannot resolve)
+function _trim_rec!(mb::Vector{Vector{TRIM_NL}}, bb::Vector{TRIM_NL}, chans::Vector{TRIM_NL},
+                    ord::Int, start::Int)
+   if !isempty(bb) && iseven(sum(b.l for b in bb))
+      push!(mb, copy(bb))
+   end
+   length(bb) == ord && return
+   for i in start:length(chans)
+      push!(bb, chans[i]); _trim_rec!(mb, bb, chans, ord, i); pop!(bb)
+   end
+   return
 end
 
 trim_rnl(maxn::Int, maxl::Int) = TRIM_NL[(n = n, l = l) for l in 0:maxl for n in 1:maxn]

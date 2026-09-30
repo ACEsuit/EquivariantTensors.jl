@@ -73,7 +73,7 @@ end
 # (2) or the only one element that can possibly be non-zero on the above vector.
 # I suspect that the first option will not be used anyhow, but I keep it for now.
 function GCG(ll::SVector{N,Int64}, mm::SVector{N,Int64}, LL::SVector{N,Int64};
-             vectorize::Bool=true, basis = complex) where N 
+             vectorize::Bool=true, basis::B = complex) where {N, B}
     if basis === complex
         return (vectorize ? (GCG(ll, mm, LL, sum(mm), basis) * 
                                 Float64.(I(2*LL[N]+1)[sum(mm)+LL[N]+1,:])) 
@@ -97,7 +97,7 @@ function GCG(ll::SVector{N,Int64}, mm::SVector{N,Int64}, LL::SVector{N,Int64};
 
         return LL[N] == 0 ? real(C[1]) : real(C)
     end 
-    error("Unknown basis type: $basis")
+    error("Unknown basis type")
 end
 
 # Function that returns a L set given an `l`. The elements of the set start with 
@@ -113,7 +113,7 @@ function SetLl(ll::SVector{N,Int64}, L::Int64) where N
     set = [ [ll[1];] ]
     for k in 2:N
         set_tmp = set
-        set = Vector{Any}[]
+        set = Vector{Int}[]
         for a in set_tmp
             if k < N
                 for b in abs(a[k-1]-ll[k]):a[k-1]+ll[k]
@@ -253,7 +253,7 @@ mm_filter(mm::Union{Vector{Int64},SVector{N,Int64}}, L::Int64,
 # NOTE: this line seems not to be the bottleneck in the code anymore
 
 function mm_generate(L::Int, ll::SVector{N,Int}, nn::SVector{N,Int}; 
-                     basis = complex, PI = false) where {N}
+                     basis::B = complex, PI = false) where {N, B}
     # the generator version seems to be type unstable.
     # MM_c = ([ T(I.I) for I in ci if mm_filter(T(I.I), L, basis) ])::Vector{T}
     if !PI
@@ -290,7 +290,7 @@ function mm_generate(L::Int, ll::SVector{N,Int}, nn::SVector{N,Int};
         MM_abs = unique([ abs.(mm) for mm in MM_c ])
         return signed_mmset(MM_abs)
     end
-    error("Unknown basis type: $basis")
+    error("Unknown basis type")
 end
 
 function gram(X::AbstractMatrix{SVector{N,T}}) where {N,T}
@@ -334,8 +334,8 @@ default is `nothing`, which will later be assigned as `sym` for even `L` and
 """
 function coupling_coeffs(L::Integer, ll, nn = nothing; 
                          PI = !(isnothing(nn)), 
-                         basis = complex,
-                         refl_sym::Union{Symbol,Nothing} = nothing)
+                         basis::B = complex,
+                         refl_sym::Union{Symbol,Nothing} = nothing) where {B}
 
     # convert L into the format required internally 
     _L = Int(L) 
@@ -550,7 +550,7 @@ function _coupling_coeffs(::Val{L}, ll::SVector{N, Int}, nn::SVector{N, Int};
             #     [ mm[inv_perm] for mm in MM_reduced ]
         end
     end
-    error("Unknown basis type: $basis")
+    error("Unknown basis type")
 end
 
 function assemble_U(U::AbstractMatrix{SVector{L, Float64}}, 
@@ -827,8 +827,32 @@ function nullspace_upper_sparse(U::AbstractMatrix{T}) where T<:Number
     return N ./ norm(N)
 end
 
+# trim-safe sparse transpose: `sparse(M')` goes through SparseArrays.ftranspose(A, f::Function),
+# which --trim cannot resolve. (Real entries, so adjoint == transpose.)
+function _spT(M::SparseMatrixCSC)
+    I, J, V = findnz(M)
+    return sparse(J, I, V, size(M, 2), size(M, 1))
+end
+_spT(M::AbstractMatrix) = sparse(transpose(M))
+
+# trim-safe (L', p, Rs) of a sparse LU. UmfpackLU's getproperty is one method over all
+# fields and its :L branch transposes via ftranspose(f::Function), which --trim cannot
+# resolve -- so even F.p / F.Rs are unusable. One get_numeric call returns all three
+# (L' is exactly the CSR L that getproperty(:L) would transpose).
+function _umf_Lt_p_Rs(F::SparseArrays.UMFPACK.UmfpackLU{Float64, Int})
+    U = SparseArrays.UMFPACK
+    U.umfpack_numeric!(F)
+    lnz, unz, n_row, n_col, nz_diag = U.umf_lunz(F)
+    Lp = Vector{Int}(undef, n_row + 1); Lj = Vector{Int}(undef, lnz); Lx = Vector{Float64}(undef, lnz)
+    P = Vector{Int}(undef, n_row); Rs = Vector{Float64}(undef, n_row)
+    SparseArrays.LibSuiteSparse.umfpack_dl_get_numeric(Lp, Lj, Lx, C_NULL, C_NULL, C_NULL,
+        P, C_NULL, C_NULL, C_NULL, Rs, getfield(F, :numeric))
+    Lt = SparseMatrixCSC(min(n_row, n_col), n_row, U.increment!(Lp), U.increment!(Lj), Lx)
+    return Lt, U.increment!(P), Rs
+end
+
 function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμset::Vector{SVector{N,Int}}) where {N,T<:Number}
-    M = sparse(M')
+    M = _spT(M)
     C = zeros(Float64, size(M, 2) - size(M, 1), size(M, 2))
 
     row_sum = sum.(mmset)
@@ -847,10 +871,11 @@ function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμs
     # Solving for the last block, cf Fig 1 (b,c)
     if length(row_range) == length(column_range)
         B = M[row_block, prev_col_block]
-        F = lu(B')
-        invp = invperm(F.p)
-        sparse_ns = nullspace_upper_sparse(sparse(F.L'))
-        C[:, prev_col_block] .= (Diagonal(F.Rs) * sparse_ns[invp, :])'
+        F = lu(_spT(B))
+        Lt, Fp, FRs = _umf_Lt_p_Rs(F)
+        invp = invperm(Fp)
+        sparse_ns = nullspace_upper_sparse(Lt)
+        C[:, prev_col_block] .= (Diagonal(FRs) * sparse_ns[invp, :])'
         t_start = length(row_range)-2
     else
         for (i, col_idx) in enumerate(prev_col_block)
