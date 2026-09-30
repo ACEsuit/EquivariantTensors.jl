@@ -101,3 +101,20 @@ jobs:
           using EquivariantTensors
           DocMeta.setdocmeta!(EquivariantTensors, :DocTestSetup, :(using EquivariantTensors); recursive=true)
           doctest(EquivariantTensors)
+  trim:
+    name: juliac --trim (Julia 1.13 - ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1.13'
+      - uses: julia-actions/cache@v3
+      - run: julia --project=test/trim test/trim/build_and_run.jl
