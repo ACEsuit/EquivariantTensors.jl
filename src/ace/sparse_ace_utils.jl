@@ -80,13 +80,11 @@ function sparse_equivariant_tensor(;
                                        prune = true, PI = true, basis = basis)
 
    # now we work backwards to generate the Aspec 
-   Aspec = sort( unique( reduce(vcat, 𝔸spec) ) )
-   
    # we now have the specifications for (Rnl, Ylm) -> A -> 𝔸 -> 𝔹
    # but in terms of "readable" named-tuples. We now convert these into 
    # the raw computational indices. 
-   Aspec_raw = _make_idx_A_spec(Aspec, Rnl_spec, Ylm_spec)
-   𝔸spec_raw = _make_idx_AA_spec(𝔸spec, Aspec)
+   sp = _tensor_specs(symm, 𝔸spec, Rnl_spec, Ylm_spec)
+   Aspec, Aspec_raw, 𝔸spec_raw = sp.Aspec, sp.Aspec_raw, sp.𝔸spec_raw
 
    # now we have all information ready to generate the equivariant tensor 
    Abasis = PooledSparseProduct(Aspec_raw)
@@ -100,6 +98,27 @@ function sparse_equivariant_tensor(;
                 "L" => L,)
 
    return SparseACEbasis(Abasis, 𝔸basis, (symm,), meta)                
+end
+
+"""
+   sparse_equivariant_tensor_spec(Val(L); mb_spec, Rnl_spec, Ylm_spec, basis = real)
+
+The layer-free, type-stable half of `sparse_equivariant_tensor` (usable under
+`juliac --trim`): returns `(symm, 𝔸spec, Aspec, Aspec_raw, 𝔸spec_raw)`, where
+`symm` equals `sparse_equivariant_tensor(...).A2Bmaps[1]`, `𝔸spec` its
+`meta["𝔸spec"]` and `Aspec_raw` its `abasis.spec`.
+"""
+function sparse_equivariant_tensor_spec(::Val{L}; mb_spec, Rnl_spec, Ylm_spec,
+                                        basis::B = real) where {L, B}
+   symm, 𝔸spec = symmetrisation_matrix(Val(L), mb_spec; prune = true, PI = true, basis = basis)
+   return _tensor_specs(symm, 𝔸spec, Rnl_spec, Ylm_spec)
+end
+
+function _tensor_specs(symm, 𝔸spec, Rnl_spec, Ylm_spec)
+   Aspec = sort( unique( reduce(vcat, 𝔸spec) ) )
+   Aspec_raw = _make_idx_A_spec(Aspec, Rnl_spec, Ylm_spec)
+   𝔸spec_raw = _make_idx_AA_spec(𝔸spec, Aspec)
+   return (symm = symm, 𝔸spec = 𝔸spec, Aspec = Aspec, Aspec_raw = Aspec_raw, 𝔸spec_raw = 𝔸spec_raw)
 end
 
 

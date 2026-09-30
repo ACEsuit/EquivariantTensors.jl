@@ -371,6 +371,40 @@ function coupling_coeffs(L::Integer, ll, nn = nothing;
     return _coupling_coeffs(_L, _ll, _nn; PI = PI, basis = basis, refl_sym = refl_sym)
 end
 
+"""
+    O3.coupling_coeffs(Val(L), ll::Vector{Int}, nn::Vector{Int}; PI = true, basis = complex)
+
+Type-stable variant of `coupling_coeffs` for ahead-of-time compilation
+(`juliac --trim`): `L` is a compile-time constant and the correlation order
+`N = length(ll)` is resolved through a fixed table, `N ≤ MAX_STATIC_ORDER`.
+Returns `(C::Matrix{T}, MM::Vector{Vector{Int}})` with
+`T = L == 0 ? Float64 : SVector{2L+1, Float64}`.
+"""
+function coupling_coeffs(::Val{L}, ll::Vector{Int}, nn::Vector{Int};
+                         PI::Bool = true, basis::B = complex) where {L, B}
+   N = length(ll)
+   length(nn) == N || throw(ArgumentError("coupling_coeffs: ll and nn must have the same length"))
+   N == 1 && return _coupling_coeffs_static(Val(L), Val(1), ll, nn, PI, basis)
+   N == 2 && return _coupling_coeffs_static(Val(L), Val(2), ll, nn, PI, basis)
+   N == 3 && return _coupling_coeffs_static(Val(L), Val(3), ll, nn, PI, basis)
+   N == 4 && return _coupling_coeffs_static(Val(L), Val(4), ll, nn, PI, basis)
+   N == 5 && return _coupling_coeffs_static(Val(L), Val(5), ll, nn, PI, basis)
+   N == 6 && return _coupling_coeffs_static(Val(L), Val(6), ll, nn, PI, basis)
+   N == 7 && return _coupling_coeffs_static(Val(L), Val(7), ll, nn, PI, basis)
+   N == 8 && return _coupling_coeffs_static(Val(L), Val(8), ll, nn, PI, basis)
+   throw(ArgumentError("coupling_coeffs(::Val{L}, ...): correlation order must be ≤ 8"))
+end
+
+const MAX_STATIC_ORDER = 8
+
+function _coupling_coeffs_static(::Val{L}, ::Val{N}, ll::Vector{Int}, nn::Vector{Int},
+                                 PI::Bool, basis::B) where {L, N, B}
+   T = L == 0 ? Float64 : SVector{2L+1, Float64}
+   C, MM = _coupling_coeffs(Val(L), SVector{N, Int}(ntuple(i -> ll[i], Val(N))),
+                            SVector{N, Int}(ntuple(i -> nn[i], Val(N))); PI = PI, basis = basis)
+   return Matrix{T}(C), Vector{Int}[Vector{Int}(mm) for mm in MM]
+end
+
 function _sort(x::SVector{N,T}, permutable_blocks::PermutableBlocks) where {N,T}
     # Sorts the vector x according to the indices in permutable_blocks
     # This is used to sort the equivalent classes of m's
@@ -386,8 +420,11 @@ end
 
 # Function that generates the coupling coefficient of the RE basis (PI = false) 
 # or RPE basis (PI = true) given `nn` and `ll`. 
-function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; 
-                          PI = true, basis = complex, refl_sym::Union{Symbol,Nothing} = nothing) where N
+_coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int}; kwargs...) where {N} =
+      _coupling_coeffs(Val(L), ll, nn; kwargs...)
+
+function _coupling_coeffs(::Val{L}, ll::SVector{N, Int}, nn::SVector{N, Int}; 
+                          PI = true, basis::B = complex, refl_sym::Union{Symbol,Nothing} = nothing) where {L, N, B}
     refl_sym === nothing && (refl_sym = iseven(L) ? :sym : :asym)
     if refl_sym == :sym
         ll_filter = iseven
@@ -453,13 +490,13 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
             # # return the RE-PI coupling coeffs
             # return Diagonal(sqrt.(S[1:rk])) * U[:, 1:rk]' * FMatrix, 
             #     [ mm[inv_perm] for mm in MM_reduced ]
-            C, MM = coupling_coeffs_new(L, ll, nn)
+            C, MM = coupling_coeffs_new(Val(L), ll, nn)
             return C, [ mm[inv_perm] for mm in MM ]
         end
     elseif basis === real 
         if !PI
             MM_r = mm_generate(L, ll, nn; basis=basis) # all admissible mm's
-            Ure_c, MM_c = _coupling_coeffs(L, ll, nn; PI = false, basis=complex, refl_sym = refl_sym)
+            Ure_c, MM_c = _coupling_coeffs(Val(L), ll, nn; PI = false, basis=complex, refl_sym = refl_sym)
             C_r2c = rAA2cAA(SVector{N, Int}.(MM_c),MM_r) 
             # TODO: coupling_coeffs and mm_generate return different 
             #       format of MM's which may need to be fixed
@@ -474,7 +511,7 @@ function _coupling_coeffs(L::Int, ll::SVector{N, Int}, nn::SVector{N, Int};
         else
             # S = Sn(nn,ll)
             MM_r = mm_generate(L, ll, nn; basis=basis, PI = true) # all admissible mm's wrt ordered cSH mm's
-            Urpe_c, MM_c = _coupling_coeffs(L, ll, nn, PI = PI, basis=complex, refl_sym = refl_sym) # cSH-based couplings
+            Urpe_c, MM_c = _coupling_coeffs(Val(L), ll, nn, PI = PI, basis=complex, refl_sym = refl_sym) # cSH-based couplings
             C_r2c, MM_reduced = rAA2cAA_PI(SVector{N, Int}.(MM_c),SVector{N, Int}.(MM_r),ll,nn) # r2c map and the ordered mm set
             # TODO: coupling_coeffs and mm_generate return different 
             #       format of MM's which may need to be fixed
@@ -863,7 +900,10 @@ function solver_inner(M::AbstractMatrix{T}, mmset::Vector{SVector{N,Int}}, μμs
 end
 
 # Core function that generates the L-equivariant CCs for ordered (nn,ll)
-function coupling_coeffs_new(K::Int, ll::SVector{N,Int}, nn::SVector{N,Int}) where N
+coupling_coeffs_new(K::Int, ll::SVector{N,Int}, nn::SVector{N,Int}) where N =
+      coupling_coeffs_new(Val(K), ll, nn)
+
+function coupling_coeffs_new(::Val{K}, ll::SVector{N,Int}, nn::SVector{N,Int}) where {K, N}
     # TODO: notation inconsistency: K and L both represent the order of equivariance
     # TODO: reconsider if ll and nn here should be made to be SVector{N, Int}
     T = K == 0 ? Float64 : SVector{2K+1,Float64}

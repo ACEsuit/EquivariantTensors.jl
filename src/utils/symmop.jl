@@ -19,8 +19,29 @@ The output is given in terms of a sparse matrix `𝔸2𝔹` in CCS format and a
 specification of the `𝔸` basis as a `Vector{Vector{NLM}}` where 
 `NLM = @NamedTuple{n::Int, l::Int, m::Int}`. 
 """
-function symmetrisation_matrix(L::Integer, mb_spec; 
-                               prune = false, kwargs...)
+function symmetrisation_matrix(L::Integer, mb_spec; prune = false, kwargs...)
+   _L = Int(L)
+   TVAL = _L == 0 ? Float64 : SVector{2*_L+1, Float64}
+   ccfun = (ll, nn) -> O3.coupling_coeffs(_L, ll, nn; kwargs...)
+   return _symmetrisation_matrix(TVAL, mb_spec, ccfun; prune = prune)
+end
+
+"""
+   symmetrisation_matrix(Val(L), mb_spec; prune = false, PI = true, basis = complex)
+
+Same result as `symmetrisation_matrix(L, mb_spec; prune, PI, basis)`, but
+type-stable for ahead-of-time compilation (`juliac --trim`): `L` is a
+compile-time constant and the correlation order is limited to
+`O3.MAX_STATIC_ORDER`.
+"""
+function symmetrisation_matrix(::Val{L}, mb_spec; prune = false, PI::Bool = true,
+                               basis::B = complex) where {L, B}
+   TVAL = L == 0 ? Float64 : SVector{2*L+1, Float64}
+   ccfun = (ll, nn) -> O3.coupling_coeffs(Val(L), ll, nn; PI = PI, basis = basis)
+   return _symmetrisation_matrix(TVAL, mb_spec, ccfun; prune = prune)
+end
+
+function _symmetrisation_matrix(::Type{TVAL}, mb_spec, ccfun::F; prune = false) where {TVAL, F}
 
    # for now assume a specific form of the mb_spec, namely 
    #   Vector{Vector{NT_NLM}}   
@@ -29,8 +50,8 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    # convert an element of 𝔸spec to nn, ll, mm, which is the format 
    # used by the coupling_coeffs function 
    function _vecnt2nnll(bb)
-      nn = [ b.n for b in bb ]
-      ll = [ b.l for b in bb ]
+      nn = Int[ b.n for b in bb ]
+      ll = Int[ b.l for b in bb ]
       return nn, ll
    end
 
@@ -45,7 +66,6 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    # NB : HACK TO DISTINGUISH L = 0 and L > 0
    #      this should potentially be revisited in the future 
    #      in fact this might be a type-stability issue
-   TVAL = L == 0 ? Float64 : SVector{2*L+1, Float64}
    irow = Int[]; jcol = Int[]; val = TVAL[]
 
    # counter for total number of equivariant basis functions
@@ -54,7 +74,7 @@ function symmetrisation_matrix(L::Integer, mb_spec;
    num𝔸 = 0
    for (nn, ll) in nnll
       # here the kwargs... should be PI and basis 
-      cc, MM = O3.coupling_coeffs(L, ll, nn; kwargs...)
+      cc, MM = ccfun(ll, nn)
       num_b = size(cc, 1)   
       if num_b == 0; continue; end
       # lookup the corresponding (nn, ll, mm) in the 𝔸 specification 
