@@ -5,12 +5,14 @@ function sparse_equivariant_tensors(;
                   mb_spec, 
                   Rnl_spec, 
                   Ylm_spec, 
-                  basis, )
+                  basis, 
+                  nullspace_solver::Symbol = :sparse, )
    A2Bmaps = [] 
    𝔸specs = [] 
    for L in LL 
       symm_L, 𝔸spec_L = symmetrisation_matrix(L, mb_spec; 
-                                 prune = true, PI = true, basis = basis)
+                                 prune = true, PI = true, basis = basis, 
+                                 nullspace_solver = nullspace_solver)
       push!(A2Bmaps, symm_L)
       push!(𝔸specs, 𝔸spec_L)                                 
    end
@@ -59,14 +61,18 @@ end
 
 
 """
-   sparse_equivariant_tensor(L, mb_spec, Rnl_spec, Ylm_spec, basis)
+   sparse_equivariant_tensor(L, mb_spec, Rnl_spec, Ylm_spec, basis; nullspace_solver = :sparse)
+
+`nullspace_solver` (`:sparse` or `:dense`) is passed through to
+`O3.coupling_coeffs`; see its docstring.
 """
 function sparse_equivariant_tensor(;
                   L::Integer, 
                   mb_spec, 
                   Rnl_spec, # = _auto_Rnl_spec(mb_spec), 
                   Ylm_spec, # = _auto_Y_spec(mb_spec),
-                  basis, ) # = real)
+                  basis, # = real)
+                  nullspace_solver::Symbol = :sparse, )
    # check that the radial spec is compatible with the mb_spec                   
    # min_Rnl_spec = _auto_Rnl_spec(mb_spec)
    # if !(min_Rnl_spec ⊆ Rnl_spec)
@@ -77,7 +83,8 @@ function sparse_equivariant_tensor(;
    # pruned 𝔸spec containing only those basis functions that are relevant 
    # for the symmetric basis 
    symm, 𝔸spec = symmetrisation_matrix(L, mb_spec; 
-                                       prune = true, PI = true, basis = basis)
+                                       prune = true, PI = true, basis = basis, 
+                                       nullspace_solver = nullspace_solver)
 
    # now we work backwards to generate the Aspec 
    # we now have the specifications for (Rnl, Ylm) -> A -> 𝔸 -> 𝔹
@@ -101,7 +108,8 @@ function sparse_equivariant_tensor(;
 end
 
 """
-   sparse_equivariant_tensor_spec(Val(L); mb_spec, Rnl_spec, Ylm_spec, basis = real)
+   sparse_equivariant_tensor_spec(Val(L); mb_spec, Rnl_spec, Ylm_spec, basis = real,
+                                  nullspace_solver = :sparse)
 
 The layer-free, type-stable half of `sparse_equivariant_tensor` (usable under
 `juliac --trim`): returns `(symm, 𝔸spec, Aspec, Aspec_raw, 𝔸spec_raw)`, where
@@ -109,8 +117,9 @@ The layer-free, type-stable half of `sparse_equivariant_tensor` (usable under
 `meta["𝔸spec"]` and `Aspec_raw` its `abasis.spec`.
 """
 function sparse_equivariant_tensor_spec(::Val{L}; mb_spec, Rnl_spec, Ylm_spec,
-                                        basis::B = real) where {L, B}
-   symm, 𝔸spec = symmetrisation_matrix(Val(L), mb_spec; prune = true, PI = true, basis = basis)
+                                        basis::B = real, nullspace_solver::Symbol = :sparse) where {L, B}
+   symm, 𝔸spec = symmetrisation_matrix(Val(L), mb_spec; prune = true, PI = true, basis = basis,
+                                       nullspace_solver = nullspace_solver)
    return _tensor_specs(symm, 𝔸spec, Rnl_spec, Ylm_spec)
 end
 

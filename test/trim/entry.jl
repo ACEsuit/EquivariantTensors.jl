@@ -9,9 +9,10 @@ _mix(h::UInt64, x::UInt64) = (h ⊻ x) * 0x100000001b3
 
 function checksum_lines()::Vector{String}
    out = String[]
-   for (maxn, maxl, ord) in TRIM_CASES
+   for (maxn, maxl, ord) in TRIM_CASES, solver in (:sparse, :dense)
       mb = trim_mb_spec(maxn, maxl, ord); R = trim_rnl(maxn, maxl); Y = trim_ylm(maxl)
-      t = ET.sparse_equivariant_tensor_spec(Val(0); mb_spec = mb, Rnl_spec = R, Ylm_spec = Y, basis = real)
+      t = ET.sparse_equivariant_tensor_spec(Val(0); mb_spec = mb, Rnl_spec = R, Ylm_spec = Y, basis = real,
+                                            nullspace_solver = solver)
       I, J, V = findnz(t.symm)
       h = 0xcbf29ce484222325
       for k in eachindex(V)

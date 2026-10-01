@@ -18,6 +18,9 @@ scalar, L = 1 for a vector, and so forth.
 The output is given in terms of a sparse matrix `𝔸2𝔹` in CCS format and a 
 specification of the `𝔸` basis as a `Vector{Vector{NLM}}` where 
 `NLM = @NamedTuple{n::Int, l::Int, m::Int}`. 
+
+The remaining `kwargs...` (`PI`, `basis`, `nullspace_solver`, ...) are passed 
+to `O3.coupling_coeffs`.
 """
 function symmetrisation_matrix(L::Integer, mb_spec; prune = false, kwargs...)
    _L = Int(L)
@@ -27,7 +30,8 @@ function symmetrisation_matrix(L::Integer, mb_spec; prune = false, kwargs...)
 end
 
 """
-   symmetrisation_matrix(Val(L), mb_spec; prune = false, PI = true, basis = complex)
+   symmetrisation_matrix(Val(L), mb_spec; prune = false, PI = true, basis = complex,
+                         nullspace_solver = :sparse)
 
 Same result as `symmetrisation_matrix(L, mb_spec; prune, PI, basis)`, but
 type-stable for ahead-of-time compilation (`juliac --trim`): `L` is a
@@ -35,9 +39,10 @@ compile-time constant and the correlation order is limited to
 `O3.MAX_STATIC_ORDER`.
 """
 function symmetrisation_matrix(::Val{L}, mb_spec; prune = false, PI::Bool = true,
-                               basis::B = complex) where {L, B}
+                               basis::B = complex, nullspace_solver::Symbol = :sparse) where {L, B}
    TVAL = L == 0 ? Float64 : SVector{2*L+1, Float64}
-   ccfun = (ll, nn) -> O3.coupling_coeffs(Val(L), ll, nn; PI = PI, basis = basis)
+   ccfun = (ll, nn) -> O3.coupling_coeffs(Val(L), ll, nn; PI = PI, basis = basis,
+                                          nullspace_solver = nullspace_solver)
    return _symmetrisation_matrix(TVAL, mb_spec, ccfun; prune = prune)
 end
 
