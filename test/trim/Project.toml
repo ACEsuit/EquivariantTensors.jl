@@ -1,0 +1,6 @@
+[deps]
+EquivariantTensors = "5e107534-7145-4f8f-b06f-47a52840c895"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+
+[sources]
+EquivariantTensors = {path = "../.."}
