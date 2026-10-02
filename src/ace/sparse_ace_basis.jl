@@ -159,13 +159,36 @@ function pullback!(∂Rnl, ∂Ylm,
    return ∂Rnl, ∂Ylm
 end
 
-function whatalloc(::typeof(pullback!),  
+# Underlying scalar element type of a (possibly nested / SVector-valued) array
+# type. Pure type-level recursion, so it is fully inferrable.
+_scalar_eltype(::Type{T}) where {T <: Number} = T
+_scalar_eltype(::Type{<:AbstractArray{T}}) where {T} = _scalar_eltype(T)
+
+# Promote the scalar eltype across the cotangent blocks ∂BB, type-stably for both
+# a `Tuple` of blocks (possibly heterogeneous, e.g. mixed L=0 / L=1) and a
+# homogeneous `AbstractArray` of blocks.
+_blocks_scalar_eltype(∂BB::Tuple) =
+      reduce(promote_type, map(b -> _scalar_eltype(typeof(b)), ∂BB))
+# Homogeneous (concrete-eltype) arrays take the inferrable type-level path; a
+# heterogeneous container (e.g. Vector{Any}) falls back to a per-element reduction
+# (not type-stable, but such inputs are degenerate — blocks normally come as a Tuple).
+_blocks_scalar_eltype(∂BB::AbstractArray) =
+      isconcretetype(eltype(∂BB)) ? _scalar_eltype(eltype(∂BB)) :
+      mapreduce(b -> _scalar_eltype(typeof(b)), promote_type, ∂BB)
+
+function whatalloc(::typeof(pullback!),
                    ∂BB, tensor::SparseACEbasis, Rnl, Ylm
                    )
-   # TODO: may need to check the type of ∂BB too, but this is a bit 
-   #       tricky because of the SVectors that can be in there...
-   TB = eltype.(eltype.(∂BB))
-   TA = promote_type(eltype(Rnl), eltype(Ylm), TB...)
+   # NB: the previous implementation,
+   #     TB = eltype.(eltype.(∂BB)); promote_type(..., TB...)
+   # splatted a *runtime* `Vector{DataType}` into `promote_type` whenever ∂BB was
+   # a `Vector` (e.g. the `pullback([∂B], …)` call in force evaluation). That is
+   # not inferrable: `TA` came out as the abstract `DataType`, so the
+   # `zeros(TA, …)` in `pullback` produced abstract-eltype arrays and `pullback`
+   # was inferred as `Tuple{Any, Any}` (EquivariantTensors.jl#135). Computing the
+   # scalar eltype at the type level keeps `TA` a concrete `Type{…}`.
+   TB = _blocks_scalar_eltype(∂BB)
+   TA = promote_type(eltype(Rnl), eltype(Ylm), TB)
    return (TA, size(Rnl)...), (TA, size(Ylm)...)
 end
 
