@@ -42,6 +42,7 @@ end
     @testset "Pullback type stability (#135)" begin include("acemodels/test_pullback_typestable.jl"); end
     @testset "Pullback complex" begin include("acemodels/test_sparse_ace_cplx.jl"); end
     @testset "ACE KA and grad" begin include("acemodels/test_ace_ka.jl"); end
+    @testset "Spec ordering" begin include("acemodels/test_spec_ordering.jl"); end
     # temporarily remove this testset. 
     # @testset "ACE KA new version" begin include("acemodels/test_ace_ka2.jl"); end
 end 
