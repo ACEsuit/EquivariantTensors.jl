@@ -401,6 +401,71 @@ function pushforward!(A::AbstractVector, ∂A,
    return A, ∂A 
 end
 
+# ---------------------------------------------------------------
+#  Row-wise pushforward 
+#
+# `pushforward!` propagates a single tangent through the product and the 
+# pooling, i.e. ∂A[iA] = ∑_j ∑_t (∏_{s≠t} BB[s][j, ϕ[s]]) ∂BB[t][j, ϕ[t]]. 
+# `pushforward_rows!` keeps one tangent per input row j (per neighbour / 
+# edge in an ACE model) and does not sum over j: 
+#
+#    A[iA]    = ∑_j ∏_t BB[t][j, ϕ[t]]
+#    ∂A[j, iA] = ∑_t (∏_{s≠t} BB[s][j, ϕ[s]]) ∂BB[t][j, ϕ[t]]
+#
+# The tangent element types only need to satisfy T * T∂ -> T∂, so that with 
+# SVector{3} tangents ∂BB[t][j, :] = ∂BB[t][j, :] / ∂𝐫_j the output is the 
+# Jacobian ∂A / ∂𝐫_j. This is the single-node, in-place counterpart of the 
+# batched `_jacobian_X`, but generic in NB and in the tangent type. 
+
+# TA as a static parameter: a closure capturing a type stores it as a 
+# DataType, which Julia 1.11 does not infer through 
+_rows_tangent_type(::Type{TA}, ∂BB::Tuple) where {TA} = 
+      promote_type(map(∂B -> _promote_mul_type(TA, eltype(∂B)), ∂BB)...)
+
+function whatalloc(::typeof(pushforward_rows!), 
+                   basis::PooledSparseProduct{NB}, 
+                   BB::TupMat, ∂BB::TupMat) where {NB}
+   TA = _valtype(basis, BB)
+   T∂A = _rows_tangent_type(TA, ∂BB)
+   nX = size(BB[1], 1)
+   return (TA, length(basis)), (T∂A, nX, length(basis))
+end
+
+function pushforward_rows!(A::AbstractVector, ∂A::AbstractMatrix, 
+                           basis::PooledSparseProduct{NB}, 
+                           BB::TupMat, ∂BB::TupMat) where {NB}
+   nX = size(BB[1], 1)
+   @assert length(BB) == length(∂BB) == NB
+   @assert all(B -> size(B, 1) == nX, BB) && all(B -> size(B, 1) == nX, ∂BB)
+   @assert length(A) >= length(basis)
+   @assert size(∂A, 1) == nX && size(∂A, 2) >= length(basis)
+   _pushforward_rows_A!(A, ∂A, basis.spec, BB, ∂BB, nX)
+   return A, ∂A
+end
+
+# The row-wise kernel, shared by `pushforward_rows!` (one node) and the 
+# CPU `_jacobian_X!` (a batch of nodes, one view per node). 
+function _pushforward_rows_A!(A::AbstractVector, ∂A::AbstractMatrix, 
+                              spec, BB::NTuple{NB}, ∂BB::NTuple{NB}, 
+                              nX::Integer) where {NB}
+   TA = eltype(A)
+   @inbounds for (iA, ϕ) in enumerate(spec)
+      a = zero(TA)
+      @simd ivdep for j = 1:nX
+         # @inbounds does not reach into the closures; without it here 
+         # the bounds checks prevent SIMD 
+         b = ntuple(t -> @inbounds(TA(BB[t][j, ϕ[t]])), NB)
+         ∂b = ntuple(t -> @inbounds(∂BB[t][j, ϕ[t]]), NB)
+         p, g = _static_prod_ed(b)
+         a += p
+         ∂A[j, iA] = _static_dot(g, ∂b)
+      end
+      A[iA] = a
+   end
+   return nothing
+end
+
+
 #
 # A kind of pushforward, but very specific, used to compute Jacobians. 
 #
@@ -414,8 +479,10 @@ end
 # this significantly simplifies the bookkeeping, but also means this 
 # pushforward is not generic but only specific to ACE models. 
 #
-# For simplicity, this is an implementation for NB = 2 only. Once this 
-# is verified to be correct, we can generalize it to arbitrary NB.
+# This is the batched form of `pushforward_rows!`: node i is the row-wise 
+# pushforward of BB[t][:, i, :]. The CPU method loops over nodes and calls 
+# the same row-wise kernel; the KernelAbstractions method (NB = 2 only) is 
+# in sparseprodpool_ka.jl. 
 #
 # Documenting some information about inputs and output:  
 #
@@ -425,50 +492,37 @@ end
 #    A : nnodes x nfeat(A) 
 #    ∂A : maxneigs x nnodes x nfeat(A) 
 #
-function _jacobian_X(basis::PooledSparseProduct{2},
+function _jacobian_X(basis::PooledSparseProduct{NB},
                      BB::TupTen3, ∂BB::TupTen3, 
-                     spec = basis.spec)
-   
-   Rnl, Ylm = BB 
-   ∂Rnl, ∂Ylm = ∂BB 
-   maxneigs, nnodes, lenR = size(Rnl) 
-   _, _, lenY = size(Ylm)
-   nA = length(basis)
-   @assert size(∂Rnl) == (maxneigs, nnodes, lenR)
-   @assert size(∂Ylm) == (maxneigs, nnodes, lenY)
+                     spec = basis.spec) where {NB}
+   @assert length(BB) == length(∂BB) == NB
+   maxneigs, nnodes, _ = size(BB[1]) 
+   @assert all(size(BB[t]) == size(∂BB[t]) for t = 1:NB)
+   @assert all(size(BB[t])[1:2] == (maxneigs, nnodes) for t = 1:NB)
+   nA = length(spec)
 
-   # allocate output 
-   TA = promote_type(eltype(Rnl), eltype(Ylm))
-   T∂A = promote_type(TA, eltype(∂Rnl), eltype(∂Ylm))
-   A = similar(Rnl, TA, (nnodes, nA))
-   ∂A = similar(Rnl, T∂A, (maxneigs, nnodes, nA))
+   # allocate output; the tangent type only needs T * T∂ -> T∂ 
+   TA = mapreduce(eltype, promote_type, BB)
+   T∂A = _rows_tangent_type(TA, ∂BB)
+   A = similar(BB[1], TA, (nnodes, nA))
+   ∂A = similar(BB[1], T∂A, (maxneigs, nnodes, nA))
 
-   _jacobian_X!(A, ∂A, basis, spec, Rnl, ∂Rnl, Ylm, ∂Ylm)
+   _jacobian_X!(A, ∂A, basis, spec, BB, ∂BB)
 
    return A, ∂A
 end
 
-function _jacobian_X!(A::AbstractArray, ∂A::AbstractArray, 
-                       basis::PooledSparseProduct{2},
-                       spec, 
-                       Rnl, ∂Rnl, Ylm, ∂Ylm, )
-
-   maxneigs, nnodes, _ = size(Rnl) 
-
-   @inbounds for (iA, (ϕR, ϕY)) in enumerate(spec)
-      for i = 1:nnodes 
-         a = zero(eltype(A))
-         @simd ivdep for j = 1:maxneigs
-            bR = Rnl[j, i, ϕR]
-            bY = Ylm[j, i, ϕY]
-            a += bR * bY   # TODO: switch to muladd! 
-
-            ∂bR = ∂Rnl[j, i, ϕR]
-            ∂bY = ∂Ylm[j, i, ϕY]
-            ∂A[j, i, iA] = ∂bR * bY + bR * ∂bY
-         end
-         A[i, iA] = a
-      end
+function _jacobian_X!(A::AbstractMatrix, ∂A::AbstractArray{<: Any, 3}, 
+                      basis::PooledSparseProduct{NB}, spec, 
+                      BB::Tuple, ∂BB::Tuple) where {NB}
+   maxneigs, nnodes, _ = size(BB[1]) 
+   @assert size(A) == (nnodes, length(spec))
+   @assert size(∂A) == (maxneigs, nnodes, length(spec))
+   for i = 1:nnodes 
+      BBi = ntuple(t -> view(BB[t], :, i, :), NB)
+      ∂BBi = ntuple(t -> view(∂BB[t], :, i, :), NB)
+      _pushforward_rows_A!(view(A, i, :), view(∂A, :, i, :), 
+                           spec, BBi, ∂BBi, maxneigs)
    end
    return nothing 
 end 

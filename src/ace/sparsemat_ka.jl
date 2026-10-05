@@ -1,5 +1,5 @@
 
-using SparseArrays: SparseMatrixCSC 
+using SparseArrays: SparseMatrixCSC, rowvals, nonzeros 
 import LinearAlgebra: mul! 
 
 import Adapt
@@ -164,3 +164,54 @@ end
 #       a multiplication of the form AA * 𝒞' - this is likely more performant 
 #       if done by keeping AA intact and then storing C' in CSC.
 #       (something to consider in the future when debugging performance)
+
+
+#
+# X = Y * C', the coupling step of the Jacobian: X[r, k] = ∑ᵢ C[k, i] Y[r, i]. 
+# Only the CSC structure of C is used, which both SparseMatrixCSC 
+# (tensor.A2Bmaps) and SparseMatCSX (st.A2Bmaps) provide. 
+#
+_mul_A2Bt!(X::AbstractMatrix, Y::AbstractMatrix, C::SparseMatrixCSC) = 
+      _mul_A2Bt_csc!(X, Y, C.colptr, rowvals(C), nonzeros(C))
+
+_mul_A2Bt!(X::AbstractMatrix, Y::AbstractMatrix, C::SparseMatCSX) = 
+      _mul_A2Bt_csc!(X, Y, C.colptr, C.rowval, C.nzval_csc)
+
+# on a GPU: C' is C with its CSR and CSC parts swapped, and the existing 
+# dense * sparse kernel needs the CSC part of C', i.e. the CSR part of C 
+_mul_A2Bt!(X::AbstractGPUArray{<: Any, 2}, Y::AbstractGPUArray{<: Any, 2}, 
+           C::SparseMatCSX) = 
+      mul!(X, Y, SparseMatCSX(C.n, C.m, C.colptr, C.rowval, C.nzval_csc, 
+                                        C.rowptr, C.colval, C.nzval_csr))
+
+# batched over nodes: X[:, i, :] = Y[:, i, :] * C' 
+function _mul_A2Bt!(X::AbstractArray{<: Any, 3}, Y::AbstractArray{<: Any, 3}, C)
+   @assert size(X, 2) == size(Y, 2)
+   for i = 1:size(X, 2)
+      _mul_A2Bt!(view(X, :, i, :), view(Y, :, i, :), C)
+   end
+   return X
+end
+
+# on a GPU, flatten (j, i) into one row index instead 
+function _mul_A2Bt!(X::AbstractGPUArray{<: Any, 3}, Y::AbstractGPUArray{<: Any, 3}, C)
+   _mul_A2Bt!(reshape(X, :, size(X, 3)), reshape(Y, :, size(Y, 3)), C)
+   return X
+end
+
+# a dense (or otherwise non-CSC) coupling matrix 
+_mul_A2Bt!(X::AbstractMatrix, Y::AbstractMatrix, C::AbstractMatrix) = 
+      mul!(X, Y, transpose(C))
+
+function _mul_A2Bt_csc!(X, Y, colptr, rowval, nzval)
+   nr = size(Y, 1)
+   @assert size(X, 1) == nr && size(Y, 2) == length(colptr) - 1
+   fill!(X, zero(eltype(X)))
+   @inbounds for i = 1:size(Y, 2), p = colptr[i]:(colptr[i+1]-1)
+      k = rowval[p]; c = nzval[p]
+      @simd ivdep for r = 1:nr
+         X[r, k] += c * Y[r, i]
+      end
+   end
+   return X
+end

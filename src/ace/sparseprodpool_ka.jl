@@ -219,9 +219,11 @@ end
 # ---------------------------------
 #  KA Jacobian implementation 
 
-function _jacobian_X!(A::AbstractGPUArray, ∂A::AbstractGPUArray, 
+function _jacobian_X!(A::AbstractGPUArray{<: Any, 2}, ∂A::AbstractGPUArray{<: Any, 3}, 
                        basis::PooledSparseProduct{2}, spec, 
-                       Rnl, ∂Rnl, Ylm, ∂Ylm)
+                       BB::Tuple, ∂BB::Tuple)
+   Rnl, Ylm = BB
+   ∂Rnl, ∂Ylm = ∂BB
 
    nA = length(spec)
    maxneigs, nnodes, lenR = size(Rnl) 

@@ -1,5 +1,5 @@
 
-using SparseArrays: SparseMatrixCSC
+using SparseArrays: SparseMatrixCSC, rowvals, nonzeros
 using LinearAlgebra: mul!
 import ChainRulesCore: NoTangent, rrule, ZeroTangent
 import LuxCore: AbstractLuxLayer, initialparameters, initialstates, apply 
@@ -200,6 +200,54 @@ function pullback(∂BB, tensor::SparseACEbasis{T}, Rnl, Ylm, A) where {T}
 end
 
 
+# --------------------------------------------------------
+#  Row-wise pushforward (Jacobian w.r.t. the per-row inputs)
+#
+#  Rnl, Ylm : nX x #R, nX x #Y single-node embeddings (one row per neighbour)
+#  ∂Rnl, ∂Ylm : one tangent per row, e.g. ∂Rnl[j, n] = ∂Rnl[j, n] / ∂𝐫_j 
+#               as an SVector{3}; any tangent type with T * T∂ -> T∂ works 
+#  B  : length(tensor) 
+#  ∂B : nX x length(tensor), ∂B[j, k] = ∑_t ∂B[k]/∂BB[t][j, :] ⋅ ∂BB[t][j, :]
+#
+#  This composes the row-wise pushforwards of the A and AA bases with the 
+#  coupling map. Only a single scalar (L = 0) output is supported, as for 
+#  `_jacobian_X`; for L > 0 the tangents would have to be outer products.
+
+function whatalloc(::typeof(pushforward_rows!), 
+                   tensor::SparseACEbasis, Rnl, Ylm, ∂Rnl, ∂Ylm)
+   @assert length(tensor.A2Bmaps) == 1 "pushforward_rows! supports a single (L = 0) output"
+   A2Bmap = tensor.A2Bmaps[1]
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   TB = _promote_mul_type(eltype(A2Bmap), TA)
+   T∂A = _rows_tangent_type(TA, (∂Rnl, ∂Ylm))
+   T∂B = _promote_mul_type(TB, T∂A)
+   nX = size(Rnl, 1)
+   return (TB, length(tensor)), (T∂B, nX, length(tensor))
+end
+
+function pushforward_rows!(B::AbstractVector, ∂B::AbstractMatrix, 
+                           tensor::SparseACEbasis, 
+                           Rnl::AbstractMatrix, Ylm::AbstractMatrix, 
+                           ∂Rnl::AbstractMatrix, ∂Ylm::AbstractMatrix)
+   @assert length(tensor.A2Bmaps) == 1 "pushforward_rows! supports a single (L = 0) output"
+   nX = size(Rnl, 1)
+   # one node of the batched _jacobian_X!; ReshapedArray rather than 
+   # reshape, which allocates a new Array header (on Julia 1.11) 
+   _node3(X) = Base.ReshapedArray(X, (nX, 1, size(X, 2)), ())
+   _jacobian_X!(Base.ReshapedArray(B, (1, length(B)), ()), _node3(∂B), tensor, 
+                _node3(Rnl), _node3(Ylm), _node3(∂Rnl), _node3(∂Ylm), 
+                tensor.abasis.spec, tensor.aabasis.specs, tensor.A2Bmaps[1])
+   return B, ∂B
+end
+
+function pushforward_rows(tensor::SparseACEbasis, Rnl, Ylm, ∂Rnl, ∂Ylm)
+   alc_B, alc_∂B = whatalloc(pushforward_rows!, tensor, Rnl, Ylm, ∂Rnl, ∂Ylm)
+   B = zeros(alc_B...)
+   ∂B = zeros(alc_∂B...)
+   return pushforward_rows!(B, ∂B, tensor, Rnl, Ylm, ∂Rnl, ∂Ylm)
+end
+
+
 # ChainRules integration 
 using ChainRulesCore: unthunk 
 
@@ -259,41 +307,63 @@ end
 #       dYlm[j, i, k] = ∂Ylm[i, j] / ∂X[i, j]
 #
 
+#   𝔹  : #i x length(tensor) 
+#   ∂𝔹 : #j x #i x length(tensor)
+#
+# This is the batched form of `pushforward_rows!`, which is its one-node 
+# case. Only a single (L = 0) output is supported. 
+
 function _jacobian_X(tensor::SparseACEbasis, 
                      Rnl, Ylm, 
                      dRnl, dYlm, 
                      ps, st)
-   backend = KernelAbstractions.get_backend(Rnl)
-   KernelAbstractions.synchronize(backend)
-
-   A, ∂A = _jacobian_X(tensor.abasis, (Rnl, Ylm), (dRnl, dYlm),
-                       st.aspec)
-   KernelAbstractions.synchronize(backend)
-
-   AA, ∂AA = _jacobian_X(tensor.aabasis, A, ∂A,
-                         st.aaspecs)
-
-   KernelAbstractions.synchronize(backend)
-   
-   # BB = tensor.A2Bmap * AA  if vector (single input)
-   #     or AA * A2Bmap'  if matrix (batch)
-   # BB = #nodes x #features 
-   # ∂BB = maxneigs x #nodes x #features
-   # for now assume only one basis ... 
    @assert length(st.A2Bmaps) == 1 "Jacobian currently only supports single basis"
-   A2Bmaps1 = st.A2Bmaps[1] 
-   𝔹 = permutedims( mul(A2Bmaps1, permutedims(AA) ) )
-
-   # convert 3-tensor to matrix, apply A2Bmaps, then back to 3-tensor
-   # this should be merged into a single kernel for efficiency 
-   ∂AA_mat = reshape(∂AA, :, size(∂AA, 3))
-   ∂𝔹_mat1 = permutedims( mul(A2Bmaps1, permutedims(∂AA_mat)) )
-
-   ∂𝔹 = reshape(∂𝔹_mat1, size(∂AA, 1), :, size(∂𝔹_mat1, 2))
-
+   A2B = st.A2Bmaps[1]
+   maxneigs, nnodes, _ = size(Rnl)
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   TB = _promote_mul_type(eltype(A2B), TA)
+   T∂B = _promote_mul_type(TB, _rows_tangent_type(TA, (dRnl, dYlm)))
+   𝔹 = similar(Rnl, TB, (nnodes, size(A2B, 1)))
+   ∂𝔹 = similar(Rnl, T∂B, (maxneigs, nnodes, size(A2B, 1)))
+   _jacobian_X!(𝔹, ∂𝔹, tensor, Rnl, Ylm, dRnl, dYlm, 
+                st.aspec, st.aaspecs, A2B)
    return (𝔹,), (∂𝔹,)
 end
 
+function _jacobian_X!(𝔹::AbstractMatrix, ∂𝔹::AbstractArray{<: Any, 3}, 
+                      tensor::SparseACEbasis, 
+                      Rnl, Ylm, dRnl, dYlm, 
+                      aspec, aaspecs, A2B)
+   maxneigs, nnodes, _ = size(Rnl)
+   nA, nAA = length(aspec), length(tensor.aabasis)
+   TA = promote_type(eltype(Rnl), eltype(Ylm))
+   T∂A = _rows_tangent_type(TA, (dRnl, dYlm))
+   backend = KernelAbstractions.get_backend(Rnl)
+   # on the CPU the intermediates live on the Bumper stack; on a GPU 
+   # they are ordinary device arrays 
+   @no_escape begin 
+      A = _alloc_like(Rnl, TA, nnodes, nA)
+      ∂A = _alloc_like(Rnl, T∂A, maxneigs, nnodes, nA)
+      _jacobian_X!(A, ∂A, tensor.abasis, aspec, (Rnl, Ylm), (dRnl, dYlm))
+      KernelAbstractions.synchronize(backend)
+      AA = _alloc_like(Rnl, TA, nnodes, nAA)
+      ∂AA = _alloc_like(Rnl, T∂A, maxneigs, nnodes, nAA)
+      _jacobian_X!(AA, ∂AA, tensor.aabasis, A, ∂A, aaspecs)
+      KernelAbstractions.synchronize(backend)
+      # 𝔹 = AA * A2B' and ∂𝔹[:, i, :] = ∂AA[:, i, :] * A2B' 
+      _mul_A2Bt!(𝔹, AA, A2B)
+      _mul_A2Bt!(∂𝔹, ∂AA, A2B)
+      KernelAbstractions.synchronize(backend)
+   end
+   return nothing 
+end
+
+# ::Type{T} so that the element type is inferred (Julia 1.11 does not 
+# specialise on a Type argument that is only passed through) 
+_alloc_like(X, ::Type{T}, dims...) where {T} = 
+      Bumper.alloc!(Bumper.default_buffer(), T, dims...)
+_alloc_like(X::AbstractGPUArray, ::Type{T}, dims...) where {T} = 
+      similar(X, T, dims)
 
 # --------------------------------------------------------
 

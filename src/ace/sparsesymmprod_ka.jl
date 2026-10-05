@@ -211,8 +211,12 @@ end
    aa, ∇aa = _static_prod_ed(Avals)
    AA[iX, iAA] = aa
 
-   for j = 1:maxneigs, t = 1:N
-      ∂AA[j, iX, iAA] += ∇aa[t] * ∂A[j, iX, ϕ[t]]
+   for j = 1:maxneigs
+      a = zero(eltype(∂AA))
+      for t = 1:N
+         a += ∇aa[t] * ∂A[j, iX, ϕ[t]]
+      end
+      ∂AA[j, iX, iAA] = a
    end
 
    nothing
