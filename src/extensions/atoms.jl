@@ -18,6 +18,11 @@ function nlist2graph end
 
 function forces_from_edge_grads end
 
+# lazy graphs (NeighbourLists >= 0.6)
+function for_each_edge end
+
+function interaction_graph_legacy end
+
 
 
 

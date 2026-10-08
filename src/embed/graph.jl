@@ -44,7 +44,7 @@ function ETGraph(ii::AbstractVector{TI}, jj::AbstractVector{TI};
    end 
    first[end] = nedges + 1
 
-   maxneigs = maximum(first[2:end] .- first[1:end-1])
+   maxneigs = Int(maximum(first[2:end] .- first[1:end-1]))
 
    return ETGraph(ii, jj, first, node_data, edge_data, graph_data, maxneigs)
 end               
